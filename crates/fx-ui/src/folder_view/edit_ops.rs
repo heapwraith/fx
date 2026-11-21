@@ -210,6 +210,12 @@ impl FolderView {
                 self.put_on_clipboard(ks.key == "x", cx);
                 true
             }
+            // Like Explorer's "Copy as path".
+            "c" if ctrl_shift => {
+                let items = self.targets();
+                self.copy_paths(items, cx);
+                true
+            }
             "v" if only_ctrl => {
                 self.paste(window, cx);
                 true
@@ -343,20 +349,7 @@ impl FolderView {
             MenuOutcome::Fx(0) => {
                 self.launch(fx_shell::launch::Launch::Terminal(self.path.clone()), cx);
             }
-            MenuOutcome::Fx(_) => {
-                let paths = if items.is_empty() {
-                    vec![self.path.clone()]
-                } else {
-                    items
-                };
-                let text = paths
-                    .iter()
-                    .map(|p| p.display().to_string())
-                    .collect::<Vec<_>>()
-                    .join("\r\n");
-                cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
-                self.notice = Some("caminho copiado".into());
-            }
+            MenuOutcome::Fx(_) => self.copy_paths(items, cx),
             MenuOutcome::Verb(verb) => match verb.as_str() {
                 "delete" if !items.is_empty() => {
                     self.submit_job(Job::recycle(items), window, cx);
@@ -383,6 +376,26 @@ impl FolderView {
             MenuOutcome::Shell | MenuOutcome::Cancelled => {}
         }
         cx.notify();
+    }
+
+    /// Full paths of `items` (or of this folder) as text, one per line.
+    pub(super) fn copy_paths(&mut self, items: Vec<PathBuf>, cx: &mut Context<Self>) {
+        let paths = if items.is_empty() {
+            vec![self.path.clone()]
+        } else {
+            items
+        };
+        let text = paths
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join("\r\n");
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+        self.notice = Some(if paths.len() == 1 {
+            "caminho copiado".into()
+        } else {
+            format!("{} caminhos copiados", paths.len())
+        });
     }
 
     pub(super) fn begin_rename(&mut self, entry: u32) {

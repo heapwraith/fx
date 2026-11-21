@@ -229,3 +229,13 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Elevado:** `fx-shell::is_elevated` (token do processo). O fx lê a MFT do volume uma vez numa thread (`fx-index`, alguns segundos) e guarda o índice para o processo inteiro; daí em diante a busca usa o índice (disco inteiro, os 200 melhores por pontuação difusa). Enquanto o índice não fica pronto, vale a busca por pastas.
 - **Medido:** varrer todas as fixtures (~112 mil itens, 108 pastas), release: ~190–200 ms; uma busca com 2.296 resultados os entregou em 11–29 lotes. Teste: nas fixtures, a busca acha exatamente o que uma varredura independente com `std::fs` acha (3 consultas, com acento e maiúsculas).
 - **Falta:** P4 com resultados chegando (`input_search_ms`), que pede a janela.
+
+## D-033 — Paleta de comandos (T1.24)
+- **Data:** 2026-11-21 · **Status:** aceita
+- **Abrir:** Ctrl+K ou Ctrl+Shift+P, na janela. Campo no topo; ↑↓ escolhe (dá a volta), Enter executa, Esc ou clicar fora fecha. Com a paleta aberta, todas as teclas ficam com ela.
+- **Itens:** os comandos do fx com o atalho ao lado (`fx-ui/src/commands.rs`, 36 comandos), o Acesso rápido e as pastas recentes (as outras abas e o histórico de todas, sem repetir, até 15). Sem texto: 5 recentes, Acesso rápido, depois os comandos.
+- **Busca difusa** (`fx-core::fuzzy`): as letras na ordem, sem maiúsculas nem acentos; pontua sequências, começos de palavra e casamento cedo ("np" acha "Nova pasta"). Uma pasta também é achada pelo caminho completo, abaixo das que casam pelo nome.
+- **Um caminho só:** cada comando com atalho executa o próprio atalho na janela ou na aba ativa (`FolderView::press` monta o `KeyDownEvent` e chama o mesmo tratador do teclado), então paleta e teclado nunca divergem. Sem atalho: alternar grade e ordenar por coluna. Testes: rótulos únicos, todo atalho é válido e nenhum se repete.
+- **Atalho novo:** Ctrl+Shift+C copia o caminho dos itens (como "Copiar como caminho" do Explorador), também na paleta.
+- **Medido:** filtrar 336 itens, release: pior tecla 0,2–0,35 ms (meta: 16 ms por tecla).
+- **Falta:** ver na janela e medir a tecla até o quadro (`input_palette_ms`).

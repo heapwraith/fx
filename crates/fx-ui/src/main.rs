@@ -14,6 +14,7 @@
 #![windows_subsystem = "windows"]
 
 mod a11y;
+mod commands;
 mod folder_view;
 mod icons;
 mod ops;

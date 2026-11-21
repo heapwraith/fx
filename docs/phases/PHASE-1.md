@@ -281,7 +281,7 @@ O usuário pediu que o fx tivesse o básico completo, sem bugs visuais, e três 
 - Nenhuma tecla da busca passa de 16 ms (P4) enquanto os resultados chegam; busca na pasta de fixtures acha os itens esperados (teste).
 
 ## T1.24 — Paleta de comandos (Ctrl+K)
-- [ ] Concluída em: ____ · Resumo: ____
+- [ ] Concluída em: ____ · Resumo: implementada em 2026-11-21 (D-033): Ctrl+K/Ctrl+Shift+P, busca difusa sobre 36 comandos (com atalho), Acesso rápido e pastas recentes; cada comando executa o próprio atalho (mesmo caminho do teclado); Ctrl+Shift+C copia o caminho. Testes da busca difusa e da lista de comandos; filtro de 336 itens: pior tecla 0,2–0,35 ms (release). **Falta:** ver na janela e medir tecla→quadro (adiado: o usuário pausou os testes que usam a janela).
 
 **Fazer**
 - Ctrl+K (e Ctrl+Shift+P) abre a paleta: busca difusa sobre os comandos do fx (com o atalho ao lado), pastas recentes e Acesso rápido; Enter executa.

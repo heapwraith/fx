@@ -10,6 +10,7 @@
 //! active tab; ☰ or Ctrl+B collapses it.
 
 mod history;
+mod palette;
 mod queue;
 mod sidebar;
 
@@ -68,6 +69,8 @@ pub struct TabsView {
     shown_active: Option<usize>,
     /// Operation history panel (Ctrl+Shift+H or the clock button).
     history_open: bool,
+    /// Command palette (Ctrl+K, Ctrl+Shift+P; T1.24).
+    palette: Option<palette::Palette>,
 }
 
 /// What is carried while a tab is dragged (also its drag preview).
@@ -143,6 +146,7 @@ impl TabsView {
             tab_scroll: ScrollHandle::new(),
             shown_active: None,
             history_open: false,
+            palette: None,
         };
         view.focus_active(window, cx);
         view
@@ -362,6 +366,11 @@ impl TabsView {
 
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let started = Instant::now();
+        if self.palette_open() {
+            self.palette_key(event, started, window, cx);
+            cx.stop_propagation();
+            return;
+        }
         let ks = &event.keystroke;
         let m = ks.modifiers;
         if self.history_open && ks.key == "escape" {
@@ -375,6 +384,7 @@ impl TabsView {
         }
         match (ks.key.as_str(), m.shift) {
             ("h", true) => self.history_open = !self.history_open,
+            ("k", false) | ("p", true) => self.open_palette(cx),
             ("t", false) => self.open_tab(window, cx),
             ("w", false) => self.close_tab(self.tabs.active_index(), window, cx),
             ("tab", false) => {
@@ -609,6 +619,7 @@ impl Render for TabsView {
             )
             .children(self.render_queue(cx))
             .children(self.render_history(cx))
+            .children(self.render_palette(cx))
             .children(self.render_conflict(cx))
     }
 }

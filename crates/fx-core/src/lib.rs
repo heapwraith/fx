@@ -7,6 +7,7 @@
 pub mod complete;
 mod entry;
 pub mod format;
+pub mod fuzzy;
 mod history;
 mod list;
 pub mod natural;

@@ -968,6 +968,41 @@ impl FolderView {
         }
     }
 
+    /// Runs a shortcut as if it was typed (command palette, T1.24): the same
+    /// code path as the keyboard.
+    pub fn press(&mut self, keys: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if let Ok(keystroke) = gpui::Keystroke::parse(keys) {
+            let event = KeyDownEvent {
+                keystroke,
+                is_held: false,
+            };
+            self.on_key_down(&event, window, cx);
+        }
+    }
+
+    /// Folders this tab visited before the current one, newest first
+    /// (recent folders of the command palette).
+    pub fn recent_folders(&self) -> Vec<PathBuf> {
+        let (back, _, forward) = self.history.parts();
+        back.iter()
+            .rev()
+            .chain(forward.iter().rev())
+            .map(|v| v.path.clone())
+            .collect()
+    }
+
+    /// Grid ⇄ list (the button next to the path bar; command palette).
+    pub fn toggle_grid(&mut self, cx: &mut Context<Self>) {
+        self.set_grid(!self.grid);
+        cx.notify();
+    }
+
+    /// Sorts by `key` from the palette: a new column starts at its first
+    /// direction; the same column flips.
+    pub fn sort_by_command(&mut self, key: SortKey, cx: &mut Context<Self>) {
+        self.sort_by(key, cx);
+    }
+
     /// A column header was clicked: sort by it (again: other direction).
     fn sort_by(&mut self, key: SortKey, cx: &mut Context<Self>) {
         self.sort = next_sort(self.sort, key);
