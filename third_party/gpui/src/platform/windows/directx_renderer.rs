@@ -1391,22 +1391,11 @@ const BUFFER_COUNT: usize = 3;
 pub(crate) mod shader_resources {
     use anyhow::Result;
 
-    // fx patch: shaders are always compiled at runtime from source embedded in the
-    // binary (D3DCompile, d3dcompiler_47.dll ships with Windows 10/11). Upstream
-    // precompiles them with fxc.exe in build.rs (release) or reads the .hlsl files
-    // from CARGO_MANIFEST_DIR (debug); neither works when cross-compiling from Linux.
-    #[cfg(debug_assertions)]
-    use windows::Win32::Graphics::Direct3D::Fxc::{D3DCOMPILE_DEBUG, D3DCOMPILE_SKIP_OPTIMIZATION};
-    #[cfg(not(debug_assertions))]
-    use windows::Win32::Graphics::Direct3D::Fxc::D3DCOMPILE_OPTIMIZATION_LEVEL3;
-    use windows::{
-        Win32::Graphics::Direct3D::{Fxc::D3DCompile, ID3DBlob},
-        core::PCSTR,
-    };
-
-    const ALPHA_CORRECTION_HLSL: &str = include_str!("alpha_correction.hlsl");
-    const SHADERS_HLSL: &str = include_str!("shaders.hlsl");
-    const COLOR_TEXT_RASTER_HLSL: &str = include_str!("color_text_raster.hlsl");
+    // fx patch: shaders are DXBC precompiled by `compile-shaders.ps1` (with the
+    // d3dcompiler_47.dll that ships with Windows) and embedded in the binary.
+    // Upstream precompiles them with fxc.exe in build.rs (release) or compiles the
+    // .hlsl files from CARGO_MANIFEST_DIR at runtime (debug); neither works when
+    // cross-compiling from Linux, and compiling at startup costs ~250 ms.
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
     pub(crate) enum ShaderModule {
@@ -1428,96 +1417,33 @@ pub(crate) mod shader_resources {
 
     pub(crate) struct RawShaderBytes<'t> {
         inner: &'t [u8],
-        _blob: ID3DBlob,
     }
 
     impl<'t> RawShaderBytes<'t> {
         pub(crate) fn new(module: ShaderModule, target: ShaderTarget) -> Result<Self> {
-            let blob = build_shader_blob(module, target)?;
-            let inner = unsafe {
-                std::slice::from_raw_parts(blob.GetBufferPointer() as *const u8, blob.GetBufferSize())
+            let inner: &'static [u8] = match (module, target) {
+                (ShaderModule::Quad, ShaderTarget::Vertex) => include_bytes!("../../../shaders-dxbc/quad_vertex.dxbc"),
+                (ShaderModule::Quad, ShaderTarget::Fragment) => include_bytes!("../../../shaders-dxbc/quad_fragment.dxbc"),
+                (ShaderModule::Shadow, ShaderTarget::Vertex) => include_bytes!("../../../shaders-dxbc/shadow_vertex.dxbc"),
+                (ShaderModule::Shadow, ShaderTarget::Fragment) => include_bytes!("../../../shaders-dxbc/shadow_fragment.dxbc"),
+                (ShaderModule::PathRasterization, ShaderTarget::Vertex) => include_bytes!("../../../shaders-dxbc/path_rasterization_vertex.dxbc"),
+                (ShaderModule::PathRasterization, ShaderTarget::Fragment) => include_bytes!("../../../shaders-dxbc/path_rasterization_fragment.dxbc"),
+                (ShaderModule::PathSprite, ShaderTarget::Vertex) => include_bytes!("../../../shaders-dxbc/path_sprite_vertex.dxbc"),
+                (ShaderModule::PathSprite, ShaderTarget::Fragment) => include_bytes!("../../../shaders-dxbc/path_sprite_fragment.dxbc"),
+                (ShaderModule::Underline, ShaderTarget::Vertex) => include_bytes!("../../../shaders-dxbc/underline_vertex.dxbc"),
+                (ShaderModule::Underline, ShaderTarget::Fragment) => include_bytes!("../../../shaders-dxbc/underline_fragment.dxbc"),
+                (ShaderModule::MonochromeSprite, ShaderTarget::Vertex) => include_bytes!("../../../shaders-dxbc/monochrome_sprite_vertex.dxbc"),
+                (ShaderModule::MonochromeSprite, ShaderTarget::Fragment) => include_bytes!("../../../shaders-dxbc/monochrome_sprite_fragment.dxbc"),
+                (ShaderModule::PolychromeSprite, ShaderTarget::Vertex) => include_bytes!("../../../shaders-dxbc/polychrome_sprite_vertex.dxbc"),
+                (ShaderModule::PolychromeSprite, ShaderTarget::Fragment) => include_bytes!("../../../shaders-dxbc/polychrome_sprite_fragment.dxbc"),
+                (ShaderModule::EmojiRasterization, ShaderTarget::Vertex) => include_bytes!("../../../shaders-dxbc/emoji_rasterization_vertex.dxbc"),
+                (ShaderModule::EmojiRasterization, ShaderTarget::Fragment) => include_bytes!("../../../shaders-dxbc/emoji_rasterization_fragment.dxbc"),
             };
-            Ok(Self { inner, _blob: blob })
+            Ok(Self { inner })
         }
 
         pub(crate) fn as_bytes(&'t self) -> &'t [u8] {
             self.inner
-        }
-    }
-
-    pub(super) fn build_shader_blob(entry: ShaderModule, target: ShaderTarget) -> Result<ID3DBlob> {
-        unsafe {
-            let main_source = if matches!(entry, ShaderModule::EmojiRasterization) {
-                COLOR_TEXT_RASTER_HLSL
-            } else {
-                SHADERS_HLSL
-            };
-            // Resolve the only #include used by the shaders without touching the disk.
-            let source = main_source.replace("#include \"alpha_correction.hlsl\"", ALPHA_CORRECTION_HLSL);
-
-            let entry = format!(
-                "{}_{}\0",
-                entry.as_str(),
-                match target {
-                    ShaderTarget::Vertex => "vertex",
-                    ShaderTarget::Fragment => "fragment",
-                }
-            );
-            let target = match target {
-                ShaderTarget::Vertex => "vs_4_1\0",
-                ShaderTarget::Fragment => "ps_4_1\0",
-            };
-
-            let mut compile_blob = None;
-            let mut error_blob = None;
-            let entry_point = PCSTR::from_raw(entry.as_ptr());
-            let target_cstr = PCSTR::from_raw(target.as_ptr());
-
-            #[cfg(debug_assertions)]
-            let flags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
-            #[cfg(not(debug_assertions))]
-            let flags = D3DCOMPILE_OPTIMIZATION_LEVEL3;
-
-            let ret = D3DCompile(
-                source.as_ptr() as *const _,
-                source.len(),
-                PCSTR::null(),
-                None,
-                None,
-                entry_point,
-                target_cstr,
-                flags,
-                0,
-                &mut compile_blob,
-                Some(&mut error_blob),
-            );
-            if ret.is_err() {
-                let Some(error_blob) = error_blob else {
-                    return Err(anyhow::anyhow!("{ret:?}"));
-                };
-
-                let error_string =
-                    std::ffi::CStr::from_ptr(error_blob.GetBufferPointer() as *const i8)
-                        .to_string_lossy();
-                log::error!("Shader compile error: {}", error_string);
-                return Err(anyhow::anyhow!("Compile error: {}", error_string));
-            }
-            Ok(compile_blob.unwrap())
-        }
-    }
-
-    impl ShaderModule {
-        pub fn as_str(&self) -> &str {
-            match self {
-                ShaderModule::Quad => "quad",
-                ShaderModule::Shadow => "shadow",
-                ShaderModule::Underline => "underline",
-                ShaderModule::PathRasterization => "path_rasterization",
-                ShaderModule::PathSprite => "path_sprite",
-                ShaderModule::MonochromeSprite => "monochrome_sprite",
-                ShaderModule::PolychromeSprite => "polychrome_sprite",
-                ShaderModule::EmojiRasterization => "emoji_rasterization",
-            }
         }
     }
 }

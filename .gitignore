@@ -4,3 +4,4 @@
 bench/results/*.json
 !bench/results/.gitkeep
 .claude/settings.local.json
+bench/results/trace-*.txt

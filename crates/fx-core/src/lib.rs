@@ -5,6 +5,7 @@
 #![forbid(unsafe_code)]
 
 mod entry;
+pub mod format;
 mod list;
 pub mod natural;
 

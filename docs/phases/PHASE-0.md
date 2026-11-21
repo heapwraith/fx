@@ -75,7 +75,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T0.5 — Lista virtualizada no GPUI (fx-ui)
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: lista virtualizada (≤ 26 linhas construídas por quadro). **P2 FALHA desde a partida do processo: 406 ms** (25 ms com o app aberto; D-013). P7 a 239 Hz: p95 4,38 ms contra meta de 4,2 ms, falha pela letra por jitter do vsync, com 1 quadro perdido em 3.425 (máx. 6,3 ms). Janela responde durante a carga de 1M arquivos via `\\wsl.localhost`: máx. 2,9 ms.
 
 **Fazer**
 - `fx <caminho>` abre uma janela com a lista da pasta: colunas Nome, Tamanho, Data. Só as linhas visíveis são construídas.

@@ -1,4 +1,4 @@
-diff -ru -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch a/Cargo.toml ./Cargo.toml
+diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 a/Cargo.toml ./Cargo.toml
 --- a/Cargo.toml	2006-07-23 21:21:28.000000000 -0400
 +++ b/Cargo.toml	2026-11-21 00:13:31.907328651 -0400
 @@ -576,7 +576,9 @@
@@ -21,7 +21,7 @@ diff -ru -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx
  version = "3.0"
  
  [lints.clippy]
-diff -ru -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch a/build.rs ./build.rs
+diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 a/build.rs ./build.rs
 --- a/build.rs	2006-07-23 21:21:28.000000000 -0400
 +++ b/build.rs	2026-11-21 00:16:16.109490537 -0400
 @@ -10,11 +10,17 @@
@@ -279,45 +279,130 @@ diff -ru -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx
 -            .expect("Failed to write Rust binding file");
 -    }
  }
-diff -ru -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch a/src/platform/windows/directx_renderer.rs ./src/platform/windows/directx_renderer.rs
+diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 a/src/platform/windows/directx_devices.rs ./src/platform/windows/directx_devices.rs
+--- a/src/platform/windows/directx_devices.rs	2006-07-23 21:21:28.000000000 -0400
++++ b/src/platform/windows/directx_devices.rs	2026-11-21 01:02:12.786886238 -0400
+@@ -53,32 +53,25 @@
+         let debug_layer_available = check_debug_layer_available();
+         let dxgi_factory =
+             get_dxgi_factory(debug_layer_available).context("Creating DXGI factory")?;
+-        let adapter =
+-            get_adapter(&dxgi_factory, debug_layer_available).context("Getting DXGI adapter")?;
+-        let (device, device_context) = {
+-            let mut context: Option<ID3D11DeviceContext> = None;
+-            let mut feature_level = D3D_FEATURE_LEVEL::default();
+-            let device = get_device(
+-                &adapter,
+-                Some(&mut context),
+-                Some(&mut feature_level),
+-                debug_layer_available,
+-            )
+-            .context("Creating Direct3D device")?;
+-            match feature_level {
+-                D3D_FEATURE_LEVEL_11_1 => {
+-                    log::info!("Created device with Direct3D 11.1 feature level.")
+-                }
+-                D3D_FEATURE_LEVEL_11_0 => {
+-                    log::info!("Created device with Direct3D 11.0 feature level.")
+-                }
+-                D3D_FEATURE_LEVEL_10_1 => {
+-                    log::info!("Created device with Direct3D 10.1 feature level.")
+-                }
+-                _ => unreachable!(),
++        // fx patch: upstream probed each adapter by creating a D3D11 device, dropped
++        // it, then created a second device on the chosen adapter. Each creation
++        // costs ~200 ms on NVIDIA drivers at process start, so keep the probe's
++        // device instead.
++        let (adapter, device, device_context, feature_level) =
++            get_adapter_and_device(&dxgi_factory, debug_layer_available)
++                .context("Creating Direct3D device")?;
++        match feature_level {
++            D3D_FEATURE_LEVEL_11_1 => {
++                log::info!("Created device with Direct3D 11.1 feature level.")
+             }
+-            (device, context.unwrap())
+-        };
++            D3D_FEATURE_LEVEL_11_0 => {
++                log::info!("Created device with Direct3D 11.0 feature level.")
++            }
++            D3D_FEATURE_LEVEL_10_1 => {
++                log::info!("Created device with Direct3D 10.1 feature level.")
++            }
++            _ => unreachable!(),
++        }
+ 
+         Ok(Self {
+             adapter,
+@@ -120,7 +113,10 @@
+ }
+ 
+ #[inline]
+-fn get_adapter(dxgi_factory: &IDXGIFactory6, debug_layer_available: bool) -> Result<IDXGIAdapter1> {
++fn get_adapter_and_device(
++    dxgi_factory: &IDXGIFactory6,
++    debug_layer_available: bool,
++) -> Result<(IDXGIAdapter1, ID3D11Device, ID3D11DeviceContext, D3D_FEATURE_LEVEL)> {
+     for adapter_index in 0.. {
+         let adapter: IDXGIAdapter1 = unsafe { dxgi_factory.EnumAdapters(adapter_index)?.cast()? };
+         if let Ok(desc) = unsafe { adapter.GetDesc1() } {
+@@ -129,16 +125,20 @@
+                 .to_string();
+             log::info!("Using GPU: {}", gpu_name);
+         }
+-        // Check to see whether the adapter supports Direct3D 11, but don't
+-        // create the actual device yet.
+-        if get_device(&adapter, None, None, debug_layer_available)
+-            .log_err()
+-            .is_some()
++        let mut context: Option<ID3D11DeviceContext> = None;
++        let mut feature_level = D3D_FEATURE_LEVEL::default();
++        if let Some(device) = get_device(
++            &adapter,
++            Some(&mut context),
++            Some(&mut feature_level),
++            debug_layer_available,
++        )
++        .log_err()
++            && let Some(context) = context
+         {
+-            return Ok(adapter);
++            return Ok((adapter, device, context, feature_level));
+         }
+     }
+-
+     unreachable!()
+ }
+ 
+diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 a/src/platform/windows/directx_renderer.rs ./src/platform/windows/directx_renderer.rs
 --- a/src/platform/windows/directx_renderer.rs	2006-07-23 21:21:28.000000000 -0400
-+++ b/src/platform/windows/directx_renderer.rs	2026-11-21 00:13:50.350539702 -0400
-@@ -1391,15 +1391,23 @@
++++ b/src/platform/windows/directx_renderer.rs	2026-11-21 01:02:45.532052512 -0400
+@@ -1391,14 +1391,11 @@
  pub(crate) mod shader_resources {
      use anyhow::Result;
  
-+    // fx patch: shaders are always compiled at runtime from source embedded in the
-+    // binary (D3DCompile, d3dcompiler_47.dll ships with Windows 10/11). Upstream
-+    // precompiles them with fxc.exe in build.rs (release) or reads the .hlsl files
-+    // from CARGO_MANIFEST_DIR (debug); neither works when cross-compiling from Linux.
-     #[cfg(debug_assertions)]
-+    use windows::Win32::Graphics::Direct3D::Fxc::{D3DCOMPILE_DEBUG, D3DCOMPILE_SKIP_OPTIMIZATION};
-+    #[cfg(not(debug_assertions))]
-+    use windows::Win32::Graphics::Direct3D::Fxc::D3DCOMPILE_OPTIMIZATION_LEVEL3;
-     use windows::{
+-    #[cfg(debug_assertions)]
+-    use windows::{
 -        Win32::Graphics::Direct3D::{
 -            Fxc::{D3DCOMPILE_DEBUG, D3DCOMPILE_SKIP_OPTIMIZATION, D3DCompileFromFile},
 -            ID3DBlob,
 -        },
 -        core::{HSTRING, PCSTR},
-+        Win32::Graphics::Direct3D::{Fxc::D3DCompile, ID3DBlob},
-+        core::PCSTR,
-     };
+-    };
++    // fx patch: shaders are DXBC precompiled by `compile-shaders.ps1` (with the
++    // d3dcompiler_47.dll that ships with Windows) and embedded in the binary.
++    // Upstream precompiles them with fxc.exe in build.rs (release) or compiles the
++    // .hlsl files from CARGO_MANIFEST_DIR at runtime (debug); neither works when
++    // cross-compiling from Linux, and compiling at startup costs ~250 ms.
  
-+    const ALPHA_CORRECTION_HLSL: &str = include_str!("alpha_correction.hlsl");
-+    const SHADERS_HLSL: &str = include_str!("shaders.hlsl");
-+    const COLOR_TEXT_RASTER_HLSL: &str = include_str!("color_text_raster.hlsl");
-+
      #[derive(Copy, Clone, Debug, Eq, PartialEq)]
      pub(crate) enum ShaderModule {
-         Quad,
-@@ -1420,86 +1428,32 @@
+@@ -1420,157 +1417,34 @@
  
      pub(crate) struct RawShaderBytes<'t> {
          inner: &'t [u8],
 -
 -        #[cfg(debug_assertions)]
-         _blob: ID3DBlob,
+-        _blob: ID3DBlob,
      }
  
      impl<'t> RawShaderBytes<'t> {
@@ -337,11 +422,25 @@ diff -ru -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx
 -                };
 -                Ok(Self { inner, _blob: blob })
 -            }
-+            let blob = build_shader_blob(module, target)?;
-+            let inner = unsafe {
-+                std::slice::from_raw_parts(blob.GetBufferPointer() as *const u8, blob.GetBufferSize())
++            let inner: &'static [u8] = match (module, target) {
++                (ShaderModule::Quad, ShaderTarget::Vertex) => include_bytes!("../../../shaders-dxbc/quad_vertex.dxbc"),
++                (ShaderModule::Quad, ShaderTarget::Fragment) => include_bytes!("../../../shaders-dxbc/quad_fragment.dxbc"),
++                (ShaderModule::Shadow, ShaderTarget::Vertex) => include_bytes!("../../../shaders-dxbc/shadow_vertex.dxbc"),
++                (ShaderModule::Shadow, ShaderTarget::Fragment) => include_bytes!("../../../shaders-dxbc/shadow_fragment.dxbc"),
++                (ShaderModule::PathRasterization, ShaderTarget::Vertex) => include_bytes!("../../../shaders-dxbc/path_rasterization_vertex.dxbc"),
++                (ShaderModule::PathRasterization, ShaderTarget::Fragment) => include_bytes!("../../../shaders-dxbc/path_rasterization_fragment.dxbc"),
++                (ShaderModule::PathSprite, ShaderTarget::Vertex) => include_bytes!("../../../shaders-dxbc/path_sprite_vertex.dxbc"),
++                (ShaderModule::PathSprite, ShaderTarget::Fragment) => include_bytes!("../../../shaders-dxbc/path_sprite_fragment.dxbc"),
++                (ShaderModule::Underline, ShaderTarget::Vertex) => include_bytes!("../../../shaders-dxbc/underline_vertex.dxbc"),
++                (ShaderModule::Underline, ShaderTarget::Fragment) => include_bytes!("../../../shaders-dxbc/underline_fragment.dxbc"),
++                (ShaderModule::MonochromeSprite, ShaderTarget::Vertex) => include_bytes!("../../../shaders-dxbc/monochrome_sprite_vertex.dxbc"),
++                (ShaderModule::MonochromeSprite, ShaderTarget::Fragment) => include_bytes!("../../../shaders-dxbc/monochrome_sprite_fragment.dxbc"),
++                (ShaderModule::PolychromeSprite, ShaderTarget::Vertex) => include_bytes!("../../../shaders-dxbc/polychrome_sprite_vertex.dxbc"),
++                (ShaderModule::PolychromeSprite, ShaderTarget::Fragment) => include_bytes!("../../../shaders-dxbc/polychrome_sprite_fragment.dxbc"),
++                (ShaderModule::EmojiRasterization, ShaderTarget::Vertex) => include_bytes!("../../../shaders-dxbc/emoji_rasterization_vertex.dxbc"),
++                (ShaderModule::EmojiRasterization, ShaderTarget::Fragment) => include_bytes!("../../../shaders-dxbc/emoji_rasterization_fragment.dxbc"),
 +            };
-+            Ok(Self { inner, _blob: blob })
++            Ok(Self { inner })
          }
  
          pub(crate) fn as_bytes(&'t self) -> &'t [u8] {
@@ -386,72 +485,91 @@ diff -ru -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx
 -            };
 -            Self { inner: bytes }
 -        }
-     }
- 
+-    }
+-
 -    #[cfg(debug_assertions)]
-     pub(super) fn build_shader_blob(entry: ShaderModule, target: ShaderTarget) -> Result<ID3DBlob> {
-         unsafe {
+-    pub(super) fn build_shader_blob(entry: ShaderModule, target: ShaderTarget) -> Result<ID3DBlob> {
+-        unsafe {
 -            use windows::Win32::Graphics::{
 -                Direct3D::ID3DInclude, Hlsl::D3D_COMPILE_STANDARD_FILE_INCLUDE,
 -            };
 -
 -            let shader_name = if matches!(entry, ShaderModule::EmojiRasterization) {
 -                "color_text_raster.hlsl"
-+            let main_source = if matches!(entry, ShaderModule::EmojiRasterization) {
-+                COLOR_TEXT_RASTER_HLSL
-             } else {
+-            } else {
 -                "shaders.hlsl"
-+                SHADERS_HLSL
-             };
-+            // Resolve the only #include used by the shaders without touching the disk.
-+            let source = main_source.replace("#include \"alpha_correction.hlsl\"", ALPHA_CORRECTION_HLSL);
- 
-             let entry = format!(
-                 "{}_{}\0",
-@@ -1516,25 +1470,23 @@
- 
-             let mut compile_blob = None;
-             let mut error_blob = None;
+-            };
+-
+-            let entry = format!(
+-                "{}_{}\0",
+-                entry.as_str(),
+-                match target {
+-                    ShaderTarget::Vertex => "vertex",
+-                    ShaderTarget::Fragment => "fragment",
+-                }
+-            );
+-            let target = match target {
+-                ShaderTarget::Vertex => "vs_4_1\0",
+-                ShaderTarget::Fragment => "ps_4_1\0",
+-            };
+-
+-            let mut compile_blob = None;
+-            let mut error_blob = None;
 -            let shader_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 -                .join(&format!("src/platform/windows/{}", shader_name))
 -                .canonicalize()?;
 -
-             let entry_point = PCSTR::from_raw(entry.as_ptr());
-             let target_cstr = PCSTR::from_raw(target.as_ptr());
- 
+-            let entry_point = PCSTR::from_raw(entry.as_ptr());
+-            let target_cstr = PCSTR::from_raw(target.as_ptr());
+-
 -            // really dirty trick because winapi bindings are unhappy otherwise
 -            let include_handler = &std::mem::transmute::<usize, ID3DInclude>(
 -                D3D_COMPILE_STANDARD_FILE_INCLUDE as usize,
 -            );
-+            #[cfg(debug_assertions)]
-+            let flags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
-+            #[cfg(not(debug_assertions))]
-+            let flags = D3DCOMPILE_OPTIMIZATION_LEVEL3;
- 
+-
 -            let ret = D3DCompileFromFile(
 -                &HSTRING::from(shader_path.to_str().unwrap()),
-+            let ret = D3DCompile(
-+                source.as_ptr() as *const _,
-+                source.len(),
-+                PCSTR::null(),
-+                None,
-                 None,
+-                None,
 -                include_handler,
-                 entry_point,
-                 target_cstr,
+-                entry_point,
+-                target_cstr,
 -                D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
-+                flags,
-                 0,
-                 &mut compile_blob,
-                 Some(&mut error_blob),
-@@ -1554,10 +1506,6 @@
-         }
-     }
- 
+-                0,
+-                &mut compile_blob,
+-                Some(&mut error_blob),
+-            );
+-            if ret.is_err() {
+-                let Some(error_blob) = error_blob else {
+-                    return Err(anyhow::anyhow!("{ret:?}"));
+-                };
+-
+-                let error_string =
+-                    std::ffi::CStr::from_ptr(error_blob.GetBufferPointer() as *const i8)
+-                        .to_string_lossy();
+-                log::error!("Shader compile error: {}", error_string);
+-                return Err(anyhow::anyhow!("Compile error: {}", error_string));
+-            }
+-            Ok(compile_blob.unwrap())
+-        }
+-    }
+-
 -    #[cfg(not(debug_assertions))]
 -    include!(concat!(env!("OUT_DIR"), "/shaders_bytes.rs"));
 -
 -    #[cfg(debug_assertions)]
-     impl ShaderModule {
-         pub fn as_str(&self) -> &str {
-             match self {
+-    impl ShaderModule {
+-        pub fn as_str(&self) -> &str {
+-            match self {
+-                ShaderModule::Quad => "quad",
+-                ShaderModule::Shadow => "shadow",
+-                ShaderModule::Underline => "underline",
+-                ShaderModule::PathRasterization => "path_rasterization",
+-                ShaderModule::PathSprite => "path_sprite",
+-                ShaderModule::MonochromeSprite => "monochrome_sprite",
+-                ShaderModule::PolychromeSprite => "polychrome_sprite",
+-                ShaderModule::EmojiRasterization => "emoji_rasterization",
+-            }
+-        }
+     }
+ }
+ 

@@ -30,7 +30,7 @@ pub enum Direction {
     Descending,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct FileList {
     /// Display names (UTF-8), concatenated; `name_ends[i]` is the end of name `i`.
     names: String,
@@ -137,7 +137,13 @@ impl FileList {
     /// Sorts the display order. Folders always come first; ties fall back to the
     /// name, then to the exact name, then to arrival order (stable).
     pub fn sort(&mut self, key: SortKey, direction: Direction) {
-        let mut order = std::mem::take(&mut self.order);
+        self.order = self.sorted_order(key, direction);
+    }
+
+    /// The order [`FileList::sort`] would produce, without changing the list, so
+    /// it can be computed off the UI thread and applied with [`FileList::set_order`].
+    pub fn sorted_order(&self, key: SortKey, direction: Direction) -> Vec<u32> {
+        let mut order: Vec<u32> = (0..self.len() as u32).collect();
         let by_name = |a: u32, b: u32| {
             natural_cmp(self.folded(a), self.folded(b)).then_with(|| self.name(a).cmp(self.name(b)))
         };
@@ -166,7 +172,24 @@ impl FileList {
                 // Arrival order breaks exact ties in both directions (stability).
                 .then_with(|| a.cmp(&b))
         });
+        order
+    }
+
+    /// Replaces the display order. Rejected (returns `false`) unless `order` is a
+    /// permutation of all entries, e.g. when batches arrived after it was computed.
+    pub fn set_order(&mut self, order: Vec<u32>) -> bool {
+        if order.len() != self.len() {
+            return false;
+        }
+        let mut seen = vec![false; order.len()];
+        for &i in &order {
+            match seen.get_mut(i as usize) {
+                Some(s) if !*s => *s = true,
+                _ => return false,
+            }
+        }
         self.order = order;
+        true
     }
 
     /// Entries whose name contains `needle` (case/accent-insensitive), in the
@@ -371,6 +394,23 @@ mod tests {
         assert_eq!(names(&list, list.order()), ["a", "b", "c", "d"]);
         assert_eq!(list.len(), 4);
         assert_eq!(list.size(2), 0);
+    }
+
+    #[test]
+    fn sorted_order_is_computed_aside_and_validated() {
+        let mut list = FileList::new();
+        list.extend(vec![file("b", 0, 0), file("a", 0, 0), file("c", 0, 0)]);
+        let order = list.sorted_order(SortKey::Name, Direction::Ascending);
+        assert_eq!(order, [1, 0, 2]);
+        assert_eq!(list.order(), [0, 1, 2], "sorted_order must not mutate");
+        assert!(!list.set_order(vec![0, 1]), "wrong length");
+        assert!(!list.set_order(vec![0, 0, 1]), "duplicate");
+        assert!(!list.set_order(vec![0, 1, 9]), "out of range");
+        assert!(list.set_order(order.clone()));
+        assert_eq!(list.order(), order.as_slice());
+        // A batch arriving after the order was computed makes it stale.
+        list.extend(vec![file("d", 0, 0)]);
+        assert!(!list.set_order(order));
     }
 
     #[test]
