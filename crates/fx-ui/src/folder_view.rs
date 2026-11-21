@@ -246,17 +246,24 @@ impl FolderView {
     fn start_loading(&mut self, cx: &mut Context<Self>) {
         // Watch first, then read: nothing that changes during the read is lost
         // (duplicates are harmless, see `FileList::apply`).
+        // Both run on the worker thread (opening the folder is disk I/O), the
+        // watcher armed before the read starts.
         self.pending_changes.clear();
+        self.watcher = None;
         let (changes_tx, changes_rx) = channel::<Vec<Change>>();
-        self.watcher = fx_fs::watch(&self.path, changes_tx).ok();
-        if self.watcher.is_some() {
-            Self::receive_changes(changes_rx, self.generation, cx);
-        }
+        Self::receive_changes(changes_rx, self.generation, cx);
+        let (watcher_tx, watcher_rx) = channel::<fx_fs::Watcher>();
+        Self::receive_watcher(watcher_rx, self.generation, cx);
         let (tx, rx) = channel::<Vec<Entry>>();
         let worker_path = self.path.clone();
         let worker = std::thread::Builder::new()
             .name("fx-enumerate".into())
-            .spawn(move || fx_fs::enumerate(Strategy::FindFirstFileEx, &worker_path, &tx));
+            .spawn(move || {
+                if let Ok(w) = fx_fs::watch(&worker_path, changes_tx) {
+                    let _ = watcher_tx.send(w);
+                }
+                fx_fs::enumerate(Strategy::FindFirstFileEx, &worker_path, &tx)
+            });
         self.status = match worker {
             Ok(worker) => {
                 Self::receive(rx, worker, self.generation, cx);
@@ -264,6 +271,21 @@ impl FolderView {
             }
             Err(e) => Status::Failed(format!("could not start reader thread: {e}")),
         };
+    }
+
+    /// Keeps the watcher the worker made (dropped if the view moved on).
+    fn receive_watcher(rx: Receiver<fx_fs::Watcher>, generation: u64, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let watcher = cx.background_spawn(async move { rx.recv() }).await;
+            if let Ok(w) = watcher {
+                let _ = this.update(cx, |view, _| {
+                    if view.generation == generation {
+                        view.watcher = Some(w);
+                    }
+                });
+            }
+        })
+        .detach();
     }
 
     /// Applies watcher batches as they arrive (buffered until the list is sorted).

@@ -79,15 +79,24 @@ impl Places {
                 }
                 // Warm the context menu up (COM, OLE, common shell
                 // extensions) so the first right click is not the slow one.
+                // Delayed: loading shell extensions takes the loader lock,
+                // which would slow down the first frames.
                 if let Some(home) = known.iter().find(|(k, _)| *k == KnownFolder::Home) {
-                    let _ = fx_shell::show_context_menu(fx_shell::menu::MenuRequest {
-                        items: Vec::new(),
-                        folder: home.1.clone(),
-                        fx_items: Vec::new(),
-                        owner: 0,
-                        started: std::time::Instant::now(),
-                        warm_up: true,
-                    });
+                    let folder = home.1.clone();
+                    cx.spawn(async move |_, cx| {
+                        cx.background_executor()
+                            .timer(std::time::Duration::from_secs(3))
+                            .await;
+                        let _ = fx_shell::show_context_menu(fx_shell::menu::MenuRequest {
+                            items: Vec::new(),
+                            folder,
+                            fx_items: Vec::new(),
+                            owner: 0,
+                            started: std::time::Instant::now(),
+                            warm_up: true,
+                        });
+                    })
+                    .detach();
                 }
                 places.pinned_ready = true;
                 places.known = known;

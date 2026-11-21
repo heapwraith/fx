@@ -220,7 +220,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.18 — Relatório do portão
-- [ ] Concluída em: ____ · Resumo: ____
+- [ ] Concluída em: ____ · Resumo: relatório escrito em 2026-11-21 (`bench/results/gate-1.md`): P1–P4 e P7 passam; P8 95,7 MB (meta 80) e menu p95 259 ms ficam como riscos; Explorador medido de novo (254 ms / 1.105 ms contra 10 ms / ~420 ms do fx). **Falta o registro das 2 semanas de uso diário.**
 
 **Fazer**
 - Rodar `fx-bench all`, `scroll` e `type`; repetir as comparações com o Explorador; `/gate`.
