@@ -81,7 +81,7 @@ Do tempo até o primeiro quadro, ~200 ms são o `D3D11CreateDevice` (driver da N
 
 **Corrigir antes de passar (pendências curtas), não acionar o plano B.**
 
-1. Rodar elevado os três comandos pendentes (`docs/phases/PHASE-0.md`, T0.7 e T0.8) e completar P5, P6 e P9 reais.
+1. Rodar as medições elevadas e completar P5, P6 e P9 reais: no WSL, `bench/prepare-elevated.sh`; depois, num PowerShell como Administrador, `cd $env:TEMP\fx-elevated; powershell -ExecutionPolicy Bypass -File .\run-elevated.ps1`.
 2. Decidir a D-013: recomendo **(a) processo residente** (o fx fica carregado e "abrir pasta" cria só a janela: ~24 ms medidos, contra 264 ms do Explorador navegando e 1.048 ms abrindo janela), mantendo a P1 como meta de "primeira abertura do dia".
 3. Decidir a régua da P7: manter 4,2 ms (o protótipo já fica a 1 quadro perdido em 3.425) ou voltar à meta escrita de 120 Hz.
 

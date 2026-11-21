@@ -12,6 +12,9 @@
 //! fx-bench index --volume C:  P6/P9: index the real MFT (needs Administrator) (T0.7)
 //! fx-bench index --synthetic N  index N generated files in memory (T0.7)
 //! fx-bench search (--volume C: | --synthetic N) [--interactive]  P5 (T0.8)
+//! fx-bench all                every benchmark that needs neither Administrator nor
+//!                             control of the mouse/keyboard (enum, list, open,
+//!                             index and search on a synthetic 2M index)
 //! ```
 //! Run from the repository root: results go to `bench/results/`.
 
@@ -31,7 +34,7 @@ use std::time::Instant;
 
 use fixtures::{Outcome, Spec};
 
-const USAGE: &str = "usage: fx-bench fixtures [--clean] | enum | list | open | scroll | responsive <folder> | type | index (--volume C: | --synthetic N) | search (--volume C: | --synthetic N) [--interactive]";
+const USAGE: &str = "usage: fx-bench fixtures [--clean] | enum | list | open | scroll | responsive <folder> | type | index (--volume C: | --synthetic N) | search (--volume C: | --synthetic N) [--interactive] | all";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -44,6 +47,7 @@ fn main() -> ExitCode {
         ["open"] => ui_bench::open(),
         ["scroll"] => ui_bench::scroll(),
         ["type"] => ui_bench::type_keys(),
+        ["all"] => run_all(),
         ["index", "--volume", volume] => index_bench::volume(volume),
         ["search", "--volume", v] => {
             search_bench::run(&search_bench::Source::Volume((*v).to_owned()), false)
@@ -79,6 +83,43 @@ fn main() -> ExitCode {
             eprintln!("fx-bench: {e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// Benchmarks that run unattended: no Administrator, no synthetic input.
+/// `scroll` (P7) and `type` (P4) move the mouse / send keys, and `--volume C:`
+/// (P5/P6/P9 on the real disk) needs Administrator, so they are run separately.
+fn run_all() -> std::io::Result<()> {
+    let synthetic = search_bench::Source::Synthetic(2_000_000);
+    let steps: [(&str, &dyn Fn() -> std::io::Result<()>); 5] = [
+        ("enum", &enum_bench::run),
+        ("list", &list_bench::run),
+        ("open", &ui_bench::open),
+        ("index --synthetic 2000000", &|| {
+            index_bench::synthetic(2_000_000)
+        }),
+        ("search --synthetic 2000000", &|| {
+            search_bench::run(&synthetic, false)
+        }),
+    ];
+    let mut failed = Vec::new();
+    for (name, step) in steps {
+        println!("== fx-bench {name}");
+        if let Err(e) = step() {
+            eprintln!("fx-bench {name}: {e}");
+            failed.push(name);
+        }
+    }
+    println!(
+        "== skipped (run by hand): scroll (moves the mouse), type (sends keys), index/search --volume C: (Administrator)"
+    );
+    if failed.is_empty() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(format!(
+            "failed: {}",
+            failed.join(", ")
+        )))
     }
 }
 
