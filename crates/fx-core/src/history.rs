@@ -26,6 +26,28 @@ impl<T> History<T> {
         }
     }
 
+    /// Rebuilds a history (from saved state): `back` oldest first, `forward`
+    /// as returned by [`History::parts`].
+    pub fn from_parts(back: Vec<T>, current: T, forward: Vec<T>, limit: usize) -> Self {
+        let limit = limit.max(1);
+        let mut back = back;
+        if back.len() > limit {
+            back.drain(..back.len() - limit);
+        }
+        Self {
+            back,
+            current,
+            forward,
+            limit,
+        }
+    }
+
+    /// Back entries (oldest first), the current one, and the forward entries
+    /// (the next one last), for saving.
+    pub fn parts(&self) -> (&[T], &T, &[T]) {
+        (&self.back, &self.current, &self.forward)
+    }
+
     pub fn current(&self) -> &T {
         &self.current
     }
@@ -125,6 +147,21 @@ mod tests {
             ahead += 1;
         }
         assert_eq!((ahead, *h.current()), (3, 10));
+    }
+
+    #[test]
+    fn parts_round_trip() {
+        let mut h = History::new("a", 10);
+        h.push("b");
+        h.push("c");
+        h.go_back();
+        let (back, cur, fwd) = h.parts();
+        let mut copy = History::from_parts(back.to_vec(), *cur, fwd.to_vec(), 10);
+        assert_eq!(copy.go_forward(), Some(&"c"));
+        assert_eq!(copy.go_back(), Some(&"b"));
+        assert_eq!(copy.go_back(), Some(&"a"));
+        let trimmed = History::from_parts(vec![1, 2, 3, 4], 5, Vec::new(), 2);
+        assert_eq!(trimmed.parts().0, [3, 4]);
     }
 
     #[test]

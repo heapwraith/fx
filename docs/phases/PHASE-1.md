@@ -209,7 +209,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.17 — Persistência
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: configurações em TOML (`%APPDATA%\fx\settings.toml`, gravação atômica) e sessão em SQLite WAL (`%LOCALAPPDATA%\fx\state.db`: janelas, abas, rolagem, seleção, cursor, grade, histórico, Acesso rápido), salva a cada 2 s numa thread própria e restaurada ao abrir sem pasta (D-026). Teste com processo filho morto 5 vezes no meio da gravação: banco íntegro e último estado completo; verificado no app (estado restaurado depois de matar o processo). Benchmarks e testes não tocam a sessão do usuário.
 
 **Fazer**
 - Configurações em TOML; estado (abas, janelas, histórico, Acesso rápido, posição de rolagem) em SQLite; restaurar ao reabrir.

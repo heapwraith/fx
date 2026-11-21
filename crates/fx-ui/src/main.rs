@@ -17,7 +17,9 @@ mod a11y;
 mod folder_view;
 mod icons;
 mod ops;
+mod persist;
 mod places;
+mod store;
 mod tabs_view;
 mod theme;
 mod thumbs;
@@ -30,14 +32,16 @@ use std::sync::mpsc::Receiver;
 
 use gpui::{
     App, AppContext, Application, Bounds, Entity, TitlebarOptions, WindowBackgroundAppearance,
-    WindowBounds, WindowOptions, px, size,
+    WindowBounds, WindowHandle, WindowOptions, point, px, size,
 };
 
 use a11y::A11yHandle;
 use folder_view::{Look, window_title};
 use icons::{Icons, Media};
 use ops::Ops;
+use persist::Persist;
 use places::Places;
+use store::{Settings, WindowState};
 use tabs_view::{TabsView, WindowServices};
 use theme::{Density, Mode, Theme};
 use thumbs::Thumbs;
@@ -48,6 +52,7 @@ use trace::Trace;
 struct Shared {
     places: Entity<Places>,
     media: Media,
+    persist: Entity<Persist>,
 }
 
 /// Settings read once at startup and shared by every window.
@@ -58,6 +63,7 @@ struct Startup {
     icon_font: &'static str,
     forced: Option<Mode>,
     density: Density,
+    sidebar: bool,
 }
 
 /// A window app has no console: write panics to `%TEMP%\fx-crash-<pid>.log`
@@ -74,8 +80,9 @@ fn log_panics() {
 
 fn main() {
     log_panics();
-    let path = std::env::args_os()
-        .nth(1)
+    let arg = std::env::args_os().nth(1);
+    let path = arg
+        .clone()
         .map(PathBuf::from)
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_else(|| PathBuf::from("."));
@@ -100,6 +107,19 @@ fn main() {
     // Before the event loop: RtlGetVersion only, no I/O.
     let mica_supported =
         fx_shell::supports_mica() && std::env::var_os("FX_MICA").is_none_or(|v| v != "0");
+    // Settings and the saved session (task T1.17), read before the event
+    // loop. Benchmarks and test runs (FX_NO_STATE=1) neither read nor save.
+    let persist = trace.is_none() && std::env::var_os("FX_NO_STATE").is_none_or(|v| v != "1");
+    let settings = if persist {
+        store::settings_path()
+            .map(|p| store::load_settings(&p))
+            .unwrap_or_default()
+    } else {
+        Settings::default()
+    };
+    let session = (persist && arg.is_none() && settings.restaurar_sessao)
+        .then(persist::load_session)
+        .flatten();
 
     let app = Application::new();
     if let Some(t) = &mut trace {
@@ -115,17 +135,58 @@ fn main() {
             font: theme::pick_font(&fonts),
             icon_font: theme::pick_icon_font(&fonts),
             forced: Mode::from_env(),
-            density: Density::from_env().unwrap_or(Density::Standard),
+            density: Density::from_env().unwrap_or(match settings.densidade.as_str() {
+                "compacta" => Density::Compact,
+                "confortável" => Density::Comfortable,
+                _ => Density::Standard,
+            }),
+            sidebar: settings.barra_lateral,
         };
         let trace = trace.map(|t| Rc::new(RefCell::new(t)));
-        let places = cx.new(|cx| Places::new(trace.clone(), cx));
+        let pinned = session.as_ref().and_then(|s| s.pinned.clone());
+        let places = cx.new(|cx| Places::new(trace.clone(), pinned, cx));
         let media = Media {
             icons: cx.new(Icons::new),
             thumbs: cx.new(Thumbs::new),
             ops: cx.new(Ops::new),
         };
-        let shared = Shared { places, media };
-        if !open_folder_window(path, startup, trace, shared.clone(), cx) {
+        let persist = cx.new(|cx| Persist::new(persist, settings, places.clone(), cx));
+        let shared = Shared {
+            places,
+            media,
+            persist,
+        };
+        // The last session's windows, or one window on the folder asked for.
+        let saved: Vec<WindowState> = session
+            .map(|s| s.windows)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|w| !w.tabs.is_empty())
+            .collect();
+        let mut opened = 0;
+        if saved.is_empty() {
+            opened += usize::from(open_folder_window(
+                path,
+                startup,
+                trace,
+                shared.clone(),
+                None,
+                cx,
+            ));
+        } else {
+            for w in saved {
+                let first = w.tabs[0].path.clone();
+                opened += usize::from(open_folder_window(
+                    first,
+                    startup,
+                    None,
+                    shared.clone(),
+                    Some(w),
+                    cx,
+                ));
+            }
+        }
+        if opened == 0 {
             cx.quit();
             return;
         }
@@ -167,7 +228,7 @@ fn listen(rx: Receiver<PathBuf>, startup: Startup, shared: Shared, cx: &mut App)
             rx = back;
             let Ok(folder) = folder else { break };
             if cx
-                .update(|cx| open_folder_window(folder, startup, None, shared.clone(), cx))
+                .update(|cx| open_folder_window(folder, startup, None, shared.clone(), None, cx))
                 .is_err()
             {
                 break;
@@ -177,22 +238,36 @@ fn listen(rx: Receiver<PathBuf>, startup: Startup, shared: Shared, cx: &mut App)
     .detach();
 }
 
+fn track(persist: &Entity<Persist>, handle: WindowHandle<TabsView>, cx: &mut App) {
+    persist.update(cx, |p, _| p.track(handle));
+}
+
 /// Opens a folder window; returns false if the window could not be created.
 fn open_folder_window(
     path: PathBuf,
     startup: Startup,
     trace: Option<Rc<RefCell<Trace>>>,
     shared: Shared,
+    saved: Option<WindowState>,
     cx: &mut App,
 ) -> bool {
-    let bounds = Bounds::centered(None, size(px(900.0), px(640.0)), cx);
+    let bounds = match saved.as_ref().and_then(|s| s.bounds) {
+        Some([x, y, w, h]) if w >= 200.0 && h >= 150.0 => Bounds {
+            origin: point(px(x), px(y)),
+            size: size(px(w), px(h)),
+        },
+        _ => Bounds::centered(None, size(px(900.0), px(640.0)), cx),
+    };
     let Startup {
         mica_supported,
         font,
         icon_font,
         forced,
         density,
+        sidebar,
     } = startup;
+    let persist = shared.persist.clone();
+    let close_persist = persist.clone();
     let opened = cx.open_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -227,6 +302,7 @@ fn open_folder_window(
                 font,
                 icon_font,
                 grid: std::env::var_os("FX_VIEW").is_some_and(|v| v == "grid"),
+                sidebar,
                 mica_supported,
                 mica,
             };
@@ -241,6 +317,9 @@ fn open_folder_window(
                 };
                 TabsView::new(path, look, trace, services, window, cx)
             });
+            if let Some(state) = saved {
+                view.update(cx, |view, cx| view.restore_tabs(state, window, cx));
+            }
             // Follow the Windows light/dark setting live.
             let themed = view.clone();
             window
@@ -258,15 +337,24 @@ fn open_folder_window(
                 .detach();
             window.activate_window();
             let for_close = view.clone();
-            window.on_window_should_close(cx, move |_, cx| {
-                for_close.read(cx).write_trace();
+            let closing_persist = close_persist;
+            window.on_window_should_close(cx, move |window, cx| {
+                let tabs = for_close.read(cx);
+                tabs.write_trace();
+                let state = tabs.export(window, cx);
+                let settings = tabs.settings_part();
+                let id = window.window_handle().window_id();
+                closing_persist.update(cx, |p, cx| p.closing(id, state, settings, cx));
                 true
             });
             view
         },
     );
     match opened {
-        Ok(_) => true,
+        Ok(handle) => {
+            track(&persist, handle, cx);
+            true
+        }
         Err(err) => {
             eprintln!("fx: failed to open window: {err:#}");
             false

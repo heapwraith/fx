@@ -31,6 +31,11 @@ accesskit_windows = "=0.35.2"
 # HWND da janela do GPUI (mesma versão que o GPUI já usa; D-021).
 raw-window-handle = "=0.6.2"
 
+# Persistência (T1.17, D-026): configurações em TOML, estado em SQLite (embutido).
+serde = { version = "=1.0.229", features = ["derive"] }
+toml = "=0.8.23"
+rusqlite = { version = "=0.37.0", features = ["bundled"] }
+
 # GPUI: fixado na T0.1 (D-007). Resolvido para a cópia com patch em third_party/gpui
 # via [patch.crates-io] abaixo, para compilar de forma cruzada WSL -> Windows (D-005).
 gpui = "=0.2.2"

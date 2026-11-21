@@ -72,6 +72,8 @@ pub struct Look {
     pub icon_font: &'static str,
     /// New tabs start in the grid view (`FX_VIEW=grid`).
     pub grid: bool,
+    /// The sidebar starts open (saved setting).
+    pub sidebar: bool,
     /// Mica is available (Windows 11 22H2+ and not disabled by `FX_MICA=0`).
     pub mica_supported: bool,
     /// Mica shows through right now (see `FolderView::set_system_mode`).
@@ -773,6 +775,47 @@ impl FolderView {
             let item = if self.grid { pos / self.grid_cols } else { pos };
             self.scroll.scroll_to_item(item, ScrollStrategy::Center);
         }
+    }
+
+    /// This tab's state, for the saved session (task T1.17).
+    pub fn export(&self) -> crate::store::TabState {
+        let r = self.snapshot();
+        let (back, _, forward) = self.history.parts();
+        let paths = |v: &[Visit]| v.iter().map(|v| v.path.clone()).collect();
+        crate::store::TabState {
+            path: self.path.clone(),
+            scroll: r.scroll.unwrap_or(0.0),
+            grid: self.grid,
+            selected: r
+                .selected
+                .iter()
+                .map(|n| n.to_string_lossy().into_owned())
+                .collect(),
+            cursor: r.cursor.map(|c| c.to_string_lossy().into_owned()),
+            back: paths(back),
+            forward: paths(forward),
+        }
+    }
+
+    /// Restores a saved tab (right after `new` on the same folder): view,
+    /// history, and the selection and scroll once the folder is read.
+    pub fn apply_saved(&mut self, t: crate::store::TabState) {
+        self.grid = t.grid;
+        self.restore = Some(Restore {
+            selected: t.selected.into_iter().map(OsString::from).collect(),
+            cursor: t.cursor.map(OsString::from),
+            scroll: Some(t.scroll),
+        });
+        let visit = |path: PathBuf| Visit {
+            path,
+            restore: Restore::default(),
+        };
+        self.history = History::from_parts(
+            t.back.into_iter().map(visit).collect(),
+            visit(self.path.clone()),
+            t.forward.into_iter().map(visit).collect(),
+            History::<Visit>::DEFAULT_LIMIT,
+        );
     }
 
     /// Opens `path` in this tab (sidebar), as a new history entry.

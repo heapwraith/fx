@@ -20,6 +20,9 @@ pub struct Places {
     pub drives: Vec<Drive>,
     known: Vec<(KnownFolder, PathBuf)>,
     pub pinned: Pinned,
+    /// Quick access is final (restored, or the defaults applied): only then
+    /// is it saved, so the defaults are never saved as "nothing pinned".
+    pinned_ready: bool,
     trace: Option<Rc<RefCell<Trace>>>,
 }
 
@@ -34,15 +37,30 @@ const DEFAULT_PINS: [KnownFolder; 6] = [
 ];
 
 impl Places {
-    pub fn new(trace: Option<Rc<RefCell<Trace>>>, cx: &mut Context<Self>) -> Self {
+    /// `saved`: quick access from the last session (`None`: use the defaults).
+    pub fn new(
+        trace: Option<Rc<RefCell<Trace>>>,
+        saved: Option<Vec<PathBuf>>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         Self::load_known(cx);
         Self::watch(cx);
+        let mut pinned = Pinned::new();
+        let pinned_ready = saved.is_some();
+        for p in saved.into_iter().flatten() {
+            pinned.pin(p);
+        }
         Self {
             drives: Vec::new(),
             known: Vec::new(),
-            pinned: Pinned::new(),
+            pinned,
+            pinned_ready,
             trace,
         }
+    }
+
+    pub fn pinned_ready(&self) -> bool {
+        self.pinned_ready
     }
 
     fn load_known(cx: &mut Context<Self>) {
@@ -51,8 +69,8 @@ impl Places {
                 .background_spawn(async { fx_shell::known_folders() })
                 .await;
             let _ = this.update(cx, |places, cx| {
-                // Until settings persist (T1.17), every start pins the defaults.
-                if places.pinned.is_empty() {
+                // First run (nothing saved yet): Explorer-like defaults.
+                if !places.pinned_ready {
                     for f in DEFAULT_PINS {
                         if let Some((_, p)) = known.iter().find(|(k, _)| *k == f) {
                             places.pinned.pin(p.clone());
@@ -71,6 +89,7 @@ impl Places {
                         warm_up: true,
                     });
                 }
+                places.pinned_ready = true;
                 places.known = known;
                 cx.notify();
             });

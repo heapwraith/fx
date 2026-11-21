@@ -126,8 +126,8 @@ impl TabsView {
             trace,
             places,
             media,
+            sidebar_open: look.sidebar,
             a11y,
-            sidebar_open: true,
             apply_all: false,
         };
         view.focus_active(window, cx);
@@ -147,6 +147,64 @@ impl TabsView {
         // Re-render the strip when the tab's folder (its label) changes.
         cx.observe(&tab, |_, _, cx| cx.notify()).detach();
         tab
+    }
+
+    /// This window's state for the saved session (task T1.17).
+    pub fn export(&self, window: &Window, cx: &gpui::App) -> crate::store::WindowState {
+        let b = window.bounds();
+        crate::store::WindowState {
+            bounds: Some([
+                f32::from(b.origin.x),
+                f32::from(b.origin.y),
+                f32::from(b.size.width),
+                f32::from(b.size.height),
+            ]),
+            active: self.tabs.active_index(),
+            tabs: self.tabs.iter().map(|t| t.read(cx).export()).collect(),
+        }
+    }
+
+    /// Row density and sidebar, for the saved settings.
+    pub fn settings_part(&self) -> (String, bool) {
+        let density = match self.look.density {
+            Density::Compact => "compacta",
+            Density::Standard => "padrão",
+            Density::Comfortable => "confortável",
+        };
+        (density.to_owned(), self.sidebar_open)
+    }
+
+    /// Reopens a saved window's tabs (the first tab already shows the first
+    /// folder).
+    pub fn restore_tabs(
+        &mut self,
+        state: crate::store::WindowState,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let mut saved = state.tabs.into_iter();
+        if let Some(first) = saved.next() {
+            self.tabs
+                .active()
+                .update(cx, |tab, _| tab.apply_saved(first));
+        }
+        for t in saved {
+            let tab = Self::new_tab(
+                t.path.clone(),
+                self.look,
+                None,
+                None,
+                self.media.clone(),
+                self.a11y.clone(),
+                cx,
+            );
+            tab.update(cx, |tab, _| tab.apply_saved(t));
+            self.tabs.open(tab);
+        }
+        self.tabs
+            .activate(state.active.min(self.tabs.len().saturating_sub(1)));
+        self.focus_active(window, cx);
+        cx.notify();
     }
 
     /// Focus and click requests from screen readers go to the active tab.
