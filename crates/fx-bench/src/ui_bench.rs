@@ -2,6 +2,7 @@
 //! - `fx-bench open`: P2, 10 openings of `flat-100k` (first frame with rows).
 //! - `fx-bench scroll`: P7, frame intervals while `bench/scroll-p7.ps1` scrolls.
 //! - `fx-bench responsive <folder>`: the window keeps answering while it loads.
+//! - `fx-bench type`: P4, key -> frame latency while typing to filter (T0.6).
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
@@ -36,6 +37,15 @@ impl TraceFile {
             .iter()
             .find(|(k, _)| k == key)
             .and_then(|(_, v)| v.parse().ok())
+    }
+
+    /// Every value of a repeated key (e.g. `input_ms`), in file order.
+    pub fn numbers(&self, key: &str) -> Vec<f64> {
+        self.lines
+            .iter()
+            .filter(|(k, _)| k == key)
+            .filter_map(|(_, v)| v.parse().ok())
+            .collect()
     }
 
     /// Frame intervals grouped by scrolling session.
@@ -395,6 +405,70 @@ pub fn responsive(folder: &Path, seconds: u32) -> std::io::Result<()> {
     Ok(())
 }
 
+const TARGET_P4_MS: f64 = 16.0;
+const TYPE_ROUNDS: usize = 3;
+
+/// P4: types "report-123" (10 keys, 50 ms apart) into fx on `flat-100k`, 3 rounds.
+pub fn type_keys() -> std::io::Result<()> {
+    let folder = flat_100k()?;
+    let mut child = spawn_fx(&folder, false)?;
+    // Let the folder load and sort first, so typing filters the full list.
+    std::thread::sleep(Duration::from_secs(2));
+    let out = Command::new("powershell")
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+        .arg(Path::new("bench").join("type-p4.ps1"))
+        .args(["-ProcessId", &child.id().to_string()])
+        .args(["-Rounds", &TYPE_ROUNDS.to_string()])
+        .output()?;
+    Command::new("powershell")
+        .args(["-NoProfile", "-Command"])
+        .arg(format!(
+            "(Get-Process -Id {}).CloseMainWindow() | Out-Null",
+            child.id()
+        ))
+        .status()?;
+    wait_with_timeout(&mut child, Duration::from_secs(10))?;
+    if !out.status.success() {
+        return Err(std::io::Error::other(format!(
+            "typing script failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        )));
+    }
+    let samples = read_trace(child.id())?.numbers("input_ms");
+    if samples.is_empty() {
+        return Err(std::io::Error::other("no key latency recorded"));
+    }
+    let (median, p95) = median_p95(&ms_samples(&samples));
+    let max = samples.iter().copied().fold(0.0, f64::max);
+    let pass = p95 <= TARGET_P4_MS;
+    println!("P4: key -> frame presented while typing to filter flat-100k (release)");
+    println!(
+        "  {} keys ({TYPE_ROUNDS} x \"report-123\" + Escape): median {median:.2} ms  p95 {p95:.2} ms  max {max:.2} ms   target ≤ {TARGET_P4_MS} ms  {}",
+        samples.len(),
+        if pass { "pass" } else { "FAIL" }
+    );
+    let date = utc_date(SystemTime::now());
+    let json = format!(
+        concat!(
+            "{{\n  \"id\": \"P4\",\n  \"task\": \"T0.6\",\n  \"folder\": \"flat-100k\",\n",
+            "  \"input\": \"bench/type-p4.ps1: 3 x 'report-123' + Escape, 50 ms between keys\",\n",
+            "  \"keys\": {n},\n  \"latency_ms\": {{ \"median\": {m:.3}, \"p95\": {p:.3}, \"max\": {x:.3}, \"target\": {t} }},\n",
+            "  \"pass\": {pass},\n  \"machine\": {machine},\n  \"commit\": {commit},\n  \"date\": {date}\n}}\n"
+        ),
+        n = samples.len(),
+        m = median,
+        p = p95,
+        x = max,
+        t = TARGET_P4_MS,
+        pass = pass,
+        machine = json_string(&machine()),
+        commit = json_string(commit()),
+        date = json_string(&date),
+    );
+    std::fs::write(results_dir()?.join(format!("{date}-T0.6-P4.json")), json)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -408,6 +482,8 @@ mod tests {
         assert_eq!(t.number("loaded_ms"), None);
         assert_eq!(t.number("missing"), None);
         assert_eq!(t.sessions(), vec![vec![4.1, 8.4], vec![4.2]]);
+        let t = TraceFile::parse("input_ms 3.5\nframe_ms 4.1\ninput_ms 7.25\n");
+        assert_eq!(t.numbers("input_ms"), vec![3.5, 7.25]);
     }
 
     #[test]

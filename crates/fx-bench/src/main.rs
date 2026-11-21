@@ -8,6 +8,7 @@
 //! fx-bench open               P2: 10 openings of flat-100k in fx.exe (T0.5)
 //! fx-bench scroll             P7: frame times while scrolling (moves the mouse!) (T0.5)
 //! fx-bench responsive <dir>   window responsiveness while <dir> loads (T0.5)
+//! fx-bench type               P4: key -> frame latency typing to filter (sends keys!) (T0.6)
 //! ```
 //! Run from the repository root: results go to `bench/results/`.
 
@@ -26,7 +27,7 @@ use std::time::Instant;
 use fixtures::{Outcome, Spec};
 
 const USAGE: &str =
-    "usage: fx-bench fixtures [--clean] | enum | list | open | scroll | responsive <folder>";
+    "usage: fx-bench fixtures [--clean] | enum | list | open | scroll | responsive <folder> | type";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -38,6 +39,7 @@ fn main() -> ExitCode {
         ["list"] => list_bench::run(),
         ["open"] => ui_bench::open(),
         ["scroll"] => ui_bench::scroll(),
+        ["type"] => ui_bench::type_keys(),
         ["responsive", folder] => ui_bench::responsive(std::path::Path::new(folder), 10),
         _ => {
             eprintln!("{USAGE}");

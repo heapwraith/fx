@@ -30,6 +30,10 @@ pub struct Trace {
     prev_frame: Option<Instant>,
     /// Frame intervals, grouped by continuous scrolling session.
     sessions: Vec<Vec<f64>>,
+    /// Earliest key event not yet shown on screen (P4).
+    pending_input: Option<Instant>,
+    /// Key event -> end of the frame that shows its result, in ms (P4).
+    input_ms: Vec<f64>,
 }
 
 impl Trace {
@@ -51,6 +55,8 @@ impl Trace {
             last_change: None,
             prev_frame: None,
             sessions: Vec::new(),
+            pending_input: None,
+            input_ms: Vec::new(),
         })
     }
 
@@ -123,6 +129,22 @@ impl Trace {
         self.prev_frame = Some(now);
     }
 
+    /// A key event changed what is shown; `at` is when its handler started.
+    /// Several keys before the next frame keep the earliest timestamp.
+    pub fn input_started(&mut self, at: Instant) {
+        self.pending_input.get_or_insert(at);
+    }
+
+    /// Takes the pending key event, if any, so the caller can close it with
+    /// [`Trace::record_input`] once the current frame has been presented.
+    pub fn take_pending_input(&mut self) -> Option<Instant> {
+        self.pending_input.take()
+    }
+
+    pub fn record_input(&mut self, started: Instant) {
+        self.input_ms.push(millis(started.elapsed()));
+    }
+
     pub fn write(&self) {
         if let Err(e) = self.try_write() {
             eprintln!("fx: could not write trace: {e}");
@@ -143,6 +165,9 @@ impl Trace {
         let _ = writeln!(out, "max_rows_built {}", self.max_rows_built);
         // Scroll position when the trace was written (negative = scrolled down).
         let _ = writeln!(out, "final_offset_px {:.1}", self.last_offset);
+        for ms in &self.input_ms {
+            let _ = writeln!(out, "input_ms {ms:.3}");
+        }
         for session in self.sessions.iter().filter(|s| !s.is_empty()) {
             let _ = writeln!(out, "session {}", session.len());
             for f in session {
@@ -177,6 +202,8 @@ mod tests {
             last_change: None,
             prev_frame: None,
             sessions: Vec::new(),
+            pending_input: None,
+            input_ms: Vec::new(),
         }
     }
 
@@ -196,6 +223,19 @@ mod tests {
         t.record_frame();
         assert_eq!(t.sessions.len(), 2, "an idle gap starts a new session");
         assert_eq!(t.sessions[1].len(), 1);
+    }
+
+    #[test]
+    fn input_keeps_earliest_pending_key() {
+        let mut t = trace();
+        let first = Instant::now();
+        t.input_started(first);
+        t.input_started(first + Duration::from_millis(5));
+        assert_eq!(t.take_pending_input(), Some(first));
+        assert_eq!(t.take_pending_input(), None);
+        t.record_input(first);
+        assert_eq!(t.input_ms.len(), 1);
+        assert!(t.input_ms[0] >= 0.0);
     }
 
     #[test]

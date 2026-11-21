@@ -218,6 +218,22 @@ impl FileList {
             .filter(|&i| hit[i as usize])
             .collect()
     }
+
+    /// Like [`FileList::filter`], but only among `candidates` (keeping their
+    /// order). When the user extends the text (`"rep"` -> `"repo"`), every match of
+    /// the new text is among the matches of the old one, so filtering the previous
+    /// result is equivalent and much cheaper than a full pass.
+    pub fn filter_within(&self, needle: &str, candidates: &[u32]) -> Vec<u32> {
+        let needle = crate::natural::fold(needle);
+        if needle.is_empty() {
+            return candidates.to_vec();
+        }
+        candidates
+            .iter()
+            .copied()
+            .filter(|&i| self.folded(i).contains(needle.as_str()))
+            .collect()
+    }
 }
 
 /// Extension of a folded name (`""` when none; a leading dot is not an extension).
@@ -381,6 +397,36 @@ mod tests {
         // A match never spans two names.
         assert!(list.filter("pdfrel").is_empty());
         assert!(list.filter("\0").is_empty());
+    }
+
+    #[test]
+    fn filter_within_matches_full_filter_when_refining() {
+        let mut list = FileList::new();
+        list.extend(
+            [
+                "Relatório.pdf",
+                "relat.txt",
+                "report-1",
+                "Report-12",
+                "foto",
+                "repórter",
+            ]
+            .map(|n| file(n, 0, 0)),
+        );
+        list.sort(SortKey::Name, Direction::Ascending);
+        let mut previous = list.filter("");
+        let mut typed = String::new();
+        for c in "repo".chars() {
+            typed.push(c);
+            let refined = list.filter_within(&typed, &previous);
+            assert_eq!(refined, list.filter(&typed), "after typing {typed:?}");
+            previous = refined;
+        }
+        assert_eq!(
+            names(&list, &previous),
+            ["report-1", "Report-12", "repórter"]
+        );
+        assert_eq!(list.filter_within("", &previous), previous);
     }
 
     #[test]

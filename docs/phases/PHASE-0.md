@@ -90,7 +90,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T0.6 — Latência de input
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: digitar para filtrar na `flat-100k`; **P4: p95 3,4 ms** (mediana 2,7, máx. 3,4; meta 16) em 33 teclas reais (3× "report-123" + Esc), medido do evento de tecla até depois do present do quadro.
 
 **Fazer**
 - Digitar para filtrar na `flat-100k` usando o filtro da T0.4.

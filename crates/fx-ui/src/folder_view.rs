@@ -10,13 +10,15 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, channel};
+use std::time::Instant;
 
 use fx_core::format::{date_time_utc, size_kb};
 use fx_core::{Direction, Entry, FileList, SortKey};
 use fx_fs::Strategy;
 use gpui::{
-    Context, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, SharedString,
-    UniformListScrollHandle, Window, canvas, div, point, prelude::*, px, rgb, uniform_list,
+    Context, FocusHandle, KeyDownEvent, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
+    ScrollStrategy, SharedString, UniformListScrollHandle, Window, canvas, div, point, prelude::*,
+    px, rgb, uniform_list,
 };
 
 use crate::trace::Trace;
@@ -42,6 +44,11 @@ pub struct FolderView {
     scroll: UniformListScrollHandle,
     /// Offset of the pointer inside the thumb while dragging it.
     drag_offset: Option<Pixels>,
+    focus: FocusHandle,
+    /// "Type to filter" text (task T0.6).
+    filter_text: String,
+    /// Rows shown while filtering (indices in display order); `None` = all.
+    filtered: Option<Vec<u32>>,
     trace: Option<Rc<RefCell<Trace>>>,
 }
 
@@ -70,6 +77,9 @@ impl FolderView {
             status,
             scroll: UniformListScrollHandle::new(),
             drag_offset: None,
+            focus: cx.focus_handle(),
+            filter_text: String::new(),
+            filtered: None,
             trace,
         }
     }
@@ -98,6 +108,7 @@ impl FolderView {
                         trace.borrow_mut().mark("first_batch");
                     }
                     Arc::make_mut(&mut view.list).extend(batch);
+                    view.refilter();
                     cx.notify();
                 });
                 if alive.is_err() {
@@ -129,6 +140,7 @@ impl FolderView {
                 .await;
             let _ = this.update(cx, |view, cx| {
                 Arc::make_mut(&mut view.list).set_order(order);
+                view.refilter();
                 view.status = match failure {
                     Some(e) => Status::Failed(e),
                     None => Status::Ready,
@@ -146,7 +158,7 @@ impl FolderView {
         if let Some(trace) = &self.trace {
             trace.borrow_mut().record_rows_built(range.len());
         }
-        let order = self.list.order();
+        let order = self.rows();
         range
             .filter_map(|row| order.get(row).copied())
             .map(|i| {
@@ -268,8 +280,72 @@ impl FolderView {
             )
     }
 
+    pub fn focus_handle(&self) -> FocusHandle {
+        self.focus.clone()
+    }
+
+    /// Rows currently shown, in display order.
+    fn rows(&self) -> &[u32] {
+        self.filtered.as_deref().unwrap_or(self.list.order())
+    }
+
+    /// Recomputes the filter from scratch (after the list itself changed).
+    fn refilter(&mut self) {
+        if !self.filter_text.is_empty() {
+            self.filtered = Some(self.list.filter(&self.filter_text));
+        }
+    }
+
+    /// Applies a new filter text. Extending the text refines the previous result
+    /// instead of scanning all entries again.
+    fn set_filter(&mut self, text: String) {
+        let refine = !self.filter_text.is_empty() && text.starts_with(self.filter_text.as_str());
+        self.filtered = match (&self.filtered, text.is_empty()) {
+            (_, true) => None,
+            (Some(previous), false) if refine => Some(self.list.filter_within(&text, previous)),
+            _ => Some(self.list.filter(&text)),
+        };
+        self.filter_text = text;
+        self.scroll.scroll_to_item(0, ScrollStrategy::Top);
+    }
+
+    /// "Type to filter": printable characters extend the filter, Backspace
+    /// removes the last character and Escape clears it.
+    fn on_key_down(&mut self, event: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+        let started = Instant::now();
+        let ks = &event.keystroke;
+        let mut text = self.filter_text.clone();
+        match ks.key.as_str() {
+            "backspace" => {
+                text.pop();
+            }
+            "escape" => text.clear(),
+            _ => {
+                let m = &ks.modifiers;
+                if m.control || m.alt || m.platform || m.function {
+                    return;
+                }
+                match ks.key_char.as_deref() {
+                    Some(c) if !c.chars().any(char::is_control) => text.push_str(c),
+                    _ => return,
+                }
+            }
+        }
+        if text == self.filter_text {
+            return;
+        }
+        self.set_filter(text);
+        if let Some(trace) = &self.trace {
+            trace.borrow_mut().input_started(started);
+        }
+        cx.notify();
+    }
+
     fn status_text(&self) -> String {
         let n = self.list.len();
+        if let Some(filtered) = &self.filtered {
+            return format!("filtro \"{}\": {} de {n}", self.filter_text, filtered.len());
+        }
         match &self.status {
             Status::Loading => format!("{n} itens — carregando…"),
             Status::Sorting => format!("{n} itens — ordenando…"),
@@ -298,6 +374,12 @@ impl FolderView {
                 }
             });
         }
+        if let Some(started) = t.take_pending_input() {
+            let trace = trace.clone();
+            // Runs at the start of the next frame, i.e. after this one (which shows
+            // the key's result) was drawn and presented.
+            window.on_next_frame(move |_, _| trace.borrow_mut().record_input(started));
+        }
         let offset = f32::from(self.scroll.0.borrow().base_handle.offset().y);
         if t.observe_scroll(offset) {
             let trace = trace.clone();
@@ -316,10 +398,12 @@ impl FolderView {
 impl Render for FolderView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.trace_frame(window);
-        let count = self.list.order().len();
+        let count = self.rows().len();
         let header_cell = |label: &'static str| div().text_color(rgb(0x555555)).child(label);
 
         div()
+            .track_focus(&self.focus)
+            .on_key_down(cx.listener(Self::on_key_down))
             .size_full()
             .flex()
             .flex_col()

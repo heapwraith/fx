@@ -46,6 +46,8 @@ fn main() {
                     t.mark("window_created");
                 }
                 let view = cx.new(|cx| FolderView::new(path, trace, cx));
+                // Keys go to the list from the start ("type to filter").
+                view.read(cx).focus_handle().focus(window);
                 let for_close = view.clone();
                 window.on_window_should_close(cx, move |_, cx| {
                     for_close.read(cx).write_trace();
