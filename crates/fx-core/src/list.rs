@@ -2,6 +2,11 @@
 //! one name buffer with offsets, separate size/date/attribute vectors, and an
 //! index vector that sorting and filtering rearrange. Batches are appended; the
 //! columns are never rebuilt.
+//!
+//! Changes from the folder watcher (task T1.8) are applied in place: a new
+//! entry is appended to the columns and inserted at its sorted position; a
+//! removed entry leaves the display order but keeps its slot, so the indices
+//! of every other entry (held by the selection) stay valid.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -9,7 +14,7 @@ use std::ffi::OsString;
 use std::time::SystemTime;
 
 use crate::natural::{fold_into, natural_cmp};
-use crate::{Attributes, Entry};
+use crate::{Attributes, Change, Entry};
 
 /// Separator between folded keys in the filter buffer. Folded keys never contain
 /// it (Windows forbids NUL in names) and a needle containing it matches nothing.
@@ -47,6 +52,24 @@ pub struct FileList {
     raw_names: HashMap<u32, OsString>,
     /// Current display order (indices into the columns).
     order: Vec<u32>,
+    /// Slots of entries removed by the watcher (not in `order`).
+    removed: Vec<bool>,
+    /// The order's sort, once sorted (new entries are inserted by it).
+    sorted_by: Option<(SortKey, Direction)>,
+    /// Live entries by lowercase name, built on the first change.
+    by_name: Option<HashMap<String, u32>>,
+}
+
+/// What [`FileList::apply`] did, for the view to follow.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Applied {
+    /// The watcher lost events: read the folder again.
+    pub reload: bool,
+    pub added: Vec<u32>,
+    pub removed: Vec<u32>,
+    /// `(old, new)` slots of renamed entries (to carry the selection over).
+    pub renamed: Vec<(u32, u32)>,
+    pub modified: Vec<u32>,
 }
 
 impl FileList {
@@ -54,19 +77,38 @@ impl FileList {
         Self::default()
     }
 
+    /// Entries in the folder (removed ones excluded).
     pub fn len(&self) -> usize {
-        self.sizes.len()
+        self.order.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.sizes.is_empty()
+        self.order.is_empty()
+    }
+
+    /// Number of slots: every index below it is valid for the accessors
+    /// (including removed entries).
+    pub fn slots(&self) -> usize {
+        self.sizes.len()
+    }
+
+    pub fn is_removed(&self, i: u32) -> bool {
+        self.removed.get(i as usize).copied().unwrap_or(false)
     }
 
     /// Appends a batch. New entries go to the end of the current order; call
     /// [`FileList::sort`] to place them.
     pub fn extend(&mut self, batch: impl IntoIterator<Item = Entry>) {
         for entry in batch {
-            let index = self.len() as u32;
+            let index = self.push_slot(entry);
+            self.order.push(index);
+        }
+    }
+
+    /// Appends an entry to the columns (not to the order); returns its slot.
+    fn push_slot(&mut self, entry: Entry) -> u32 {
+        {
+            let index = self.slots() as u32;
             let name = match entry.name.into_string() {
                 Ok(s) => s,
                 Err(raw) => {
@@ -83,7 +125,14 @@ impl FileList {
             self.sizes.push(entry.size);
             self.modified.push(entry.modified);
             self.attributes.push(entry.attributes);
-            self.order.push(index);
+            self.removed.push(false);
+            if self.by_name.is_some() {
+                let key = self.name(index).to_lowercase();
+                if let Some(map) = &mut self.by_name {
+                    map.insert(key, index);
+                }
+            }
+            index
         }
     }
 
@@ -138,12 +187,25 @@ impl FileList {
     /// name, then to the exact name, then to arrival order (stable).
     pub fn sort(&mut self, key: SortKey, direction: Direction) {
         self.order = self.sorted_order(key, direction);
+        self.sorted_by = Some((key, direction));
     }
 
-    /// The order [`FileList::sort`] would produce, without changing the list, so
-    /// it can be computed off the UI thread and applied with [`FileList::set_order`].
-    pub fn sorted_order(&self, key: SortKey, direction: Direction) -> Vec<u32> {
-        let mut order: Vec<u32> = (0..self.len() as u32).collect();
+    /// Like [`FileList::set_order`], remembering the sort for new entries.
+    pub fn set_sorted_order(
+        &mut self,
+        order: Vec<u32>,
+        key: SortKey,
+        direction: Direction,
+    ) -> bool {
+        let ok = self.set_order(order);
+        if ok {
+            self.sorted_by = Some((key, direction));
+        }
+        ok
+    }
+
+    /// The comparison [`FileList::sorted_order`] sorts by.
+    fn compare(&self, a: u32, b: u32, key: SortKey, direction: Direction) -> Ordering {
         let by_name = |a: u32, b: u32| {
             natural_cmp(self.folded(a), self.folded(b)).then_with(|| self.name(a).cmp(self.name(b)))
         };
@@ -159,19 +221,26 @@ impl FileList {
                     .then_with(|| by_name(a, b)),
             }
         };
-        order.sort_unstable_by(|&a, &b| {
-            let dirs_first = self
-                .attributes(b)
-                .is_dir()
-                .cmp(&self.attributes(a).is_dir());
-            dirs_first
-                .then_with(|| match direction {
-                    Direction::Ascending => primary(a, b),
-                    Direction::Descending => primary(b, a),
-                })
-                // Arrival order breaks exact ties in both directions (stability).
-                .then_with(|| a.cmp(&b))
-        });
+        let dirs_first = self
+            .attributes(b)
+            .is_dir()
+            .cmp(&self.attributes(a).is_dir());
+        dirs_first
+            .then_with(|| match direction {
+                Direction::Ascending => primary(a, b),
+                Direction::Descending => primary(b, a),
+            })
+            // Arrival order breaks exact ties in both directions (stability).
+            .then_with(|| a.cmp(&b))
+    }
+
+    /// The order [`FileList::sort`] would produce, without changing the list, so
+    /// it can be computed off the UI thread and applied with [`FileList::set_order`].
+    pub fn sorted_order(&self, key: SortKey, direction: Direction) -> Vec<u32> {
+        let mut order: Vec<u32> = (0..self.slots() as u32)
+            .filter(|&i| !self.is_removed(i))
+            .collect();
+        order.sort_unstable_by(|&a, &b| self.compare(a, b, key, direction));
         order
     }
 
@@ -181,10 +250,10 @@ impl FileList {
         if order.len() != self.len() {
             return false;
         }
-        let mut seen = vec![false; order.len()];
+        let mut seen = vec![false; self.slots()];
         for &i in &order {
             match seen.get_mut(i as usize) {
-                Some(s) if !*s => *s = true,
+                Some(s) if !*s && !self.is_removed(i) => *s = true,
                 _ => return false,
             }
         }
@@ -204,7 +273,7 @@ impl FileList {
         }
         // One pass over the folded buffer; map each match to its entry by walking
         // the (sorted) key ends forward.
-        let mut hit = vec![false; self.len()];
+        let mut hit = vec![false; self.slots()];
         let mut entry = 0usize;
         for (at, _) in self.folded.match_indices(needle.as_str()) {
             while (self.folded_ends[entry] as usize) < at + needle.len() {
@@ -233,6 +302,100 @@ impl FileList {
             .copied()
             .filter(|&i| self.folded(i).contains(needle.as_str()))
             .collect()
+    }
+}
+
+impl FileList {
+    /// Applies watcher changes in place (see the module comment). Stops at an
+    /// [`Change::Overflow`]: the caller must read the folder again.
+    pub fn apply(&mut self, changes: Vec<Change>) -> Applied {
+        let mut done = Applied::default();
+        if self.by_name.is_none() {
+            let map = self
+                .order
+                .iter()
+                .map(|&i| (self.name(i).to_lowercase(), i))
+                .collect();
+            self.by_name = Some(map);
+        }
+        for change in changes {
+            match change {
+                Change::Overflow => {
+                    done.reload = true;
+                    return done;
+                }
+                Change::Added(entry) | Change::Modified(entry) => match self.find(&entry.name) {
+                    Some(i) => {
+                        self.update(i, &entry);
+                        done.modified.push(i);
+                    }
+                    None => done.added.push(self.insert(entry)),
+                },
+                Change::Removed(name) => {
+                    if let Some(i) = self.find(&name) {
+                        self.remove(i);
+                        done.removed.push(i);
+                    }
+                }
+                Change::Renamed { from, to } => {
+                    let old = self.find(&from);
+                    if let Some(i) = old {
+                        self.remove(i);
+                    }
+                    let new = match self.find(&to.name) {
+                        Some(i) => {
+                            self.update(i, &to);
+                            i
+                        }
+                        None => self.insert(to),
+                    };
+                    match old {
+                        Some(i) => done.renamed.push((i, new)),
+                        None => done.added.push(new),
+                    }
+                }
+            }
+        }
+        done
+    }
+
+    fn find(&self, name: &std::ffi::OsStr) -> Option<u32> {
+        let key = name.to_string_lossy().to_lowercase();
+        let i = *self.by_name.as_ref()?.get(&key)?;
+        (!self.is_removed(i)).then_some(i)
+    }
+
+    fn update(&mut self, i: u32, entry: &Entry) {
+        let i = i as usize;
+        self.sizes[i] = entry.size;
+        self.modified[i] = entry.modified;
+        self.attributes[i] = entry.attributes;
+    }
+
+    /// Adds an entry at its sorted position (at the end when not sorted yet).
+    fn insert(&mut self, entry: Entry) -> u32 {
+        let i = self.push_slot(entry);
+        let at = match self.sorted_by {
+            Some((key, dir)) => self
+                .order
+                .partition_point(|&o| self.compare(o, i, key, dir) == Ordering::Less),
+            None => self.order.len(),
+        };
+        self.order.insert(at, i);
+        i
+    }
+
+    fn remove(&mut self, i: u32) {
+        if let Some(at) = self.order.iter().position(|&o| o == i) {
+            self.order.remove(at);
+        }
+        self.removed[i as usize] = true;
+        let key = self.name(i).to_lowercase();
+        if let Some(map) = &mut self.by_name
+            && map.get(&key) == Some(&i)
+        {
+            map.remove(&key);
+        }
     }
 }
 
@@ -466,5 +629,99 @@ mod tests {
         assert_eq!(list.os_name(0), OsString::from("日本語 😀.txt"));
         assert_eq!(list.attributes(0), Attributes::empty());
         assert_eq!(list.modified(0), SystemTime::UNIX_EPOCH);
+    }
+
+    fn entry(name: &str, size: u64) -> Entry {
+        Entry {
+            name: name.into(),
+            size,
+            modified: SystemTime::UNIX_EPOCH,
+            attributes: Attributes::default(),
+        }
+    }
+
+    fn shown(list: &FileList) -> Vec<&str> {
+        list.order().iter().map(|&i| list.name(i)).collect()
+    }
+
+    #[test]
+    fn changes_insert_sorted_remove_and_keep_other_indices() {
+        let mut list = FileList::new();
+        list.extend([entry("b.txt", 1), entry("d.txt", 1), entry("f.txt", 1)]);
+        list.sort(SortKey::Name, Direction::Ascending);
+        let d = list.order()[1];
+        let done = list.apply(vec![
+            Change::Added(entry("c.txt", 5)),
+            Change::Added(entry("a.txt", 5)),
+            Change::Removed("F.TXT".into()), // Windows names ignore case
+        ]);
+        assert_eq!(shown(&list), ["a.txt", "b.txt", "c.txt", "d.txt"]);
+        assert_eq!((done.added.len(), done.removed.len()), (2, 1));
+        assert_eq!(list.name(d), "d.txt", "existing indices are stable");
+        assert_eq!((list.len(), list.slots()), (4, 5));
+        assert!(list.is_removed(done.removed[0]));
+        // Re-sorting and filtering skip the removed slot.
+        assert_eq!(
+            list.sorted_order(SortKey::Name, Direction::Ascending).len(),
+            4
+        );
+        assert!(list.filter("f.txt").is_empty());
+    }
+
+    #[test]
+    fn duplicates_and_unknown_names_are_harmless() {
+        let mut list = FileList::new();
+        list.extend([entry("a.txt", 1)]);
+        list.sort(SortKey::Name, Direction::Ascending);
+        // Already listed (the read and the watcher overlap): an update.
+        let done = list.apply(vec![
+            Change::Added(entry("a.txt", 9)),
+            Change::Removed("missing".into()),
+            Change::Modified(entry("new.txt", 3)),
+        ]);
+        assert_eq!(list.size(list.order()[0]), 9);
+        assert_eq!(done.modified, [0]);
+        assert_eq!(
+            shown(&list),
+            ["a.txt", "new.txt"],
+            "unknown modified = added"
+        );
+    }
+
+    #[test]
+    fn rename_moves_to_the_new_sorted_place() {
+        let mut list = FileList::new();
+        list.extend([entry("a", 1), entry("m", 1), entry("z", 1)]);
+        list.sort(SortKey::Name, Direction::Ascending);
+        let done = list.apply(vec![Change::Renamed {
+            from: "a".into(),
+            to: entry("y", 1),
+        }]);
+        assert_eq!(shown(&list), ["m", "y", "z"]);
+        let (old, new) = done.renamed[0];
+        assert!(list.is_removed(old) && list.name(new) == "y");
+        // A file can come back under its old name.
+        list.apply(vec![Change::Added(entry("a", 2))]);
+        assert_eq!(shown(&list), ["a", "m", "y", "z"]);
+    }
+
+    #[test]
+    fn overflow_asks_for_a_reload() {
+        let mut list = FileList::new();
+        list.extend([entry("a", 1)]);
+        let done = list.apply(vec![
+            Change::Overflow,
+            Change::Added(entry("never-applied", 1)),
+        ]);
+        assert!(done.reload);
+        assert_eq!(list.len(), 1);
+    }
+
+    #[test]
+    fn unsorted_list_appends_new_entries() {
+        let mut list = FileList::new();
+        list.extend([entry("b", 1)]);
+        list.apply(vec![Change::Added(entry("a", 1))]);
+        assert_eq!(shown(&list), ["b", "a"], "sorted later with the rest");
     }
 }

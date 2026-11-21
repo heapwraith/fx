@@ -2,6 +2,9 @@
 
 mod find;
 mod handle_info;
+mod watch;
+
+pub use watch::{Watcher, watch};
 
 use std::ffi::OsString;
 use std::io;

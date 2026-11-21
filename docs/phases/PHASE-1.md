@@ -105,7 +105,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.8 — Observador de mudanças
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: `fx-fs::watch` com `ReadDirectoryChangesW` assíncrono em thread própria (parado no `Drop`, armado antes de retornar), entregando criado/removido/renomeado/alterado com metadados; `FileList::apply` insere na posição ordenada, remove mantendo os índices, atualiza no lugar; seleção acompanha renomeações; a rolagem é compensada para a linha sob o cursor não andar; estouro (testado com buffer de 64 bytes) recarrega a pasta mantendo seleção e posição. Testes com `tempfile`: criar, alterar, renomear, criar pasta e apagar chegam em ≤ 100 ms (5 rodadas estáveis); verificado no app (`%TEMP%\fx-watch-demo`).
 
 **Fazer**
 - `fx-fs`: `ReadDirectoryChangesW` por pasta aberta, entregando diffs (criado, removido, renomeado, alterado) que a lista aplica sem recarregar tudo e sem mover a linha sob o cursor.

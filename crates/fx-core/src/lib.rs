@@ -14,9 +14,9 @@ mod pinned;
 mod selection;
 mod tabs;
 
-pub use entry::{Attributes, Entry};
+pub use entry::{Attributes, Change, Entry};
 pub use history::History;
-pub use list::{Direction, FileList, SortKey};
+pub use list::{Applied, Direction, FileList, SortKey};
 pub use pinned::Pinned;
 pub use selection::{MoveMode, Selection, Step};
 pub use tabs::Tabs;

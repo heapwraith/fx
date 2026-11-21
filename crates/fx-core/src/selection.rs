@@ -141,6 +141,33 @@ impl Selection {
         self.anchor = cursor;
     }
 
+    /// Entry `i` left the folder: unselect it (and drop it as cursor/anchor).
+    pub fn forget(&mut self, i: u32) {
+        self.set(i, false);
+        if self.cursor == Some(i) {
+            self.cursor = None;
+        }
+        if self.anchor == Some(i) {
+            self.anchor = None;
+        }
+    }
+
+    /// Entry `old` was renamed and is now entry `new`: it keeps its selection
+    /// and cursor/anchor role.
+    pub fn moved(&mut self, old: u32, new: u32) {
+        let was = self.is_selected(old);
+        self.set(old, false);
+        if was {
+            self.set(new, true);
+        }
+        if self.cursor == Some(old) {
+            self.cursor = Some(new);
+        }
+        if self.anchor == Some(old) {
+            self.anchor = Some(new);
+        }
+    }
+
     /// Ctrl+A: selects every row; the cursor stays (or goes to the first row).
     pub fn select_all(&mut self, rows: &[u32]) {
         self.clear_bits();
@@ -385,6 +412,22 @@ mod tests {
         assert_eq!((s.cursor(), s.anchor()), (Some(9), Some(9)));
         s.extend_to(&rows(12), 11);
         assert_eq!(sel(&s), [9, 10, 11]);
+    }
+
+    #[test]
+    fn removed_and_renamed_entries() {
+        let mut s = Selection::new();
+        s.select_only(2);
+        s.toggle(5); // cursor and anchor on 5
+        s.moved(5, 9);
+        assert_eq!(
+            (sel(&s), s.cursor(), s.anchor()),
+            (vec![2, 9], Some(9), Some(9))
+        );
+        s.forget(9);
+        assert_eq!((sel(&s), s.cursor(), s.anchor()), (vec![2], None, None));
+        s.moved(7, 8); // not selected: nothing to carry
+        assert_eq!(sel(&s), [2]);
     }
 
     #[test]

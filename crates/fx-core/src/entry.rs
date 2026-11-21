@@ -60,3 +60,18 @@ mod tests {
         assert!(!Attributes::default().is_dir());
     }
 }
+
+/// A change in a folder reported by the watcher (task T1.8).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Change {
+    Added(Entry),
+    Removed(std::ffi::OsString),
+    Renamed {
+        from: std::ffi::OsString,
+        to: Entry,
+    },
+    /// Size, date or attributes changed.
+    Modified(Entry),
+    /// Events were lost (the watcher's buffer overflowed): read the folder again.
+    Overflow,
+}

@@ -7,13 +7,13 @@
 use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
-pub use fx_core::{Attributes, Entry};
+pub use fx_core::{Attributes, Change, Entry};
 
 #[cfg(windows)]
 mod windows;
 
 #[cfg(windows)]
-pub use windows::enumerate;
+pub use windows::{Watcher, enumerate, watch};
 
 /// How a folder is read. All strategies deliver the same entries; they differ
 /// only in speed (task T0.3, docs/DECISIONS.md D-009).

@@ -27,7 +27,7 @@ use std::sync::mpsc::{Receiver, channel};
 use std::time::Instant;
 
 use fx_core::format::{date_time_utc, size_kb};
-use fx_core::{Direction, Entry, FileList, History, MoveMode, Selection, SortKey, Step};
+use fx_core::{Change, Direction, Entry, FileList, History, MoveMode, Selection, SortKey, Step};
 use fx_fs::Strategy;
 use fx_shell::icons::icon_key;
 use gpui::{
@@ -138,6 +138,10 @@ pub struct FolderView {
     grid: bool,
     /// Tiles per grid row, from the last layout.
     grid_cols: usize,
+    /// Watches the folder shown (task T1.8); replaced on navigation.
+    watcher: Option<fx_fs::Watcher>,
+    /// Changes that arrived before the list was sorted.
+    pending_changes: Vec<Change>,
 }
 
 impl FolderView {
@@ -192,6 +196,8 @@ impl FolderView {
             thumbs,
             grid: look.grid,
             grid_cols: 1,
+            watcher: None,
+            pending_changes: Vec::new(),
         };
         view.start_loading(cx);
         view
@@ -199,6 +205,14 @@ impl FolderView {
 
     /// Starts reading `self.path` on a worker thread.
     fn start_loading(&mut self, cx: &mut Context<Self>) {
+        // Watch first, then read: nothing that changes during the read is lost
+        // (duplicates are harmless, see `FileList::apply`).
+        self.pending_changes.clear();
+        let (changes_tx, changes_rx) = channel::<Vec<Change>>();
+        self.watcher = fx_fs::watch(&self.path, changes_tx).ok();
+        if self.watcher.is_some() {
+            Self::receive_changes(changes_rx, self.generation, cx);
+        }
         let (tx, rx) = channel::<Vec<Entry>>();
         let worker_path = self.path.clone();
         let worker = std::thread::Builder::new()
@@ -211,6 +225,101 @@ impl FolderView {
             }
             Err(e) => Status::Failed(format!("could not start reader thread: {e}")),
         };
+    }
+
+    /// Applies watcher batches as they arrive (buffered until the list is sorted).
+    fn receive_changes(rx: Receiver<Vec<Change>>, generation: u64, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let background = cx.background_executor().clone();
+            let mut rx = rx;
+            loop {
+                // Wait on a background thread, never on the UI thread.
+                let (back, batch) = background
+                    .spawn(async move {
+                        let b = rx.recv();
+                        (rx, b)
+                    })
+                    .await;
+                rx = back;
+                let Ok(batch) = batch else { break };
+                let current = this.update(cx, |view, cx| {
+                    if view.generation != generation {
+                        return false;
+                    }
+                    if matches!(view.status, Status::Ready | Status::Failed(_)) {
+                        view.apply_changes(batch, cx);
+                    } else {
+                        view.pending_changes.extend(batch);
+                    }
+                    true
+                });
+                if !matches!(current, Ok(true)) {
+                    break;
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// Applies folder changes in place, keeping the row under the cursor (or
+    /// the first visible row) where it is on screen. A lost-events overflow
+    /// reads the folder again.
+    fn apply_changes(&mut self, changes: Vec<Change>, cx: &mut Context<Self>) {
+        if changes.is_empty() {
+            return;
+        }
+        let item_h = self.item_height();
+        let per_item = if self.grid { self.grid_cols } else { 1 };
+        let offset = f32::from(self.scroll.0.borrow().base_handle.offset().y);
+        let first_visible = ((-offset / item_h).max(0.0) as usize) * per_item;
+        let rows = rows_of(&self.filtered, &self.list);
+        let anchor = self
+            .selection
+            .cursor()
+            .and_then(|c| self.selection.position(rows, c).map(|p| (c, p)))
+            .or_else(|| rows.get(first_visible).map(|&i| (i, first_visible)));
+
+        let done = Arc::make_mut(&mut self.list).apply(changes);
+        if done.reload {
+            let restore = self.snapshot();
+            self.reload(restore, cx);
+            return;
+        }
+        for &i in &done.removed {
+            self.selection.forget(i);
+        }
+        for &(old, new) in &done.renamed {
+            self.selection.moved(old, new);
+        }
+        if !self.filter_text.is_empty() {
+            self.filtered = Some(self.list.filter(&self.filter_text));
+        }
+        let rows = rows_of(&self.filtered, &self.list);
+        if let Some((entry, before)) = anchor
+            && let Some(after) = rows.iter().position(|&i| i == entry)
+            && after / per_item != before / per_item
+        {
+            let shift = (after / per_item) as f32 - (before / per_item) as f32;
+            let y = (offset - shift * item_h).min(0.0);
+            self.scroll
+                .0
+                .borrow()
+                .base_handle
+                .set_offset(point(px(0.0), px(y)));
+        }
+        cx.notify();
+    }
+
+    /// Reads the current folder again (watcher overflow), keeping selection
+    /// and scroll position.
+    fn reload(&mut self, restore: Restore, cx: &mut Context<Self>) {
+        self.generation += 1;
+        self.list = Arc::new(FileList::new());
+        self.filtered = None;
+        self.selection.clear();
+        self.restore = Some(restore);
+        self.start_loading(cx);
+        cx.notify();
     }
 
     /// Appends batches as they arrive, then sorts by name off the UI thread.
@@ -281,7 +390,11 @@ impl FolderView {
                 if view.generation != generation {
                     return;
                 }
-                Arc::make_mut(&mut view.list).set_order(order);
+                Arc::make_mut(&mut view.list).set_sorted_order(
+                    order,
+                    SortKey::Name,
+                    Direction::Ascending,
+                );
                 view.refilter();
                 view.apply_restore();
                 view.status = match failure {
@@ -291,6 +404,8 @@ impl FolderView {
                 if let Some(trace) = &view.trace {
                     trace.borrow_mut().record_loaded();
                 }
+                let pending = std::mem::take(&mut view.pending_changes);
+                view.apply_changes(pending, cx);
                 cx.notify();
             });
         })
@@ -750,7 +865,7 @@ impl FolderView {
         let mut selected = Vec::new();
         let mut cursor = None;
         if !shown.is_empty() {
-            for i in 0..self.list.len() as u32 {
+            for i in self.list.order().to_vec() {
                 if !shown.contains(self.list.name(i)) {
                     continue;
                 }
