@@ -152,7 +152,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.12 — Lixeira, renomear, nova pasta e desfazer
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: Delete → Lixeira (`IFileOperation`, caminho canonizado, recusa unidade sem Lixeira), Shift+Delete com confirmação, F2 renomeia no lugar (seleciona o nome sem extensão), Ctrl+Shift+N cria "Nova pasta" e já abre a renomeação, Ctrl+Z/Ctrl+Y com histórico de reversões calculadas do que cada trabalho fez (D-022). Testes (24 no `fx-ops`): cada operação desfeita volta ao estado anterior (nomes e conteúdos comparados), desfazer exclusão restaura da Lixeira real (também através de junção), raiz e `C:\Windows` recusados sem confirmação (função pura + caminho inexistente). Verificado no app pela unidade `subst`. Um arquivo de teste foi excluído de vez numa primeira tentativa (motivo da correção, D-022). Shift+Delete e o diálogo de proteção não foram exercitados na janela.
 
 **Fazer**
 - Excluir para a Lixeira (`IFileOperation`), Shift+Delete com confirmação; F2 renomeia no lugar; Ctrl+Shift+N cria pasta.

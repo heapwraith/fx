@@ -16,6 +16,7 @@
 mod a11y;
 mod folder_view;
 mod icons;
+mod ops;
 mod places;
 mod tabs_view;
 mod theme;
@@ -35,6 +36,7 @@ use gpui::{
 use a11y::A11yHandle;
 use folder_view::{Look, window_title};
 use icons::{Icons, Media};
+use ops::Ops;
 use places::Places;
 use tabs_view::{TabsView, WindowServices};
 use theme::{Density, Mode, Theme};
@@ -107,6 +109,7 @@ fn main() {
         let media = Media {
             icons: cx.new(Icons::new),
             thumbs: cx.new(Thumbs::new),
+            ops: cx.new(Ops::new),
         };
         let shared = Shared { places, media };
         if !open_folder_window(path, startup, trace, shared.clone(), cx) {

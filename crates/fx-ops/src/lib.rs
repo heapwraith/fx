@@ -14,6 +14,12 @@
 //!   and resolved by the job's policy, "keep both" (`nome (2).ext`) unless
 //!   the user chose otherwise. The final rename itself refuses to replace.
 //!
+//!
+//! Task T1.12 adds the Recycle Bin (`IFileOperation`; restoring for undo),
+//! permanent deletion (only on explicit request), renaming, new folders, and
+//! [`undo_of`]: the job that reverts a finished job. Jobs touching a drive
+//! root or a system folder are refused unless confirmed ([`system_guard`]).
+//!
 //! See docs/ARCHITECTURE.md. Every `unsafe` block needs a `// SAFETY:` comment.
 
 use std::collections::HashMap;
@@ -33,6 +39,27 @@ pub type JobId = u64;
 pub enum OpKind {
     Copy,
     Move,
+    /// Moves exact `(from, to)` pairs (undo of a move).
+    MoveBack,
+    Recycle,
+    /// Permanent deletion: only on explicit request with confirmation.
+    DeletePermanent,
+    Rename,
+    NewFolder,
+    /// Puts recycled items back (undo of a deletion).
+    Restore,
+}
+
+/// A recycled item: where it was and where the Recycle Bin keeps it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Recycled {
+    pub original: PathBuf,
+    /// The `$I` file (metadata).
+    pub info: PathBuf,
+    /// The `$R` file or folder (data).
+    pub data: PathBuf,
+    /// Deletion time (FILETIME ticks).
+    pub deleted_at: u64,
 }
 
 /// What to do when the destination name exists.
@@ -54,6 +81,12 @@ pub struct Job {
     sources: Vec<PathBuf>,
     dest: PathBuf,
     on_conflict: Resolution,
+    /// New name (rename) or folder name (new folder).
+    name: String,
+    pairs: Vec<(PathBuf, PathBuf)>,
+    restore: Vec<Recycled>,
+    /// The user confirmed an operation on a system folder or drive root.
+    confirmed: bool,
     /// Tests: treat a move as cross-volume (copy, verify, delete).
     force_copy: bool,
 }
@@ -67,12 +100,60 @@ impl Job {
         Self::new(OpKind::Move, sources, dest)
     }
 
+    /// Sends items to the Recycle Bin.
+    pub fn recycle(items: Vec<PathBuf>) -> Self {
+        Self::new(OpKind::Recycle, items, PathBuf::new())
+    }
+
+    /// Deletes items for good (Shift+Delete, after the user confirmed).
+    pub fn delete_permanently(items: Vec<PathBuf>) -> Self {
+        Self::new(OpKind::DeletePermanent, items, PathBuf::new())
+    }
+
+    /// Renames `item` to `new_name` in the same folder (never replacing).
+    pub fn rename(item: PathBuf, new_name: String) -> Self {
+        let mut job = Self::new(OpKind::Rename, vec![item], PathBuf::new());
+        job.name = new_name;
+        job
+    }
+
+    /// Creates folder `name` in `parent` ("keep both" if taken).
+    pub fn new_folder(parent: PathBuf, name: String) -> Self {
+        let mut job = Self::new(OpKind::NewFolder, Vec::new(), parent);
+        job.name = name;
+        job
+    }
+
+    /// Puts recycled items back where they were.
+    pub fn restore(items: Vec<Recycled>) -> Self {
+        let mut job = Self::new(OpKind::Restore, Vec::new(), PathBuf::new());
+        job.restore = items;
+        job
+    }
+
+    /// Moves each `from` to exactly `to` (undo of a move).
+    pub fn move_back(pairs: Vec<(PathBuf, PathBuf)>) -> Self {
+        let mut job = Self::new(OpKind::MoveBack, Vec::new(), PathBuf::new());
+        job.pairs = pairs;
+        job
+    }
+
+    /// The user confirmed touching a system folder or drive root.
+    pub fn confirm_system(mut self) -> Self {
+        self.confirmed = true;
+        self
+    }
+
     fn new(kind: OpKind, sources: Vec<PathBuf>, dest: PathBuf) -> Self {
         Self {
             kind,
             sources,
             dest,
             on_conflict: Resolution::KeepBoth,
+            name: String::new(),
+            pairs: Vec::new(),
+            restore: Vec::new(),
+            confirmed: false,
             force_copy: false,
         }
     }
@@ -84,6 +165,11 @@ impl Job {
 
     pub fn kind(&self) -> OpKind {
         self.kind
+    }
+
+    /// Whether the user confirmed touching a system folder or drive root.
+    pub fn is_confirmed(&self) -> bool {
+        self.confirmed
     }
 }
 
@@ -98,6 +184,97 @@ pub struct Report {
     pub skipped: Vec<PathBuf>,
     /// Existing files that were replaced (only with `Resolution::Replace`).
     pub replaced: Vec<PathBuf>,
+    /// Items now in the Recycle Bin.
+    pub recycled: Vec<Recycled>,
+    /// Items deleted for good (permanent deletion).
+    pub deleted: Vec<PathBuf>,
+    /// Items sent to the Recycle Bin that could not be found there (so they
+    /// cannot be restored by undo; the Recycle Bin itself still has them,
+    /// unless Windows deleted them for good after asking).
+    pub untracked: Vec<PathBuf>,
+    /// `(old, new)` path of a rename.
+    pub renamed: Option<(PathBuf, PathBuf)>,
+    /// Folder created by a "new folder" job.
+    pub created: Option<PathBuf>,
+    /// Where restored items went.
+    pub restored: Vec<PathBuf>,
+}
+
+/// The job that reverts a finished job, from what it actually did. `None`
+/// when there is nothing to revert, or for permanent deletions.
+pub fn undo_of(job: &Job, report: &Report) -> Option<Job> {
+    let undo = match job.kind {
+        OpKind::Copy => {
+            let copies: Vec<PathBuf> = report.copied.iter().map(|(_, d)| d.clone()).collect();
+            // Copies go to the Recycle Bin, never straight to nothing.
+            (!copies.is_empty()).then(|| Job::recycle(copies))
+        }
+        OpKind::Move | OpKind::MoveBack => {
+            let back: Vec<(PathBuf, PathBuf)> = report
+                .moved
+                .iter()
+                .map(|(a, b)| (b.clone(), a.clone()))
+                .collect();
+            (!back.is_empty()).then(|| Job::move_back(back))
+        }
+        OpKind::Recycle => {
+            (!report.recycled.is_empty()).then(|| Job::restore(report.recycled.clone()))
+        }
+        OpKind::Restore => {
+            (!report.restored.is_empty()).then(|| Job::recycle(report.restored.clone()))
+        }
+        OpKind::Rename => report.renamed.as_ref().and_then(|(old, new)| {
+            let name = old.file_name()?.to_string_lossy().into_owned();
+            Some(Job::rename(new.clone(), name))
+        }),
+        OpKind::NewFolder => report.created.clone().map(|c| Job::recycle(vec![c])),
+        OpKind::DeletePermanent => None,
+    };
+    // The reversal touches the same places: the same confirmation holds.
+    undo.map(|mut u| {
+        u.confirmed = job.confirmed;
+        u
+    })
+}
+
+/// Folders where a slip is dangerous: Windows and the program folders.
+pub fn system_dirs() -> Vec<PathBuf> {
+    [
+        "SystemRoot",
+        "windir",
+        "ProgramFiles",
+        "ProgramFiles(x86)",
+        "ProgramW6432",
+    ]
+    .iter()
+    .filter_map(std::env::var_os)
+    .map(PathBuf::from)
+    .collect()
+}
+
+fn lower(p: &Path) -> PathBuf {
+    PathBuf::from(p.as_os_str().to_string_lossy().to_lowercase())
+}
+
+/// Why `job` needs an extra confirmation, if it does (SAFETY.md §2.7): it
+/// deletes, moves or renames a drive root, or touches a system folder.
+pub fn system_guard(job: &Job, system: &[PathBuf]) -> Option<String> {
+    let abs = |p: &Path| lower(&std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf()));
+    let mut touched: Vec<PathBuf> = job.sources.iter().map(|p| abs(p)).collect();
+    touched.extend(job.pairs.iter().map(|(from, _)| abs(from)));
+    if touched.iter().any(|p| p.parent().is_none()) {
+        return Some("a operação apaga, move ou renomeia a raiz de uma unidade".into());
+    }
+    touched.extend(job.pairs.iter().map(|(_, to)| abs(to)));
+    if matches!(job.kind, OpKind::Copy | OpKind::Move | OpKind::NewFolder) {
+        touched.push(abs(&job.dest));
+    }
+    touched.extend(job.restore.iter().map(|r| abs(&r.original)));
+    let system: Vec<PathBuf> = system.iter().map(|s| abs(s)).collect();
+    touched
+        .iter()
+        .find_map(|p| system.iter().find(|s| p.starts_with(s)))
+        .map(|s| format!("a operação mexe numa pasta do sistema ({})", s.display()))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,6 +284,9 @@ pub enum Outcome {
     Failed(String),
 }
 
+// `Finished` carries the report and is much bigger than the other variants;
+// there is one per job and progress is throttled, so boxing would buy nothing.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     Started {
@@ -140,7 +320,7 @@ const PROGRESS_EVERY: Duration = Duration::from_millis(50);
 
 struct Work {
     id: JobId,
-    job: Job,
+    job: Box<Job>,
     cancel: Arc<AtomicI32>,
 }
 
@@ -178,7 +358,11 @@ impl Engine {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let cancel = Arc::new(AtomicI32::new(0));
         lock(&self.cancels).insert(id, cancel.clone());
-        let _ = lock(&self.tx).send(Work { id, job, cancel });
+        let _ = lock(&self.tx).send(Work {
+            id,
+            job: Box::new(job),
+            cancel,
+        });
         id
     }
 
@@ -228,6 +412,8 @@ fn schedule(
             let spawned = std::thread::Builder::new()
                 .name(format!("fx-ops {key}"))
                 .spawn(move || {
+                    #[cfg(windows)]
+                    windows::com_init();
                     for w in wrx {
                         let id = w.id;
                         run_job(&w, &events);
@@ -311,7 +497,24 @@ impl From<io::Error> for Stop {
 
 fn run_job(work: &Work, events: &Sender<Event>) {
     let job = &work.job;
-    let (files, bytes) = job.sources.iter().fold((0, 0), |acc, s| {
+    if !job.confirmed
+        && let Some(reason) = system_guard(job, &system_dirs())
+    {
+        let _ = events.send(Event::Finished {
+            job: work.id,
+            outcome: Outcome::Failed(format!("{reason}: é preciso confirmar")),
+            report: Report::default(),
+        });
+        return;
+    }
+    let measured: Vec<&Path> = match job.kind {
+        OpKind::Copy | OpKind::Move | OpKind::Recycle | OpKind::DeletePermanent => {
+            job.sources.iter().map(PathBuf::as_path).collect()
+        }
+        OpKind::MoveBack => job.pairs.iter().map(|(from, _)| from.as_path()).collect(),
+        _ => Vec::new(),
+    };
+    let (files, bytes) = measured.iter().fold((0, 0), |acc, s| {
         let (f, b) = measure(s);
         (acc.0 + f, acc.1 + b)
     });
@@ -330,7 +533,18 @@ fn run_job(work: &Work, events: &Sender<Event>) {
         last_progress: Instant::now(),
         report: Report::default(),
     };
-    let result = job.sources.iter().try_for_each(|s| run.item(s));
+    let result = match job.kind {
+        OpKind::Copy | OpKind::Move => job.sources.iter().try_for_each(|s| run.item(s)),
+        OpKind::MoveBack => job
+            .pairs
+            .iter()
+            .try_for_each(|(from, to)| run.move_exact(from, to)),
+        OpKind::Recycle => run.recycle(),
+        OpKind::DeletePermanent => run.delete_permanently(),
+        OpKind::Rename => run.rename_item(),
+        OpKind::NewFolder => run.new_folder(),
+        OpKind::Restore => run.restore_items(),
+    };
     let outcome = match result {
         Ok(()) => Outcome::Done,
         Err(Stop::Cancelled) => Outcome::Cancelled,
@@ -344,6 +558,124 @@ fn run_job(work: &Work, events: &Sender<Event>) {
 }
 
 impl Run<'_> {
+    /// Moves `from` to exactly `to` (a free "keep both" name if `to` exists).
+    fn move_exact(&mut self, from: &Path, to: &Path) -> Result<(), Stop> {
+        if self.cancelled() {
+            return Err(Stop::Cancelled);
+        }
+        let mut target = to.to_path_buf();
+        if exists(&target) {
+            let dir = to.parent().unwrap_or(Path::new("."));
+            let name = to
+                .file_name()
+                .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+            target = keep_both_name(dir, &name, exists);
+        }
+        if let Some(dir) = target.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        match rename(from, &target) {
+            Ok(()) => {}
+            Err(e) if is_not_same_device(&e) || self.job.force_copy => {
+                let meta = std::fs::symlink_metadata(from)?;
+                self.copy_tree(from, &target, false)?;
+                if meta.is_dir() && !is_link(&meta) {
+                    std::fs::remove_dir_all(from)?;
+                } else {
+                    std::fs::remove_file(from)?;
+                }
+            }
+            Err(e) => return Err(e.into()),
+        }
+        self.report.moved.push((from.to_path_buf(), target));
+        Ok(())
+    }
+
+    fn recycle(&mut self) -> Result<(), Stop> {
+        let items: Vec<PathBuf> = self
+            .job
+            .sources
+            .iter()
+            .map(std::path::absolute)
+            .collect::<io::Result<_>>()?;
+        // The Recycle Bin records the real path (through subst drives and
+        // junctions): resolve it while the item still exists.
+        let real: Vec<PathBuf> = items.iter().map(|i| canonical_path(i)).collect();
+        recycle_items(&items)?;
+        for (item, real) in items.into_iter().zip(real) {
+            match find_recycled(&item, &real) {
+                Some(r) => self.report.recycled.push(r),
+                None if !exists(&item) => self.report.untracked.push(item),
+                None => {}
+            }
+        }
+        Ok(())
+    }
+
+    fn delete_permanently(&mut self) -> Result<(), Stop> {
+        for item in &self.job.sources {
+            if self.cancelled() {
+                return Err(Stop::Cancelled);
+            }
+            let meta = std::fs::symlink_metadata(item)?;
+            if meta.is_dir() && !is_link(&meta) {
+                std::fs::remove_dir_all(item)?;
+            } else if meta.is_dir() {
+                std::fs::remove_dir(item)?; // a link to a folder: only the link
+            } else {
+                std::fs::remove_file(item)?;
+            }
+            self.report.deleted.push(item.clone());
+        }
+        Ok(())
+    }
+
+    fn rename_item(&mut self) -> Result<(), Stop> {
+        let from = std::path::absolute(&self.job.sources[0])?;
+        let name = self.job.name.trim();
+        if name.is_empty() || name.contains(['\\', '/']) || name == "." || name == ".." {
+            return Err(Stop::Failed(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "nome inválido",
+            )));
+        }
+        let to = from.with_file_name(name);
+        rename(&from, &to).map_err(|e| {
+            if e.kind() == io::ErrorKind::AlreadyExists
+                || exists(&to) && !same_file_name(&from, &to)
+            {
+                Stop::Failed(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    "já existe um item com esse nome",
+                ))
+            } else {
+                Stop::from(e)
+            }
+        })?;
+        self.report.renamed = Some((from, to));
+        Ok(())
+    }
+
+    fn new_folder(&mut self) -> Result<(), Stop> {
+        let dir = std::path::absolute(&self.job.dest)?;
+        let name = self.job.name.trim();
+        let mut target = dir.join(name);
+        if exists(&target) {
+            target = keep_both_name(&dir, name, exists);
+        }
+        std::fs::create_dir(&target)?;
+        self.report.created = Some(target);
+        Ok(())
+    }
+
+    fn restore_items(&mut self) -> Result<(), Stop> {
+        for item in &self.job.restore {
+            let placed = restore_item(item)?;
+            self.report.restored.push(placed);
+        }
+        Ok(())
+    }
+
     fn cancelled(&self) -> bool {
         self.cancel.load(Ordering::SeqCst) != 0
     }
@@ -535,6 +867,31 @@ fn place(temp: &Path, target: &Path) -> io::Result<()> {
         }
         r => r,
     }
+}
+
+/// Same name except for case (a case-only rename is allowed).
+fn same_file_name(a: &Path, b: &Path) -> bool {
+    lower(a) == lower(b)
+}
+
+#[cfg(windows)]
+fn recycle_items(items: &[PathBuf]) -> io::Result<()> {
+    windows::recycle::recycle(items)
+}
+
+#[cfg(windows)]
+fn find_recycled(item: &Path, real: &Path) -> Option<Recycled> {
+    windows::recycle::find_recycled(item, real)
+}
+
+#[cfg(windows)]
+fn canonical_path(item: &Path) -> PathBuf {
+    windows::recycle::canonical(item)
+}
+
+#[cfg(windows)]
+fn restore_item(item: &Recycled) -> io::Result<PathBuf> {
+    windows::recycle::restore(item)
 }
 
 #[cfg(windows)]

@@ -322,3 +322,250 @@ fn jobs_to_the_same_volume_run_in_order() {
         .collect();
     assert_eq!(order, expected, "one job at a time on one disk");
 }
+
+// ---- Task T1.12: Recycle Bin, rename, new folder, undo, system guard ----
+
+use std::collections::BTreeMap;
+
+/// Every path under `dir` (relative) with its content (`None` for folders).
+fn snapshot(dir: &Path) -> BTreeMap<String, Option<Vec<u8>>> {
+    fn walk(base: &Path, dir: &Path, out: &mut BTreeMap<String, Option<Vec<u8>>>) {
+        for e in std::fs::read_dir(dir).unwrap().flatten() {
+            let rel = e
+                .path()
+                .strip_prefix(base)
+                .unwrap()
+                .to_string_lossy()
+                .into_owned();
+            if e.file_type().unwrap().is_dir() {
+                out.insert(rel, None);
+                walk(base, &e.path(), out);
+            } else {
+                out.insert(rel, Some(std::fs::read(e.path()).unwrap()));
+            }
+        }
+    }
+    let mut out = BTreeMap::new();
+    walk(dir, dir, &mut out);
+    out
+}
+
+/// Runs `job`, expects success, then runs its undo and expects success.
+fn run_ok(e: &Engine, rx: &Receiver<Event>, job: Job) -> Report {
+    let (_, outcome, report) = run(e, rx, job);
+    assert_eq!(outcome, Outcome::Done);
+    report
+}
+
+#[test]
+fn guard_flags_roots_and_system_folders() {
+    let system = vec![
+        PathBuf::from(r"C:\Windows"),
+        PathBuf::from(r"C:\Program Files"),
+    ];
+    let g = |job: Job| system_guard(&job, &system);
+    assert!(
+        g(Job::recycle(vec![PathBuf::from(r"C:\")])).is_some(),
+        "drive root"
+    );
+    assert!(g(Job::delete_permanently(vec![PathBuf::from(r"D:\")])).is_some());
+    assert!(g(Job::rename(PathBuf::from(r"E:\"), "x".into())).is_some());
+    assert!(
+        g(Job::recycle(vec![PathBuf::from(
+            r"c:\windows\system32\x.dll"
+        )]))
+        .is_some()
+    );
+    assert!(
+        g(Job::copy(
+            vec![PathBuf::from(r"D:\a")],
+            PathBuf::from(r"C:\Program Files\App")
+        ))
+        .is_some()
+    );
+    assert!(g(Job::new_folder(PathBuf::from(r"C:\Windows"), "n".into())).is_some());
+    assert!(g(Job::recycle(vec![PathBuf::from(r"C:\Users\x\a.txt")])).is_none());
+    assert!(
+        g(Job::copy(
+            vec![PathBuf::from(r"C:\a")],
+            PathBuf::from(r"D:\")
+        ))
+        .is_none(),
+        "root as copy target is fine"
+    );
+    assert!(
+        g(Job::recycle(vec![PathBuf::from(r"C:\WindowsOld\a")])).is_none(),
+        "prefix of a name is not inside"
+    );
+}
+
+/// The engine refuses before touching anything (the path does not even exist).
+#[test]
+fn engine_refuses_system_folders_without_confirmation() {
+    let windir = std::env::var_os("SystemRoot").map_or(PathBuf::from(r"C:\Windows"), PathBuf::from);
+    let missing = windir.join("fx-guard-test-does-not-exist.txt");
+    assert!(!missing.exists());
+    let (e, rx) = engine();
+    let (_, outcome, report) = run(&e, &rx, Job::recycle(vec![missing.clone()]));
+    match outcome {
+        Outcome::Failed(why) => assert!(why.contains("sistema"), "{why}"),
+        other => panic!("not refused: {other:?}"),
+    }
+    assert_eq!(report, Report::default());
+}
+
+#[test]
+fn recycle_and_undo_restores_from_the_recycle_bin() {
+    let t = tempfile::tempdir().unwrap();
+    let a = t.path().join("relatório.txt");
+    write(&a, "conteúdo importante".as_bytes());
+    write(&t.path().join("pasta").join("x.txt"), b"x");
+    let before = snapshot(t.path());
+    let (e, rx) = engine();
+    let job = Job::recycle(vec![a.clone(), t.path().join("pasta")]);
+    let report = run_ok(&e, &rx, job.clone());
+    assert!(!a.exists());
+    assert_eq!(report.recycled.len(), 2, "both in the Recycle Bin");
+    assert!(report.recycled.iter().all(|r| r.data.exists()));
+    let undo = undo_of(&job, &report).unwrap();
+    let back = run_ok(&e, &rx, undo);
+    assert_eq!(back.restored.len(), 2);
+    assert_eq!(snapshot(t.path()), before, "names and contents back");
+}
+
+#[test]
+fn copy_undo_sends_the_copies_to_the_recycle_bin() {
+    let t = tempfile::tempdir().unwrap();
+    let src = t.path().join("origem");
+    write(&src.join("a.txt"), b"a");
+    let dest = t.path().join("destino");
+    write(&dest.join("ja.txt"), b"existing");
+    let before = snapshot(&dest);
+    let (e, rx) = engine();
+    let job = Job::copy(vec![src.join("a.txt")], dest.clone());
+    let report = run_ok(&e, &rx, job.clone());
+    assert!(dest.join("a.txt").exists());
+    let undone = run_ok(&e, &rx, undo_of(&job, &report).unwrap());
+    assert_eq!(snapshot(&dest), before);
+    assert!(src.join("a.txt").exists(), "the source is untouched");
+    // Leave the user's Recycle Bin as it was: bring the copy back here
+    // (deleted with the temporary folder).
+    run_ok(
+        &e,
+        &rx,
+        undo_of(&Job::recycle(Vec::new()), &undone).unwrap(),
+    );
+}
+
+#[test]
+fn move_and_undo_restore_names_and_contents() {
+    let t = tempfile::tempdir().unwrap();
+    write(&t.path().join("a").join("doc.txt"), b"doc");
+    write(&t.path().join("b").join("doc.txt"), b"other");
+    let before = snapshot(t.path());
+    let (e, rx) = engine();
+    // The name is taken in `b`: it arrives as "doc (2).txt" and must go back
+    // to "doc.txt".
+    let job = Job::move_to(vec![t.path().join("a").join("doc.txt")], t.path().join("b"));
+    let report = run_ok(&e, &rx, job.clone());
+    assert!(t.path().join("b").join("doc (2).txt").exists());
+    run_ok(&e, &rx, undo_of(&job, &report).unwrap());
+    assert_eq!(snapshot(t.path()), before);
+}
+
+#[test]
+fn rename_undo_and_redo() {
+    let t = tempfile::tempdir().unwrap();
+    let a = t.path().join("antigo.txt");
+    write(&a, b"x");
+    let before = snapshot(t.path());
+    let (e, rx) = engine();
+    let job = Job::rename(a.clone(), "novo ✓.txt".into());
+    let report = run_ok(&e, &rx, job.clone());
+    assert!(t.path().join("novo ✓.txt").exists() && !a.exists());
+    let undo = undo_of(&job, &report).unwrap();
+    let undone = run_ok(&e, &rx, undo.clone());
+    assert_eq!(snapshot(t.path()), before);
+    // Redo = the undo of the undo.
+    run_ok(&e, &rx, undo_of(&undo, &undone).unwrap());
+    assert!(t.path().join("novo ✓.txt").exists());
+    // Case-only rename works; renaming onto another item never replaces it.
+    run_ok(
+        &e,
+        &rx,
+        Job::rename(t.path().join("novo ✓.txt"), "NOVO ✓.txt".into()),
+    );
+    write(&t.path().join("outro.txt"), b"keep me");
+    let (_, outcome, _) = run(
+        &e,
+        &rx,
+        Job::rename(t.path().join("NOVO ✓.txt"), "outro.txt".into()),
+    );
+    assert!(matches!(outcome, Outcome::Failed(_)));
+    assert_eq!(
+        std::fs::read(t.path().join("outro.txt")).unwrap(),
+        b"keep me"
+    );
+}
+
+#[test]
+fn new_folder_keeps_both_and_undo_recycles_it() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::create_dir(t.path().join("Nova pasta")).unwrap();
+    let before = snapshot(t.path());
+    let (e, rx) = engine();
+    let job = Job::new_folder(t.path().to_path_buf(), "Nova pasta".into());
+    let report = run_ok(&e, &rx, job.clone());
+    assert_eq!(report.created, Some(t.path().join("Nova pasta (2)")));
+    let undone = run_ok(&e, &rx, undo_of(&job, &report).unwrap());
+    assert_eq!(snapshot(t.path()), before);
+    // Leave the Recycle Bin clean.
+    run_ok(
+        &e,
+        &rx,
+        undo_of(&Job::recycle(Vec::new()), &undone).unwrap(),
+    );
+}
+
+#[test]
+fn permanent_deletion_has_no_undo() {
+    let t = tempfile::tempdir().unwrap();
+    let a = t.path().join("a.txt");
+    write(&a, b"a");
+    write(&t.path().join("p").join("b.txt"), b"b");
+    let (e, rx) = engine();
+    let job = Job::delete_permanently(vec![a.clone(), t.path().join("p")]);
+    let report = run_ok(&e, &rx, job.clone());
+    assert!(!a.exists() && !t.path().join("p").exists());
+    assert_eq!(report.deleted.len(), 2);
+    assert!(undo_of(&job, &report).is_none());
+}
+
+/// Through a junction (like a `subst` drive) the Recycle Bin records the real
+/// path; undo must still find and restore the item.
+#[test]
+fn recycle_through_a_junction_can_be_undone() {
+    let t = tempfile::tempdir().unwrap();
+    let real = t.path().join("real");
+    write(&real.join("doc.txt"), b"junction");
+    let link = t.path().join("atalho");
+    let made = std::process::Command::new("cmd")
+        .args(["/C", "mklink", "/J"])
+        .arg(&link)
+        .arg(&real)
+        .output()
+        .unwrap();
+    assert!(made.status.success(), "mklink /J failed");
+    let (e, rx) = engine();
+    let job = Job::recycle(vec![link.join("doc.txt")]);
+    let report = run_ok(&e, &rx, job.clone());
+    assert_eq!(
+        report.recycled.len(),
+        1,
+        "found in the Recycle Bin: {report:?}"
+    );
+    assert!(report.untracked.is_empty());
+    run_ok(&e, &rx, undo_of(&job, &report).unwrap());
+    assert_eq!(std::fs::read(real.join("doc.txt")).unwrap(), b"junction");
+    std::fs::remove_dir(&link).unwrap(); // the junction only, not its target
+}

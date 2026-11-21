@@ -13,6 +13,7 @@ pub mod natural;
 mod pinned;
 mod selection;
 mod tabs;
+mod undo;
 
 pub use entry::{Attributes, Change, Entry};
 pub use history::History;
@@ -20,3 +21,4 @@ pub use list::{Applied, Direction, FileList, SortKey};
 pub use pinned::Pinned;
 pub use selection::{MoveMode, Selection, Step};
 pub use tabs::Tabs;
+pub use undo::UndoStack;

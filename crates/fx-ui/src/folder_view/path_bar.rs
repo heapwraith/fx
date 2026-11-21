@@ -125,6 +125,13 @@ impl FolderView {
                 edit.all_selected = true;
                 return true;
             }
+            // GPUI sends no character for the space bar.
+            "space" if !(m.control || m.alt || m.platform) => {
+                if edit.all_selected {
+                    edit.text.clear();
+                }
+                edit.text.push(' ');
+            }
             "v" if only_ctrl => {
                 let pasted = cx
                     .read_from_clipboard()
@@ -353,7 +360,7 @@ impl FolderView {
                     .pl(px(space(2)))
                     .pr(px(space(2)))
                     .text_color(rgba(t.text_secondary))
-                    .child(self.status_text()),
+                    .child(self.status_text(cx)),
             )
     }
 

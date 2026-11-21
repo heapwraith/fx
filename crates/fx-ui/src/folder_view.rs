@@ -16,6 +16,7 @@
 //! forward, restoring each folder's scroll position and selection. The path
 //! bar is in `path_bar.rs`.
 
+mod edit_ops;
 mod grid;
 mod path_bar;
 
@@ -42,6 +43,7 @@ use gpui::{
 
 use crate::a11y::{A11yHandle, Row, Snapshot};
 use crate::icons::{Icons, Media};
+use crate::ops::Ops;
 use crate::theme::{BODY_SIZE, CAPTION_SIZE, Density, Mode, RADIUS, Theme, rgba, space};
 use crate::thumbs::Thumbs;
 use crate::trace::Trace;
@@ -154,6 +156,12 @@ pub struct FolderView {
     notice: Option<String>,
     /// UI Automation of the window (task T1.10).
     a11y: Option<A11yHandle>,
+    ops: Entity<Ops>,
+    /// Inline rename in progress (F2, task T1.12).
+    renaming: Option<edit_ops::Rename>,
+    /// A "new folder" job whose folder should be renamed when it appears.
+    awaiting_folder: Option<fx_ops::JobId>,
+    rename_when_listed: Option<OsString>,
 }
 
 impl FolderView {
@@ -168,7 +176,13 @@ impl FolderView {
         a11y: Option<A11yHandle>,
         cx: &mut Context<Self>,
     ) -> Self {
-        let Media { icons, thumbs } = media;
+        let Media { icons, thumbs, ops } = media;
+        // Status messages, and the folder a "new folder" job created.
+        cx.observe(&ops, |view, _, cx| {
+            view.check_new_folder(cx);
+            cx.notify();
+        })
+        .detach();
         // Redraw when icons or thumbnails arrive.
         cx.observe(&icons, |_, _, cx| cx.notify()).detach();
         cx.observe(&thumbs, |view, _, cx| {
@@ -213,6 +227,10 @@ impl FolderView {
             pending_changes: Vec::new(),
             notice: None,
             a11y,
+            ops,
+            renaming: None,
+            awaiting_folder: None,
+            rename_when_listed: None,
         };
         view.start_loading(cx);
         view
@@ -322,6 +340,7 @@ impl FolderView {
                 .base_handle
                 .set_offset(point(px(0.0), px(y)));
         }
+        self.try_rename_listed();
         cx.notify();
     }
 
@@ -523,14 +542,16 @@ impl FolderView {
                                         }),
                                 )
                             })
-                            .child(
-                                div()
+                            .child(match self.renaming.as_ref().filter(|r| r.entry == i) {
+                                Some(r) => self.render_rename_box(r, t).into_any_element(),
+                                None => div()
                                     .flex_1()
                                     .min_w_0()
                                     .truncate()
                                     .text_color(rgba(t.text))
-                                    .child(SharedString::from(self.list.name(i).to_owned())),
-                            )
+                                    .child(SharedString::from(self.list.name(i).to_owned()))
+                                    .into_any_element(),
+                            })
                             .child(
                                 div()
                                     .w(px(SIZE_COL))
@@ -648,6 +669,33 @@ impl FolderView {
         self.look.mica
     }
 
+    /// The inline rename field: the selected stem highlighted, caret at the end.
+    fn render_rename_box(&self, r: &edit_ops::Rename, t: Theme) -> impl IntoElement + use<> {
+        let selected_len = r.selected.min(r.text.len());
+        let (selected, unselected) = r.text.split_at(selected_len);
+        let caret = r.caret.clamp(selected_len, r.text.len()) - selected_len;
+        let (before, after) = unselected.split_at(caret);
+        div()
+            .flex_1()
+            .min_w_0()
+            .h(px(self.look.density.row_height() - 8.0))
+            .flex()
+            .items_center()
+            .px(px(space(1)))
+            .rounded(px(RADIUS))
+            .border_1()
+            .border_color(rgba(t.accent))
+            .bg(rgba(t.base))
+            .text_color(rgba(t.text))
+            .overflow_hidden()
+            .when(!selected.is_empty(), |d| {
+                d.child(div().bg(rgba(t.selected)).child(selected.to_owned()))
+            })
+            .child(before.to_owned())
+            .child(div().flex_none().w(px(1.0)).h(px(16.0)).bg(rgba(t.text)))
+            .child(after.to_owned())
+    }
+
     /// Sends the accessibility tree for the rows on screen (`first` is the
     /// display position of `shown[0]`). Free when no screen reader listens
     /// except for building a few dozen nodes.
@@ -721,6 +769,9 @@ impl FolderView {
     /// Shift+click selects the range from the anchor, double click opens it.
     fn click(&mut self, i: u32, ev: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         self.edit = None;
+        if self.renaming.as_ref().is_some_and(|r| r.entry != i) {
+            self.end_rename(true, window, cx);
+        }
         let m = ev.modifiers;
         if m.shift {
             self.selection
@@ -1041,6 +1092,17 @@ impl FolderView {
         if self.notice.take().is_some() {
             cx.notify();
         }
+        if self.rename_key(ks, window, cx) {
+            if let Some(trace) = &self.trace {
+                trace.borrow_mut().input_started(started, "rename");
+            }
+            cx.notify();
+            return;
+        }
+        if self.edit.is_none() && self.ops_key(ks, window, cx) {
+            cx.notify();
+            return;
+        }
         if self.edit_key(ks, window, cx) {
             if let Some(trace) = &self.trace {
                 trace.borrow_mut().input_started(started, "path");
@@ -1172,9 +1234,12 @@ impl FolderView {
         cx.notify();
     }
 
-    fn status_text(&self) -> String {
+    fn status_text(&self, cx: &gpui::App) -> String {
         if let Some(notice) = &self.notice {
             return notice.clone();
+        }
+        if let Some(notice) = self.ops.read(cx).notice() {
+            return notice.to_owned();
         }
         let text = self.load_text();
         match self.selection.len() {

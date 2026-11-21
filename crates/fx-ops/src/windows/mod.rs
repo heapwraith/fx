@@ -1,6 +1,8 @@
 //! Windows primitives of the operations engine (task T1.11): `CopyFile2`
 //! with progress and cancellation, and a rename that never replaces.
 
+pub(crate) mod recycle;
+
 use std::ffi::c_void;
 use std::io;
 use std::os::windows::ffi::OsStrExt;
@@ -34,7 +36,18 @@ fn verbatim(path: &Path) -> io::Result<Vec<u16>> {
     Ok(out)
 }
 
-fn to_io(e: windows::core::Error) -> io::Error {
+/// COM for a worker thread (`IFileOperation` needs an STA).
+pub(crate) fn com_init() {
+    // SAFETY: first COM call of a fresh worker thread, never uninitialized.
+    let _ = unsafe {
+        windows::Win32::System::Com::CoInitializeEx(
+            None,
+            windows::Win32::System::Com::COINIT_APARTMENTTHREADED,
+        )
+    };
+}
+
+pub(crate) fn to_io(e: windows::core::Error) -> io::Error {
     let code = e.code().0 as u32;
     if code & 0xFFFF_0000 == 0x8007_0000 {
         io::Error::from_raw_os_error((code & 0xFFFF) as i32)

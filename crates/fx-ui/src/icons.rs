@@ -13,6 +13,7 @@ use std::sync::mpsc::channel;
 use fx_shell::icons::{IconKey, IconService};
 use gpui::{Context, Entity, Image, ImageFormat};
 
+use crate::ops::Ops;
 use crate::thumbs::Thumbs;
 
 /// Icon and thumbnail caches, shared by every window and tab.
@@ -20,6 +21,8 @@ use crate::thumbs::Thumbs;
 pub struct Media {
     pub icons: Entity<Icons>,
     pub thumbs: Entity<Thumbs>,
+    /// File operations and the undo history (task T1.12).
+    pub ops: Entity<Ops>,
 }
 
 #[derive(Debug, Clone)]
