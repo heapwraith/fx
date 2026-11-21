@@ -11,6 +11,7 @@
 //! fx-bench type               P4: key -> frame latency typing to filter (sends keys!) (T0.6)
 //! fx-bench index --volume C:  P6/P9: index the real MFT (needs Administrator) (T0.7)
 //! fx-bench index --synthetic N  index N generated files in memory (T0.7)
+//! fx-bench search (--volume C: | --synthetic N) [--interactive]  P5 (T0.8)
 //! ```
 //! Run from the repository root: results go to `bench/results/`.
 
@@ -22,6 +23,7 @@ mod names;
 mod png;
 mod report;
 mod rng;
+mod search_bench;
 mod ui_bench;
 
 use std::process::ExitCode;
@@ -29,7 +31,7 @@ use std::time::Instant;
 
 use fixtures::{Outcome, Spec};
 
-const USAGE: &str = "usage: fx-bench fixtures [--clean] | enum | list | open | scroll | responsive <folder> | type | index (--volume C: | --synthetic N)";
+const USAGE: &str = "usage: fx-bench fixtures [--clean] | enum | list | open | scroll | responsive <folder> | type | index (--volume C: | --synthetic N) | search (--volume C: | --synthetic N) [--interactive]";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -43,6 +45,21 @@ fn main() -> ExitCode {
         ["scroll"] => ui_bench::scroll(),
         ["type"] => ui_bench::type_keys(),
         ["index", "--volume", volume] => index_bench::volume(volume),
+        ["search", "--volume", v] => {
+            search_bench::run(&search_bench::Source::Volume((*v).to_owned()), false)
+        }
+        ["search", "--volume", v, "--interactive"] => {
+            search_bench::run(&search_bench::Source::Volume((*v).to_owned()), true)
+        }
+        ["search", "--synthetic", n, rest @ ..] if rest.is_empty() || rest == ["--interactive"] => {
+            match n.parse() {
+                Ok(n) => search_bench::run(&search_bench::Source::Synthetic(n), !rest.is_empty()),
+                Err(_) => {
+                    eprintln!("{USAGE}");
+                    return ExitCode::from(2);
+                }
+            }
+        }
         ["index", "--synthetic", n] => match n.parse() {
             Ok(n) => index_bench::synthetic(n),
             Err(_) => {

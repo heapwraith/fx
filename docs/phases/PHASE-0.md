@@ -122,6 +122,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 
 ## T0.8 — Busca difusa por tecla
 - [ ] Concluída em: ____ · Resumo: ____
+- **Status 2026-11-21:** implementada (`fx_index::search`): subsequência com pontuação no estilo fzf, sem maiúscula nem acento, em todos os núcleos, cancelável, com os 200 primeiros enviados antes do fim. No **índice sintético de 2 milhões**: 83 teclas (12 consultas de 1 a 12 caracteres), **p95 7,0 ms**, máx. 10,1 ms (P5 ≤ 50). Falta o P5 no índice real do C:, num PowerShell **como Administrador**: `.\target\x86_64-pc-windows-msvc\release\fx-bench.exe search --volume C:` (ou `--interactive` para digitar).
 
 **Fazer**
 - Busca por nome sobre o índice da T0.7: correspondência por subsequência com pontuação (estilo fzf/nucleo), sem diferenciar maiúsculas e acentos, com resultados parciais (primeiros 200) devolvidos antes do fim.

@@ -165,7 +165,6 @@ impl Index {
         &self.names[start..self.name_ends[s] as usize]
     }
 
-    #[allow(dead_code)] // used by the fuzzy search (T0.8)
     pub(crate) fn folded(&self, slot: u32) -> &str {
         let s = slot as usize;
         let start = if s == 0 {

@@ -5,8 +5,10 @@
 //! behind `#[cfg(windows)]` (D-012).
 
 mod index;
+mod search;
 
 pub use index::{FileId, Index, IndexFull, Record};
+pub use search::{Hit, MAX_RESULTS, search};
 
 #[cfg(windows)]
 mod windows;
