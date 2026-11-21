@@ -29,9 +29,9 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, channel};
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime};
 
-use fx_core::format::{date_time_utc, size_kb};
+use fx_core::format::{date_time, items, size_kb};
 use fx_core::{Change, Direction, Entry, FileList, History, MoveMode, Selection, SortKey, Step};
 use fx_fs::Strategy;
 use fx_shell::icons::icon_key;
@@ -170,6 +170,10 @@ pub struct FolderView {
     /// Columns shown for the current list width.
     columns: Columns,
     last_list_width: f32,
+    /// When the current read started, and how long it took to have the
+    /// whole list sorted (shown in the status bar: speed made visible).
+    load_started: Option<Instant>,
+    loaded_in: Option<Duration>,
 }
 
 /// Which optional columns fit (T1.19): in a narrow list the date goes first,
@@ -272,6 +276,8 @@ impl FolderView {
                 date: true,
             },
             last_list_width: 0.0,
+            load_started: None,
+            loaded_in: None,
         };
         view.start_loading(cx);
         view
@@ -285,6 +291,8 @@ impl FolderView {
         // watcher armed before the read starts.
         self.pending_changes.clear();
         self.watcher = None;
+        self.load_started = Some(Instant::now());
+        self.loaded_in = None;
         let (changes_tx, changes_rx) = channel::<Vec<Change>>();
         Self::receive_changes(changes_rx, self.generation, cx);
         let (watcher_tx, watcher_rx) = channel::<fx_fs::Watcher>();
@@ -304,7 +312,7 @@ impl FolderView {
                 Self::receive(rx, worker, self.generation, cx);
                 Status::Loading
             }
-            Err(e) => Status::Failed(format!("could not start reader thread: {e}")),
+            Err(e) => Status::Failed(read_failure(&e)),
         };
     }
 
@@ -461,8 +469,8 @@ impl FolderView {
             let result = background.spawn(async move { worker.join() }).await;
             let failure = match result {
                 Ok(Ok(_)) => None,
-                Ok(Err(e)) => Some(e.to_string()),
-                Err(_) => Some("reader thread panicked".to_owned()),
+                Ok(Err(e)) => Some(read_failure(&e)),
+                Err(_) => Some("Erro interno ao ler esta pasta.".to_owned()),
             };
             let Ok(Some(list)) = this.update(cx, |view, cx| {
                 if view.generation != generation {
@@ -498,6 +506,7 @@ impl FolderView {
                     Some(e) => Status::Failed(e),
                     None => Status::Ready,
                 };
+                view.loaded_in = view.load_started.take().map(|s| s.elapsed());
                 if let Some(trace) = &view.trace {
                     trace.borrow_mut().record_loaded();
                 }
@@ -633,7 +642,7 @@ impl FolderView {
                                         .w(px(DATE_COL))
                                         .flex_none()
                                         .text_color(rgba(t.text_secondary))
-                                        .child(date_time_utc(self.list.modified(i))),
+                                        .child(local_date(self.list.modified(i))),
                                 )
                             }),
                     )
@@ -813,7 +822,7 @@ impl FolderView {
                     format!(
                         "{}, modificado em {}",
                         size_kb(self.list.size(i)),
-                        date_time_utc(self.list.modified(i))
+                        local_date(self.list.modified(i))
                     )
                 },
                 selected: self.selection.is_selected(i),
@@ -1398,14 +1407,38 @@ impl FolderView {
     fn load_text(&self) -> String {
         let n = self.list.len();
         if let Some(filtered) = &self.filtered {
-            return format!("filtro \"{}\": {} de {n}", self.filter_text, filtered.len());
+            return format!(
+                "filtro \"{}\": {} de {}",
+                self.filter_text,
+                fx_core::format::count(filtered.len()),
+                fx_core::format::count(n)
+            );
         }
         match &self.status {
-            Status::Loading => format!("{n} itens — carregando…"),
-            Status::Sorting => format!("{n} itens — ordenando…"),
-            Status::Ready => format!("{n} itens"),
-            Status::Failed(e) => format!("{n} itens — erro: {e}"),
+            Status::Loading => format!("{} — carregando…", items(n)),
+            Status::Sorting => format!("{} — ordenando…", items(n)),
+            Status::Ready => match self.loaded_in {
+                Some(d) => format!("{} · lida em {}", items(n), elapsed_text(d)),
+                None => items(n),
+            },
+            // The message itself is shown in the list area.
+            Status::Failed(_) => format!("{} · erro", items(n)),
         }
+    }
+
+    /// Message shown in the middle of the list: an error, an empty folder or
+    /// a filter with no match.
+    fn placeholder(&self) -> Option<String> {
+        if let Status::Failed(e) = &self.status {
+            return Some(e.clone());
+        }
+        if let Some(filtered) = &self.filtered
+            && filtered.is_empty()
+        {
+            return Some(format!("Nada corresponde a \"{}\".", self.filter_text));
+        }
+        (matches!(self.status, Status::Ready) && self.list.is_empty())
+            .then(|| "Esta pasta está vazia.".to_owned())
     }
 
     /// Frame bookkeeping for `FX_TRACE=1`.
@@ -1445,6 +1478,38 @@ impl FolderView {
             window.on_next_frame(move |_, _| trace.borrow_mut().record_frame());
             window.request_animation_frame();
         }
+    }
+}
+
+/// Modification date in the local time zone of that date.
+fn local_date(t: SystemTime) -> String {
+    date_time(t, fx_shell::utc_offset_at(t))
+}
+
+/// "9 ms", "0,4 ms", "1,2 s".
+fn elapsed_text(d: Duration) -> String {
+    let ms = d.as_secs_f64() * 1000.0;
+    if ms < 10.0 {
+        format!("{ms:.1} ms").replace('.', ",")
+    } else if ms < 1000.0 {
+        format!("{ms:.0} ms")
+    } else {
+        format!("{:.1} s", ms / 1000.0).replace('.', ",")
+    }
+}
+
+/// A folder that could not be read, in words (shown in the list area).
+fn read_failure(e: &std::io::Error) -> String {
+    use std::io::ErrorKind;
+    match (e.kind(), e.raw_os_error()) {
+        (ErrorKind::PermissionDenied, _) | (_, Some(5)) => {
+            "Sem permissão para abrir esta pasta.".to_owned()
+        }
+        (ErrorKind::NotFound, _) | (_, Some(2 | 3)) => "Esta pasta não existe mais.".to_owned(),
+        (_, Some(21)) => "A unidade não está pronta (sem disco ou desconectada).".to_owned(),
+        (_, Some(53 | 64 | 67 | 1222)) => "O local de rede não está disponível.".to_owned(),
+        (_, Some(code)) => format!("Não foi possível ler esta pasta (erro {code} do Windows)."),
+        _ => format!("Não foi possível ler esta pasta ({e})."),
     }
 }
 
@@ -1555,7 +1620,7 @@ impl Render for FolderView {
                                 )
                             })
                             .when(!grid_view && columns.date, |d| {
-                                d.child(header_cell("Data (UTC)").w(px(DATE_COL)).flex_none())
+                                d.child(header_cell("Modificado em").w(px(DATE_COL)).flex_none())
                             })
                             // Room for the scrollbar, so columns line up with the rows.
                             .child(div().w(px(SCROLLBAR_WIDTH)).flex_none()),
@@ -1612,7 +1677,21 @@ impl Render for FolderView {
                                 .track_scroll(self.scroll.clone())
                                 .into_any_element()
                             })
-                            .child(self.render_scrollbar(cx)),
+                            .child(self.render_scrollbar(cx))
+                            .when_some(self.placeholder(), |d, text| {
+                                d.child(
+                                    div()
+                                        .absolute()
+                                        .top(px(space(10)))
+                                        .left_0()
+                                        .right_0()
+                                        .flex()
+                                        .justify_center()
+                                        .px(px(space(4)))
+                                        .text_color(rgba(t.text_secondary))
+                                        .child(text),
+                                )
+                            }),
                     ),
             )
     }
@@ -1620,7 +1699,28 @@ impl Render for FolderView {
 
 #[cfg(test)]
 mod tests {
-    use super::Columns;
+    use super::{Columns, elapsed_text, read_failure};
+    use std::time::Duration;
+
+    #[test]
+    fn read_failures_are_in_words() {
+        let denied = std::io::Error::from_raw_os_error(5);
+        assert_eq!(
+            read_failure(&denied),
+            "Sem permissão para abrir esta pasta."
+        );
+        let gone = std::io::Error::from_raw_os_error(3);
+        assert_eq!(read_failure(&gone), "Esta pasta não existe mais.");
+        let other = std::io::Error::from_raw_os_error(1117);
+        assert!(read_failure(&other).contains("1117"));
+    }
+
+    #[test]
+    fn elapsed_texts() {
+        assert_eq!(elapsed_text(Duration::from_micros(400)), "0,4 ms");
+        assert_eq!(elapsed_text(Duration::from_millis(92)), "92 ms");
+        assert_eq!(elapsed_text(Duration::from_millis(1234)), "1,2 s");
+    }
 
     #[test]
     fn narrow_lists_drop_date_then_size() {

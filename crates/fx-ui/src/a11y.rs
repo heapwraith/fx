@@ -98,10 +98,7 @@ pub fn build(s: &Snapshot) -> TreeUpdate {
 
     let mut list = Node::new(Role::ListBox);
     list.set_label("Arquivos");
-    list.set_description(match s.total {
-        1 => "1 item".to_owned(),
-        n => format!("{n} itens"),
-    });
+    list.set_description(fx_core::format::items(s.total));
     list.set_size_of_set(s.total);
     list.set_children(
         s.rows

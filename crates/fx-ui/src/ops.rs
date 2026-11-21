@@ -50,6 +50,9 @@ pub struct Ask {
     pub job: JobId,
     pub name: String,
     pub folder: String,
+    /// The item being copied/moved, and the one already there.
+    pub incoming: Option<fx_ops::ItemInfo>,
+    pub existing: Option<fx_ops::ItemInfo>,
 }
 
 pub struct Ops {
@@ -255,6 +258,8 @@ impl Ops {
                 job,
                 source,
                 existing,
+                source_info,
+                existing_info,
             } => {
                 self.asks.push_back(Ask {
                     job,
@@ -264,6 +269,8 @@ impl Ops {
                     folder: existing
                         .parent()
                         .map_or_else(String::new, |p| p.display().to_string()),
+                    incoming: source_info,
+                    existing: existing_info,
                 });
                 cx.notify();
                 return;
@@ -343,11 +350,7 @@ fn start_label(pending: &Pending) -> Option<String> {
 }
 
 fn count(n: usize) -> String {
-    if n == 1 {
-        "1 item".into()
-    } else {
-        format!("{n} itens")
-    }
+    fx_core::format::items(n)
 }
 
 /// Status message for a finished job.

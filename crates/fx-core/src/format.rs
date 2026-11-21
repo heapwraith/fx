@@ -27,6 +27,19 @@ pub fn size_short(bytes: u64) -> String {
     format!("{text} {}", UNITS[unit])
 }
 
+/// Item count with the Brazilian thousands separator: "1 item", "100.000 itens".
+pub fn items(n: usize) -> String {
+    match n {
+        1 => "1 item".to_owned(),
+        n => format!("{} itens", group_thousands(n as u64)),
+    }
+}
+
+/// A number with the Brazilian thousands separator: `100.000`.
+pub fn count(n: usize) -> String {
+    group_thousands(n as u64)
+}
+
 fn group_thousands(n: u64) -> String {
     let digits = n.to_string();
     let mut out = String::with_capacity(digits.len() + digits.len() / 3);
@@ -53,12 +66,13 @@ pub fn civil_from_days(days: i64) -> (i64, u32, u32) {
     (yoe + era * 400 + i64::from(month <= 2), month, day)
 }
 
-/// `DD/MM/YYYY HH:MM` in UTC (the local time zone is a later task).
-pub fn date_time_utc(t: SystemTime) -> String {
+/// `DD/MM/YYYY HH:MM`, shifted by `offset` seconds from UTC (the local
+/// offset for that instant comes from the platform: fx-shell `utc_offset_at`).
+pub fn date_time(t: SystemTime, offset: i64) -> String {
     let secs = match t.duration_since(SystemTime::UNIX_EPOCH) {
         Ok(d) => d.as_secs() as i64,
         Err(e) => -(e.duration().as_secs_f64().ceil() as i64),
-    };
+    } + offset;
     let (y, m, d) = civil_from_days(secs.div_euclid(86_400));
     let s = secs.rem_euclid(86_400);
     format!(
@@ -98,9 +112,23 @@ mod tests {
     #[test]
     fn date_time_format() {
         let t = SystemTime::UNIX_EPOCH + Duration::from_secs(20_778 * 86_400 + 13 * 3600 + 7 * 60);
-        assert_eq!(date_time_utc(t), "21/11/2026 13:07");
-        assert_eq!(date_time_utc(SystemTime::UNIX_EPOCH), "01/01/1970 00:00");
+        assert_eq!(date_time(t, 0), "21/11/2026 13:07");
+        assert_eq!(date_time(SystemTime::UNIX_EPOCH, 0), "01/01/1970 00:00");
+        // Brasília (UTC-3) crosses midnight backwards.
+        assert_eq!(
+            date_time(SystemTime::UNIX_EPOCH, -3 * 3600),
+            "31/12/1969 21:00"
+        );
         assert_eq!(millis(Duration::from_micros(1500)), 1.5);
+    }
+
+    #[test]
+    fn counts() {
+        assert_eq!(items(0), "0 itens");
+        assert_eq!(items(1), "1 item");
+        assert_eq!(items(999), "999 itens");
+        assert_eq!(items(100_000), "100.000 itens");
+        assert_eq!(count(1_234_567), "1.234.567");
     }
 
     #[test]

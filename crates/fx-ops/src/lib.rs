@@ -322,6 +322,27 @@ pub enum Outcome {
 }
 
 // `Finished` carries the report and is much bigger than the other variants;
+/// Size and modification date of one side of a conflict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ItemInfo {
+    pub is_dir: bool,
+    /// File size (0 for folders: their size would need a walk).
+    pub bytes: u64,
+    pub modified: Option<std::time::SystemTime>,
+}
+
+impl ItemInfo {
+    /// Reads it from disk (runs on the job's worker thread).
+    fn of(path: &Path) -> Option<Self> {
+        let m = std::fs::symlink_metadata(path).ok()?;
+        Some(Self {
+            is_dir: m.is_dir(),
+            bytes: if m.is_dir() { 0 } else { m.len() },
+            modified: m.modified().ok(),
+        })
+    }
+}
+
 // there is one per job and progress is throttled, so boxing would buy nothing.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -344,6 +365,10 @@ pub enum Event {
         job: JobId,
         source: PathBuf,
         existing: PathBuf,
+        /// Size and date of both sides, so the user can compare them
+        /// (`None` when they could not be read).
+        source_info: Option<ItemInfo>,
+        existing_info: Option<ItemInfo>,
     },
     Conflict {
         job: JobId,
@@ -794,6 +819,8 @@ impl Run<'_> {
             job: self.id,
             source: source.to_path_buf(),
             existing: existing.to_path_buf(),
+            source_info: ItemInfo::of(source),
+            existing_info: ItemInfo::of(existing),
         });
         loop {
             if self.cancelled() {

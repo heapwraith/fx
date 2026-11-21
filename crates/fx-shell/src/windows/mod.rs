@@ -9,6 +9,7 @@ mod launch;
 mod menu;
 mod places;
 mod thumbs;
+mod time;
 
 pub use a11y::{A11y, LatestTree};
 pub use clipboard::{clear_clipboard, clipboard_files, set_clipboard_files};
@@ -19,6 +20,7 @@ pub use launch::launch;
 pub use menu::show_context_menu;
 pub use places::{drives, known_folder, known_folders, watch_drives};
 pub use thumbs::start_thumb_service;
+pub use time::utc_offset_at;
 
 use std::time::{Duration, SystemTime};
 

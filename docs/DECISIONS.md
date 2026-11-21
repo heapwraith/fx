@@ -179,3 +179,13 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Testes não sobrescrevem a sessão do usuário:** com `FX_TRACE` (benchmarks) ou `FX_NO_STATE=1` nada é lido nem gravado; `FX_DATA_DIR` troca a pasta de dados (verificação no app).
 - **Teste do critério:** um processo filho grava estados sem parar e é morto (`TerminateProcess`) 5 vezes: o banco passa no `integrity_check` e devolve sempre o último estado completo. No app: abas, pastas, seleção, cursor e histórico voltaram depois de matar o processo.
 - **Ainda pendente da D-013:** fechar a última janela continua encerrando o processo (residente sem janela exige ícone na bandeja ou opção de sair; fica para a Fase 2).
+
+## D-027 — Identidade e acabamento visual (T1.19, checkup)
+- **Data:** 2026-11-21 · **Status:** aceita
+- **Cor de destaque própria:** verde-azulado (`#0B7A75` no claro, `#3DD6C6` no escuro) em vez do azul padrão do Windows, para a seleção, o progresso, os botões principais e as barras dos discos. Passa nos testes de contraste (3:1 contra a lista; 4,5:1 para o texto do botão principal, teste novo).
+- **Velocidade visível:** o status mostra quanto levou para ter a lista inteira ordenada ("100.000 itens · lida em 9 ms"), medido do início da leitura até a ordenação. Na primeira pasta de um processo novo o número inclui a disputa com a partida do app (ex.: pasta vazia em ~49 ms); dentro do app ele mede só a leitura.
+- **Horário local** nas datas, com as regras do Windows para aquela data (horário de verão incluído), como no Explorador: `SystemTimeToTzSpecificLocalTimeEx` em `fx-shell` (`utc_offset_at`). **Feature nova do `windows`:** `Win32_System_Time`. A coluna passa a se chamar "Modificado em".
+- **Estados de borda:** erro de leitura e pasta vazia aparecem no meio da lista, em português (sem permissão, pasta inexistente, unidade não pronta, rede indisponível, código do Windows nos demais), e o status fica curto, sem espremer a barra de caminho. Filtro sem resultado também avisa.
+- **Contagens** com separador de milhar ("100.000 itens") em toda a interface e na árvore de acessibilidade.
+- **Abas:** largura mínima de 112 px; quando não cabem, a faixa rola, e a aba ativa é trazida à vista. O "×" aparece só na aba ativa ou sob o mouse.
+- **Conflito:** o motor (`Event::Ask`) passa tamanho e data dos dois lados, lidos na thread do trabalho; o diálogo mostra "Existente" e "Novo" e marca o mais recente.

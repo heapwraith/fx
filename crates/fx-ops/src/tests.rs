@@ -614,8 +614,17 @@ fn asked_conflicts_wait_for_the_answer_and_apply_to_all() {
     let mut asks = 0;
     let report = loop {
         match rx.recv_timeout(WAIT).unwrap() {
-            Event::Ask { job, existing, .. } if job == id => {
+            Event::Ask {
+                job,
+                existing,
+                source_info,
+                existing_info,
+                ..
+            } if job == id => {
                 asks += 1;
+                // Both sides are described, for the comparison in the dialog.
+                assert!(source_info.is_some_and(|i| !i.is_dir && i.modified.is_some()));
+                assert!(existing_info.is_some());
                 if existing.ends_with("a.txt") {
                     e.answer(id, Resolution::Skip, false);
                 } else {

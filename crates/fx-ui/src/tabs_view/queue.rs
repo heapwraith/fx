@@ -164,6 +164,23 @@ impl TabsView {
                     .text_color(rgba(t.text_secondary))
                     .child(format!("\"{}\" já existe em {}.", ask.name, ask.folder)),
             )
+            .children(
+                compare(ask.existing, ask.incoming)
+                    .into_iter()
+                    .map(|(label, text)| {
+                        div()
+                            .flex()
+                            .gap(px(space(2)))
+                            .child(
+                                div()
+                                    .w(px(72.0))
+                                    .flex_none()
+                                    .text_color(rgba(t.text_secondary))
+                                    .child(label),
+                            )
+                            .child(div().flex_1().min_w_0().truncate().child(text))
+                    }),
+            )
             .child(
                 div()
                     .id("apply-all")
@@ -213,5 +230,72 @@ impl TabsView {
             )
             .with_priority(2),
         )
+    }
+}
+
+/// The two sides of a conflict, one line each: size, date and which one is
+/// newer, so "Substituir" is not a blind choice.
+fn compare(
+    existing: Option<fx_ops::ItemInfo>,
+    incoming: Option<fx_ops::ItemInfo>,
+) -> Vec<(&'static str, String)> {
+    let newer = match (
+        existing.and_then(|i| i.modified),
+        incoming.and_then(|i| i.modified),
+    ) {
+        (Some(a), Some(b)) if a > b => Some(false),
+        (Some(a), Some(b)) if b > a => Some(true),
+        _ => None,
+    };
+    let line = |info: Option<fx_ops::ItemInfo>, is_newer: bool| {
+        let Some(info) = info else {
+            return "não foi possível ler".to_owned();
+        };
+        let mut parts = Vec::new();
+        parts.push(if info.is_dir {
+            "pasta".to_owned()
+        } else {
+            fx_core::format::size_short(info.bytes)
+        });
+        if let Some(m) = info.modified {
+            parts.push(fx_core::format::date_time(m, fx_shell::utc_offset_at(m)));
+        }
+        if is_newer {
+            parts.push("mais recente".to_owned());
+        }
+        parts.join(" · ")
+    };
+    if existing.is_none() && incoming.is_none() {
+        return Vec::new();
+    }
+    vec![
+        ("Existente", line(existing, newer == Some(false))),
+        ("Novo", line(incoming, newer == Some(true))),
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compare;
+    use fx_ops::ItemInfo;
+    use std::time::{Duration, SystemTime};
+
+    #[test]
+    fn compare_marks_the_newer_side() {
+        let old = ItemInfo {
+            is_dir: false,
+            bytes: 1536,
+            modified: Some(SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000_000)),
+        };
+        let new = ItemInfo {
+            modified: Some(SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000)),
+            ..old
+        };
+        let lines = compare(Some(old), Some(new));
+        assert_eq!(lines[0].0, "Existente");
+        assert!(lines[0].1.starts_with("1,5 KB · ") && !lines[0].1.contains("recente"));
+        assert!(lines[1].1.ends_with("mais recente"));
+        assert!(compare(None, None).is_empty());
+        assert_eq!(compare(None, Some(new))[0].1, "não foi possível ler");
     }
 }

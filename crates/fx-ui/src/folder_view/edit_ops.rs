@@ -87,11 +87,7 @@ impl Rename {
 }
 
 fn count(n: usize) -> String {
-    if n == 1 {
-        "1 item".into()
-    } else {
-        format!("{n} itens")
-    }
+    fx_core::format::items(n)
 }
 
 impl FolderView {
@@ -173,7 +169,10 @@ impl FolderView {
                             .file_name()
                             .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
                     ),
-                    n => format!("{n} itens serão excluídos para sempre, sem passar pela Lixeira."),
+                    n => format!(
+                        "{} serão excluídos para sempre, sem passar pela Lixeira.",
+                        count(n)
+                    ),
                 };
                 let answer = window.prompt(
                     PromptLevel::Critical,

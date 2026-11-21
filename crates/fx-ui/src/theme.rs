@@ -146,9 +146,11 @@ impl Theme {
         layer: 0xFFFFFF80,
         text: 0x1A1A1AFF,
         text_secondary: 0x5C5C5CFF,
-        accent: 0x005FB8FF,
+        // fx's own accent (teal), not Windows' blue: selection, progress,
+        // primary buttons and drive bars carry the app's identity.
+        accent: 0x0B7A75FF,
         hover: 0x0000000A,
-        selected: 0x005FB81F,
+        selected: 0x0B7A751F,
         divider: 0x00000014,
         focus: 0x1A1A1AFF,
         thumb: 0x0000005C,
@@ -161,9 +163,9 @@ impl Theme {
         layer: 0x3A3A3A4D,
         text: 0xFFFFFFFF,
         text_secondary: 0xC8C8C8FF,
-        accent: 0x60CDFFFF,
+        accent: 0x3DD6C6FF,
         hover: 0xFFFFFF0F,
-        selected: 0x60CDFF26,
+        selected: 0x3DD6C626,
         divider: 0xFFFFFF14,
         focus: 0xFFFFFFFF,
         thumb: 0xFFFFFF5C,
@@ -241,6 +243,9 @@ mod tests {
             // The focus ring and the selection indicator must stand out (3:1, WCAG 1.4.11).
             assert!(contrast(t.focus, layer) >= 3.0, "{:?} focus", t.mode);
             assert!(contrast(t.accent, layer) >= 3.0, "{:?} accent", t.mode);
+            // Primary buttons: `base` text on an accent fill.
+            let label = contrast(t.base, t.accent);
+            assert!(label >= 4.5, "{:?} button label: {label:.2}", t.mode);
         }
     }
 

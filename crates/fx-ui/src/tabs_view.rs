@@ -21,8 +21,8 @@ use std::time::Instant;
 use accesskit::{Action, ActionRequest};
 use fx_core::Tabs;
 use gpui::{
-    ClickEvent, Context, Entity, KeyDownEvent, MouseButton, MouseDownEvent, SharedString, Window,
-    div, prelude::*, px,
+    ClickEvent, Context, Entity, KeyDownEvent, MouseButton, MouseDownEvent, ScrollHandle,
+    SharedString, Window, div, prelude::*, px,
 };
 
 use crate::a11y::{A11yHandle, row_entry};
@@ -37,6 +37,8 @@ use crate::trace::Trace;
 
 const TAB_HEIGHT: f32 = 32.0;
 const TAB_MAX_WIDTH: f32 = 220.0;
+/// Below this, tabs stop shrinking and the row scrolls (a label stays readable).
+const TAB_MIN_WIDTH: f32 = 112.0;
 const CLOSE_SIZE: f32 = 20.0;
 /// Below this window width the sidebar hides itself.
 const SIDEBAR_MIN_WINDOW: f32 = 720.0;
@@ -59,6 +61,10 @@ pub struct TabsView {
     sidebar_open: bool,
     /// "Apply to all" box of the conflict dialog.
     apply_all: bool,
+    /// The tab row scrolls when tabs no longer fit at their minimum width.
+    tab_scroll: ScrollHandle,
+    /// Active tab at the last render (to scroll a newly active tab into view).
+    shown_active: Option<usize>,
 }
 
 /// What is carried while a tab is dragged (also its drag preview).
@@ -131,6 +137,8 @@ impl TabsView {
             sidebar_open: look.sidebar,
             a11y,
             apply_all: false,
+            tab_scroll: ScrollHandle::new(),
+            shown_active: None,
         };
         view.focus_active(window, cx);
         view
@@ -358,7 +366,7 @@ impl TabsView {
         let t = self.look.theme;
         let icon_font = self.look.icon_font;
         let active = self.tabs.active_index();
-        let mut strip = div()
+        let strip = div()
             .h(px(space(10)))
             .flex_none()
             .flex()
@@ -387,6 +395,15 @@ impl TabsView {
                         cx.notify();
                     })),
             );
+        let mut row = div()
+            .id("tab-row")
+            .flex_shrink()
+            .min_w_0()
+            .flex()
+            .items_end()
+            .gap(px(space(1)))
+            .overflow_x_scroll()
+            .track_scroll(&self.tab_scroll);
         for (k, tab) in self.tabs.iter().enumerate() {
             let path = tab.read(cx).path();
             let label: SharedString = path
@@ -403,11 +420,13 @@ impl TabsView {
                 theme: t,
                 font: self.look.font,
             };
-            strip = strip.child(
+            let group: SharedString = format!("tab-{k}").into();
+            row = row.child(
                 div()
                     .id(("tab", k))
+                    .group(group.clone())
                     .flex_shrink()
-                    .min_w(px(space(16)))
+                    .min_w(px(TAB_MIN_WIDTH))
                     .max_w(px(TAB_MAX_WIDTH))
                     .h(px(TAB_HEIGHT))
                     .pl(px(space(3)))
@@ -433,6 +452,11 @@ impl TabsView {
                             .rounded(px(RADIUS))
                             .font_family(icon_font)
                             .text_size(px(10.0))
+                            // Only on the active tab or under the mouse: more
+                            // room for the label.
+                            .when(!is_active, |d| {
+                                d.invisible().group_hover(group, |s| s.visible())
+                            })
                             .hover(|s| s.bg(rgba(t.hover)))
                             .child(ICON_CLOSE)
                             .on_click(cx.listener(move |view, _: &ClickEvent, window, cx| {
@@ -462,7 +486,7 @@ impl TabsView {
                     })),
             );
         }
-        strip.child(
+        strip.child(row).child(
             div()
                 .id("new-tab")
                 .flex_none()
@@ -488,6 +512,11 @@ impl Render for TabsView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = self.look.theme;
         let wide = f32::from(window.viewport_size().width) >= SIDEBAR_MIN_WINDOW;
+        let active = self.tabs.active_index();
+        if self.shown_active != Some(active) {
+            self.shown_active = Some(active);
+            self.tab_scroll.scroll_to_item(active);
+        }
         div()
             .capture_key_down(cx.listener(Self::on_key_down))
             // Anchor for the dialog overlay (covers the queue panel too).

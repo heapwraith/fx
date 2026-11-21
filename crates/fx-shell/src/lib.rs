@@ -18,5 +18,5 @@ pub use windows::{
     A11y, DragResult, Instance, LatestTree, claim_instance, clear_clipboard, clipboard_files,
     drag_files, drives, drop_keys, known_folder, known_folders, launch, process_start_time,
     set_clipboard_files, show_context_menu, start_icon_service, start_thumb_service, supports_mica,
-    watch_drives, window_id, windows_build,
+    utc_offset_at, watch_drives, window_id, windows_build,
 };
