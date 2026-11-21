@@ -2,7 +2,7 @@
 
 Gerenciador de arquivos para Windows 10/11: abre qualquer pasta na hora, acha qualquer arquivo do disco em milissegundos e pode substituir o Explorador. Open source, escrito em Rust.
 
-> Status: **Fase 0 — prova de velocidade.** Ainda não é utilizável.
+> Status: **Fase 1 — MVP de navegação.** A Fase 0 (prova de velocidade) passou no portão. Ainda não é utilizável.
 
 ## Benchmarks
 

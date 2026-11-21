@@ -1,12 +1,12 @@
 # Fase 1 — MVP de navegação
 
-> **RASCUNHO, aguardando o portão da Fase 0.** Preparado em 2026-11-21 a partir de `PHASES-1-4.md`, enquanto as medições elevadas da Fase 0 estão pendentes. Nada daqui começa antes de o usuário passar o portão e aprovar este arquivo (pode cortar, reordenar ou mudar tarefas).
+> **Aprovada em 2026-11-21**, no portão da Fase 0 (`bench/results/gate-0.md`).
 
 **Objetivo:** um gerenciador de arquivos que o usuário consiga usar como principal por 2 semanas sem voltar ao Explorador, mantendo as metas P1–P4 da Fase 0 e sem nenhum caso de perda de dados.
 
 **Duração estimada:** 10 semanas. **Fora de escopo nesta fase:** busca no disco inteiro e `fx-indexd` (Fase 2), Quick Look, paleta de comandos, renomear em lote, painel duplo, vista em colunas, virar o padrão do Windows (Fase 3), instalador e atualizador.
 
-**Depende de decisões do portão:** D-013 (partida do processo: residente ou não) muda a T1.2. A régua da P7 vale para todas as tarefas de UI.
+**Decisões do portão que valem aqui:** D-013 (processo residente: a T1.2 inclui a instância única) e D-014 (P7 = no máximo 0,5% de quadros perdidos).
 
 **Dependências novas previstas** (cada uma registrada em `docs/DECISIONS.md` na tarefa que a introduzir): `accesskit` e `accesskit_windows` (T1.10, D-008), `serde` e `toml` (T1.17), `rusqlite` (T1.17). Qualquer outra pede aprovação antes.
 

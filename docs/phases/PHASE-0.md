@@ -157,6 +157,8 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 
 ## Portão da Fase 0
 
+> **Aprovado em 2026-11-21.** Ver a decisão em `bench/results/gate-0.md` (D-013, D-014). Próxima fase: `PHASE-1.md`.
+
 Passa para a Fase 1 somente se:
 1. **P2, P4, P5 e P7** passaram.
 2. **P6 e P9** passaram ou têm plano claro de correção.

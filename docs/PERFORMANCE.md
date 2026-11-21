@@ -4,13 +4,13 @@
 
 | ID | Medida | Meta |
 |---|---|---|
-| P1 | Abertura a frio do app até a primeira lista pintada | ≤ 150 ms |
-| P2 | Pasta com 100 mil arquivos: primeira pintura | ≤ 100 ms |
-| P3 | Pasta com 100 mil arquivos: lista completa e ordenada por nome | ≤ 300 ms |
+| P1 | Primeira abertura do dia (processo novo) até a primeira lista pintada | ≤ 500 ms (revisada em D-013; era 150 ms) |
+| P2 | Pasta com 100 mil arquivos: primeira pintura, com o fx já carregado (processo residente, D-013) | ≤ 100 ms |
+| P3 | Pasta com 100 mil arquivos: lista completa e ordenada por nome, com o fx já carregado | ≤ 300 ms |
 | P4 | Resposta a tecla/clique (input → quadro atualizado) | ≤ 16 ms |
 | P5 | Busca por nome no disco inteiro, por tecla, com ~2 milhões de arquivos indexados | ≤ 50 ms |
 | P6 | Construção inicial do índice da MFT de um disco com ~2 milhões de arquivos | ≤ 10 s |
-| P7 | Rolagem na lista de 100 mil itens | sem quadros acima de 8,3 ms (120 Hz) |
+| P7 | Rolagem na lista de 100 mil itens, na taxa real do monitor | ≤ 0,5% de quadros perdidos (intervalo ≥ 1,5× o período do monitor); reportar também o p95 (D-014) |
 | P8 | Memória do app parado, 1 janela, 1 pasta pequena | ≤ 80 MB |
 | P9 | Memória do índice por milhão de arquivos | ≤ 150 MB |
 

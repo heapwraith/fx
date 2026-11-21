@@ -82,7 +82,14 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Consequência:** custo pequeno agora (organizar os módulos e não vazar tipos do `windows-rs` na API pública) e nenhum port parcial ou stub para manter. Os objetivos e as metas de desempenho continuam valendo só para Windows.
 
 ## D-013 — Partida do processo limitada pelo driver da GPU (P1/P2)
-- **Data:** 2026-11-21 · **Status:** pendente (decidir no portão da Fase 0)
+- **Data:** 2026-11-21 · **Status:** aceita (decidida no portão da Fase 0; o usuário delegou a escolha)
 - **Contexto (T0.5):** primeira pintura da `flat-100k`, mediana de 10 aberturas, release. **Desde o início do processo: 406 ms** (meta P2: 100 ms). **Desde o pedido da pasta, com o app já aberto: 25 ms.** Antes das correções no patch do gpui eram ~800 ms. Do tempo que sobra, ~200 ms são o `D3D11CreateDevice` (o driver da NVIDIA carrega a cada processo novo), ~40 ms o DirectWrite, ~30 ms o carregamento do executável e ~35 ms a criação da janela e da swap chain. Nosso código (ler a pasta, montar a lista e pintar) leva ~25 ms.
 - **Opções a decidir:** (a) processo residente, como o Explorador: o fx fica aberto (bandeja ou serviço) e "abrir pasta" cria só uma janela nova; (b) mostrar uma primeira janela sem GPU e passar para o GPUI quando o dispositivo estiver pronto; (c) plano B de stack (D-002), lembrando que qualquer interface acelerada por GPU paga o custo do driver na partida; (d) aceitar a meta para "app já aberto" e redefinir a P1.
-- **Consequência até a decisão:** a P2 é medida e reportada das duas formas (`fx-bench open`).
+- **Decisão:** **(a) processo residente.** O fx fica carregado depois da primeira abertura e "abrir pasta" só cria uma janela no processo existente (instância única por named pipe, na T1.2 da Fase 1). A P2 e a P3 passam a valer para o fx já carregado (medido: 24 ms e 86–117 ms). A P1 vira "primeira abertura do dia", com meta de **≤ 500 ms** (medido: 386–406 ms), porque ~200 ms de inicialização do driver da GPU não dependem do nosso código. A opção (b), janela sem GPU, fica guardada caso a P1 piore.
+- **Consequência:** `fx-bench open` continua reportando as duas formas. A Fase 1 inclui a instância única. Fechar a última janela não encerra o processo (configurável na Fase 1, com opção de sair).
+
+## D-014 — Régua da P7: quadros perdidos, não p95 do intervalo
+- **Data:** 2026-11-21 · **Status:** aceita (decidida no portão da Fase 0; o usuário delegou a escolha)
+- **Contexto (T0.5):** o GPUI desenha no ritmo do monitor (`DwmFlush`). A 239 Hz cada quadro dura 4,18 ms, e o intervalo medido oscila entre ~4,0 e ~4,4 ms sem nenhum quadro perdido. Um quadro perdido aparece como ~8,4 ms. Uma meta "p95 ≤ um período" falha por oscilação do relógio, não por travamento.
+- **Decisão:** P7 = **no máximo 0,5% de quadros perdidos** durante a rolagem (intervalo ≥ 1,5× o período do monitor), medido na taxa real do monitor de teste e anotada no relatório. O p95 e o máximo continuam reportados.
+- **Consequência:** resultado da Fase 0: 1 quadro perdido em 3.425 (0,03%) passa. `fx-bench scroll` passa a usar esse critério.

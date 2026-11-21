@@ -34,13 +34,13 @@ Cache de disco **quente** em todas as medidas (as pastas foram abertas antes). N
 
 | Meta | Alvo | Resultado | Passou? |
 |---|---|---|---|
-| **P1** abertura a frio até a primeira lista | ≤ 150 ms | 386–406 ms (mesma medida da P2 a) | ❌ |
-| **P2** primeira pintura, 100 mil arquivos | ≤ 100 ms | (a) desde a partida do processo: **mediana 386–406 ms**, p95 400–439<br>(b) app já aberto, desde o pedido da pasta: **mediana 24–25 ms**, p95 27–33 | (a) ❌ (b) ✅ |
+| **P1** primeira abertura do dia (revisada em D-013) | ≤ 500 ms (era 150) | 372–406 ms | ✅ (meta revisada) |
+| **P2** primeira pintura, 100 mil arquivos | ≤ 100 ms | (a) desde a partida do processo: **mediana 386–406 ms**, p95 400–439<br>(b) app já aberto, desde o pedido da pasta: **mediana 24–25 ms**, p95 27–33 | ✅ pela meta revisada (b), D-013 |
 | **P3** lista completa e ordenada, 100 mil | ≤ 300 ms | app aberto: **86–117 ms**; desde a partida: 418–474 ms | ✅ (app aberto) |
 | **P4** tecla → quadro | ≤ 16 ms (p95) | **p95 3,4 ms**, mediana 2,7, máx. 3,4 (33 teclas reais) | ✅ |
 | **P5** busca por tecla, ~2M arquivos | ≤ 50 ms (p95) | índice real do C: (763.510 arquivos): **p95 4,1 ms**, máx. 5,9 (83 teclas); sintético de 2M: p95 7,0 ms | ✅ |
 | **P6** índice da MFT, ~2M arquivos | ≤ 10 s | C: real: **763.507 arquivos em 7,56 s**. O disco tem 0,76M, não 2M: em escala linear seriam ~20 s (ver riscos) | ✅ no disco real · ⚠️ extrapolado |
-| **P7** rolagem, 100 mil itens | sem quadros > 4,2 ms (p95; um quadro a 239 Hz, escolha do usuário) | arraste + roda até o fim: mediana 4,17, **p95 4,38 ms**, máx. 6,3; **1 quadro perdido em 3.425**; ≤ 26 linhas construídas por quadro | ❌ pela letra; ✅ se a meta for 120 Hz (8,3 ms) |
+| **P7** rolagem, 100 mil itens | sem quadros > 4,2 ms (p95; um quadro a 239 Hz, escolha do usuário) | arraste + roda até o fim: mediana 4,17, **p95 4,38 ms**, máx. 6,3; **1 quadro perdido em 3.425**; ≤ 26 linhas construídas por quadro | ✅ pela régua da D-014 (≤ 0,5% perdidos: 0,03%) |
 | **P8** memória parado, 1 janela | ≤ 80 MB | **72,4 MB** privados (52 MB de working set) | ✅ |
 | **P9** índice por milhão de arquivos | ≤ 150 MB | C: real: **96,5 MB/milhão** (73,7 MB no total); sintético: 71 MB/milhão | ✅ |
 | Outras | — | enumeração `FindFirstFileExW` da `flat-100k`: 1º lote 2,9 ms, total 50 ms; ordenar 100 mil 36 ms; filtrar 1 ms; janela responde (máx. 2,9 ms) carregando 1M arquivos via `\\wsl.localhost` | ✅ |
@@ -86,3 +86,11 @@ Do tempo até o primeiro quadro, ~200 ms são o `D3D11CreateDevice` (driver da N
 3. Decidir a régua da P7: manter 4,2 ms (o protótipo já fica a 1 quadro perdido em 3.425) ou voltar à meta escrita de 120 Hz.
 
 O GPUI não é o gargalo em nenhuma medida do nosso controle: pintura, rolagem e input ficam dentro de um quadro a 239 Hz. A decisão de passar o portão é do usuário.
+
+## Decisão do portão (2026-11-21)
+
+O usuário delegou as escolhas. Decidido:
+
+1. **D-013 → processo residente.** A P2 e a P3 valem para o fx já carregado (24 ms e 86–117 ms ✅). A P1 vira "primeira abertura do dia", com meta de ≤ 500 ms (372–406 ms ✅).
+2. **D-014 → P7 por quadros perdidos** (≤ 0,5%, na taxa real do monitor): 1 em 3.425 = 0,03% ✅.
+3. **Portão da Fase 0: aprovado.** A Fase 1 (`docs/phases/PHASE-1.md`) está aprovada como escrita. A verificação da P6 em discos de ~2M arquivos fica como risco anotado para a Fase 2 (`fx-indexd`), onde o índice passa a rodar num serviço.

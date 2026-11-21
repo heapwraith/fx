@@ -13,7 +13,7 @@ Leia antes de qualquer tarefa:
 - `docs/ARCHITECTURE.md` — crates, threads, processos, o que pode depender do quê.
 - `docs/PERFORMANCE.md` — metas numéricas e o protocolo de medição.
 - `docs/SAFETY.md` — regras de segurança de dados e limites de autonomia. **Obrigatório.**
-- A fase atual em `docs/phases/` (hoje: `PHASE-0.md`).
+- A fase atual em `docs/phases/` (hoje: `PHASE-1.md`; a Fase 0 passou no portão em 2026-11-21).
 - `docs/DECISIONS.md` — decisões já tomadas. Não reabra sem motivo novo e registrado.
 
 ## Ambiente (crítico)

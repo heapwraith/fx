@@ -13,8 +13,12 @@ use crate::report::{commit, json_string, machine, median_p95, results_dir, utc_d
 
 const OPENINGS: usize = 10;
 const TARGET_P2_MS: f64 = 100.0;
-/// One frame at the 239 Hz display of the reference machine (user's choice).
+/// P1 (D-013): first open of the day, new process.
+const TARGET_P1_MS: f64 = 500.0;
+/// One frame at the 239 Hz display of the reference machine.
 const TARGET_P7_MS: f64 = 4.2;
+/// P7 (D-014): at most this fraction of frames may be dropped.
+const MAX_DROPPED_FRACTION: f64 = 0.005;
 
 /// A trace written by fx (`key value` lines; see fx-ui/src/trace.rs).
 #[derive(Debug, Default)]
@@ -156,18 +160,16 @@ pub fn open() -> std::io::Result<()> {
     }
     let (proc_med, proc_p95) = median_p95(&ms_samples(&from_process));
     let (req_med, req_p95) = median_p95(&ms_samples(&from_request));
-    let pass_process = proc_med <= TARGET_P2_MS;
+    let pass_process = proc_med <= TARGET_P1_MS;
     let pass_request = req_med <= TARGET_P2_MS;
 
+    println!("First frame with rows, flat-100k, {OPENINGS} openings (new process each), release");
     println!(
-        "P2: first frame with rows, flat-100k, {OPENINGS} openings (new process each), release"
-    );
-    println!(
-        "  (a) from process start      median {proc_med:>7.1} ms  p95 {proc_p95:>7.1} ms  {}",
+        "  P1 from process start (first open of the day)  median {proc_med:>7.1} ms  p95 {proc_p95:>7.1} ms  target ≤ {TARGET_P1_MS}  {}",
         if pass_process { "pass" } else { "FAIL" }
     );
     println!(
-        "  (b) from folder request     median {req_med:>7.1} ms  p95 {req_p95:>7.1} ms  {}   (app already running)",
+        "  P2 from folder request (fx already loaded)     median {req_med:>7.1} ms  p95 {req_p95:>7.1} ms  target ≤ {TARGET_P2_MS}  {}",
         if pass_request { "pass" } else { "FAIL" }
     );
     let date = utc_date(SystemTime::now());
@@ -175,12 +177,13 @@ pub fn open() -> std::io::Result<()> {
         concat!(
             "{{\n  \"id\": \"P2\",\n  \"task\": \"T0.5\",\n  \"folder\": \"flat-100k\",\n",
             "  \"openings\": {n},\n  \"target_ms\": {t},\n",
-            "  \"from_process_start_ms\": {{ \"median\": {pm:.3}, \"p95\": {pp:.3}, \"pass\": {pa} }},\n",
+            "  \"from_process_start_ms\": {{ \"median\": {pm:.3}, \"p95\": {pp:.3}, \"target\": {t1}, \"pass\": {pa} }},\n",
             "  \"from_folder_request_ms\": {{ \"median\": {rm:.3}, \"p95\": {rp:.3}, \"pass\": {ra} }},\n",
             "  \"machine\": {machine},\n  \"commit\": {commit},\n  \"date\": {date}\n}}\n"
         ),
         n = OPENINGS,
         t = TARGET_P2_MS,
+        t1 = TARGET_P1_MS,
         pm = proc_med,
         pp = proc_p95,
         pa = pass_process,
@@ -268,7 +271,9 @@ pub fn scroll() -> std::io::Result<()> {
     // end of the list (rows are 24 px; the viewport is ~585 px tall).
     let list_px = fixtures::Spec::FULL.flat_files as f64 * 24.0;
     let reached = -trace.number("final_offset_px").unwrap_or(0.0) / list_px;
-    let pass = total.p95 <= TARGET_P7_MS;
+    // D-014: at most 0.5% dropped frames (interval ≥ 1.5 refresh periods).
+    let dropped_fraction = total.dropped as f64 / total.frames as f64;
+    let pass = dropped_fraction <= MAX_DROPPED_FRACTION;
 
     println!(
         "P7: frame intervals while scrolling flat-100k (display: 239 Hz, target {TARGET_P7_MS} ms), release"
@@ -291,17 +296,24 @@ pub fn scroll() -> std::io::Result<()> {
         }
     }
     show("all", &total);
-    println!("  {}", if pass { "pass" } else { "FAIL" });
+    println!(
+        "  dropped {:.2}% of frames (P7, D-014: ≤ {:.1}%)  {}",
+        dropped_fraction * 100.0,
+        MAX_DROPPED_FRACTION * 100.0,
+        if pass { "pass" } else { "FAIL" }
+    );
 
     let date = utc_date(SystemTime::now());
     let json = format!(
         concat!(
             "{{\n  \"id\": \"P7\",\n  \"task\": \"T0.5\",\n  \"folder\": \"flat-100k\",\n",
-            "  \"display_hz\": 239,\n  \"target_ms\": {t},\n  \"input\": \"bench/scroll-p7.ps1 (wheel to the end, then thumb drag both ways)\",\n",
+            "  \"display_hz\": 239,\n  \"frame_ms\": {t},\n  \"max_dropped_fraction\": {mdf},\n  \"dropped_fraction\": {df:.5},\n  \"input\": \"bench/scroll-p7.ps1 (wheel to the end, then thumb drag both ways)\",\n",
             "  \"max_rows_built\": {rows},\n  \"wheel_reached_fraction\": {reached:.4},\n  \"all\": {all},\n  \"sessions\": [{sessions}],\n  \"pass\": {pass},\n",
             "  \"machine\": {machine},\n  \"commit\": {commit},\n  \"date\": {date}\n}}\n"
         ),
         t = TARGET_P7_MS,
+        mdf = MAX_DROPPED_FRACTION,
+        df = dropped_fraction,
         rows = rows_built,
         reached = reached,
         all = stats_json(&total),
