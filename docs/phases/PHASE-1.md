@@ -176,7 +176,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.14 — Área de transferência compatível com o Explorador
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: Ctrl+C/Ctrl+X/Ctrl+V com `CF_HDROP` + "Preferred DropEffect" (D-023), colar pelo motor com conflitos e desfazer, esvaziando a área depois de colar um recorte. Verificado no app com a área de transferência real: Ctrl+C no fx é lido pelo Windows (efeito 1) e colado; Ctrl+X grava efeito 2, colar move e esvazia a área; arquivo posto por `Set-Clipboard` (formato do Explorador) é colado no fx. **Teste manual pendente com o próprio Explorador:** copiar/recortar no fx e colar numa janela do Explorador, e o inverso.
 
 **Fazer**
 - Ctrl+C / Ctrl+X / Ctrl+V com `CF_HDROP` e `Preferred DropEffect`, nos dois sentidos com o Explorador.

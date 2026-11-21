@@ -3,11 +3,16 @@
 //! place, Ctrl+Shift+N makes a folder (and starts renaming it), Ctrl+Z /
 //! Ctrl+Y undo and redo. Operations on a drive root or a system folder ask
 //! for an extra confirmation first (SAFETY.md §2.7).
+//!
+//! Clipboard (task T1.14): Ctrl+C / Ctrl+X put the files on the clipboard
+//! like the Explorer (`CF_HDROP` + "Preferred DropEffect"); Ctrl+V pastes
+//! files from fx or any app through the operations queue (conflicts asked,
+//! undo recorded), and empties the clipboard after a successful cut-paste.
 
 use std::path::PathBuf;
 
-use fx_ops::{Job, JobId};
-use gpui::{Context, Keystroke, PromptLevel, Window};
+use fx_ops::{Job, JobId, Resolution};
+use gpui::{AppContext, Context, Keystroke, PromptLevel, Window};
 
 use super::FolderView;
 
@@ -78,6 +83,14 @@ impl Rename {
         if let Some(c) = self.text[self.caret..].chars().next() {
             self.caret += c.len_utf8();
         }
+    }
+}
+
+fn count(n: usize) -> String {
+    if n == 1 {
+        "1 item".into()
+    } else {
+        format!("{n} itens")
     }
 }
 
@@ -188,6 +201,62 @@ impl FolderView {
             "n" if ctrl_shift => {
                 let job = Job::new_folder(self.path.clone(), "Nova pasta".into());
                 self.awaiting_folder = self.submit_job(job, window, cx);
+                true
+            }
+            "c" | "x" if only_ctrl => {
+                let items = self.targets();
+                if items.is_empty() {
+                    return true;
+                }
+                let cut = ks.key == "x";
+                let n = items.len();
+                cx.spawn(async move |this, cx| {
+                    let done = cx
+                        .background_spawn(async move { fx_shell::set_clipboard_files(&items, cut) })
+                        .await;
+                    let _ = this.update(cx, |view, cx| {
+                        view.notice = Some(match done {
+                            Ok(()) if cut => format!("recortado: {} (cole com Ctrl+V)", count(n)),
+                            Ok(()) => format!("copiado: {} (cole com Ctrl+V)", count(n)),
+                            Err(e) => format!("área de transferência indisponível: {e}"),
+                        });
+                        cx.notify();
+                    });
+                })
+                .detach();
+                true
+            }
+            "v" if only_ctrl => {
+                let dest = self.path.clone();
+                cx.spawn_in(window, async move |this, cx| {
+                    let clip = cx
+                        .background_spawn(async { fx_shell::clipboard_files() })
+                        .await;
+                    let _ = this.update_in(cx, |view, window, cx| match clip {
+                        Ok(Some(files)) if !files.paths.is_empty() => {
+                            let job = if files.cut {
+                                Job::move_to(files.paths, dest)
+                            } else {
+                                Job::copy(files.paths, dest)
+                            };
+                            let id = view.submit_job(job.on_conflict(Resolution::Ask), window, cx);
+                            if files.cut
+                                && let Some(id) = id
+                            {
+                                view.ops.update(cx, |ops, _| ops.clear_clipboard_after(id));
+                            }
+                        }
+                        Ok(_) => {
+                            view.notice = Some("nada para colar".into());
+                            cx.notify();
+                        }
+                        Err(e) => {
+                            view.notice = Some(format!("área de transferência indisponível: {e}"));
+                            cx.notify();
+                        }
+                    });
+                })
+                .detach();
                 true
             }
             "z" if only_ctrl => {

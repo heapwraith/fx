@@ -61,6 +61,8 @@ pub struct Ops {
     notice: Option<(String, Instant)>,
     /// Folders made by "new folder" jobs, for the tab that asked to rename it.
     created: HashMap<JobId, PathBuf>,
+    /// Pastes of cut files: the clipboard is emptied once they succeed.
+    clear_after: std::collections::HashSet<JobId>,
 }
 
 impl Ops {
@@ -73,6 +75,7 @@ impl Ops {
             history: UndoStack::new(UndoStack::<Entry>::DEFAULT_LIMIT),
             notice: None,
             created: HashMap::new(),
+            clear_after: std::collections::HashSet::new(),
         }
     }
 
@@ -141,6 +144,11 @@ impl Ops {
             None => self.say("nada para refazer"),
         }
         cx.notify();
+    }
+
+    /// Empties the clipboard when job `id` succeeds (paste of cut files).
+    pub fn clear_clipboard_after(&mut self, id: JobId) {
+        self.clear_after.insert(id);
     }
 
     /// Running copies and moves.
@@ -251,6 +259,11 @@ impl Ops {
         };
         self.active.retain(|j| j.id != id);
         self.asks.retain(|a| a.job != id);
+        if self.clear_after.remove(&id) && outcome == Outcome::Done {
+            std::thread::spawn(|| {
+                let _ = fx_shell::clear_clipboard();
+            });
+        }
         let Some(pending) = self.pending.remove(&id) else {
             return;
         };
