@@ -20,6 +20,7 @@ mod dnd;
 mod edit_ops;
 mod grid;
 mod path_bar;
+mod quick_look;
 mod view_menu;
 
 pub use view_menu::ViewEvent;
@@ -200,6 +201,11 @@ pub struct FolderView {
     resizing: Option<Resize>,
     /// The "Exibir" menu is open (T1.21).
     view_menu: bool,
+    /// Quick Look (T1.22): the open preview, the ticket of the newest
+    /// request, and images to free on the next frame.
+    quick_look: Option<quick_look::QuickLook>,
+    quick_look_ticket: u64,
+    stale_images: Vec<Arc<gpui::RenderImage>>,
 }
 
 /// Which optional columns fit (T1.19): in a narrow list the type goes
@@ -364,6 +370,9 @@ impl FolderView {
             widths: Widths::default(),
             resizing: None,
             view_menu: false,
+            quick_look: None,
+            quick_look_ticket: 0,
+            stale_images: Vec::new(),
         };
         view.start_loading(cx);
         view
@@ -1481,6 +1490,19 @@ impl FolderView {
             cx.notify();
             return;
         }
+        // Quick Look: Space (with no filter being typed) opens and closes it;
+        // Esc closes it. Arrows keep moving the cursor; the preview follows.
+        let plain_key = !m.control && !m.alt && !m.shift && !m.platform;
+        if plain_key
+            && ((ks.key == "space" && self.filter_text.is_empty())
+                || (ks.key == "escape" && self.quick_look_open()))
+            && self.renaming.is_none()
+            && self.edit.is_none()
+        {
+            self.toggle_quick_look(started, cx);
+            cx.notify();
+            return;
+        }
         if self.rename_key(ks, window, cx) {
             if let Some(trace) = &self.trace {
                 trace.borrow_mut().input_started(started, "rename");
@@ -1894,6 +1916,7 @@ pub fn window_title(path: &Path) -> String {
 impl Render for FolderView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.trace_frame(window);
+        self.sync_quick_look(window, cx);
         let t = self.look.theme;
         let focused = self.focus.is_focused(window);
         let row_h = self.look.density.row_height();
@@ -2067,6 +2090,7 @@ impl Render for FolderView {
                             }),
                     ),
             )
+            .children(self.render_quick_look(cx))
             .children(self.render_view_menu(cx))
     }
 }

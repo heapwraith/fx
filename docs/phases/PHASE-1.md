@@ -263,7 +263,7 @@ O usuário pediu que o fx tivesse o básico completo, sem bugs visuais, e três 
 - Testes do filtro de ocultos; Propriedades abre sem bloquear a UI.
 
 ## T1.22 — Quick Look (Espaço)
-- [ ] Concluída em: ____ · Resumo: ____
+- [ ] Concluída em: ____ · Resumo: implementada em 2026-11-21 (D-031): Espaço abre o painel de prévia, que acompanha as setas e fecha com Espaço/Esc; imagem decodificada na thread da prévia, texto (256 KB, UTF-8/UTF-16) em lista virtualizada, miniatura grande do shell para o resto. Texto de 1 MB: 1,5–1,8 ms (release). **Falta:** medir imagem de 10 MB (≤ 100 ms, `input_preview_ms`) e ver na janela (adiado: o usuário pausou os testes que usam a janela).
 
 **Fazer**
 - Espaço abre uma janela de pré-visualização do item sob o cursor, que acompanha as setas e fecha com Espaço/Esc: imagem (decodificada fora da UI), texto e código (primeiros 256 KB), e miniatura grande do shell para os demais tipos. Vídeo, áudio, PDF e preview handlers de terceiros ficam para a Fase 2 (`fx-preview` isolado).

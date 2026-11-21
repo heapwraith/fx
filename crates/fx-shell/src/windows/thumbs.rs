@@ -40,6 +40,19 @@ fn init() {
 }
 
 fn thumbnail(path: &Path, cache_only: bool) -> Option<Vec<u8>> {
+    thumbnail_sized(path, cache_only, THUMB_SIZE)
+}
+
+/// A large shell thumbnail (PNG, at most `max` pixels) for Quick Look
+/// (T1.22): photos, videos, documents with a thumbnail handler, or the big
+/// icon. Initializes COM on the calling thread (a dedicated worker).
+pub fn preview_png(path: &Path, max: u32) -> Option<Vec<u8>> {
+    // SAFETY: COM on this worker thread; harmless if already initialized.
+    let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+    thumbnail_sized(path, false, max)
+}
+
+fn thumbnail_sized(path: &Path, cache_only: bool, max: u32) -> Option<Vec<u8>> {
     let wide: Vec<u16> = OsStr::new(path).encode_wide().chain([0]).collect();
     // SAFETY: `wide` is NUL-terminated and outlives the call; no bind context.
     let factory: IShellItemImageFactory =
@@ -49,8 +62,8 @@ fn thumbnail(path: &Path, cache_only: bool) -> Option<Vec<u8>> {
         flags = SIIGBF(flags.0 | SIIGBF_INCACHEONLY.0);
     }
     let size = SIZE {
-        cx: THUMB_SIZE as i32,
-        cy: THUMB_SIZE as i32,
+        cx: max as i32,
+        cy: max as i32,
     };
     // SAFETY: `factory` is a valid COM object of this STA thread.
     let bitmap = unsafe { factory.GetImage(size, flags) }.ok()?;
@@ -65,7 +78,7 @@ fn thumbnail(path: &Path, cache_only: bool) -> Option<Vec<u8>> {
             p[3] = 255; // photos come without alpha
         }
     }
-    let (w, h, rgba) = fit_rgba(w, h, bgra, THUMB_SIZE);
+    let (w, h, rgba) = fit_rgba(w, h, bgra, max);
     Some(encode_png(w, h, &rgba))
 }
 

@@ -11,6 +11,7 @@ mod history;
 mod list;
 pub mod natural;
 mod pinned;
+pub mod preview;
 mod selection;
 mod tabs;
 mod undo;

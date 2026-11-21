@@ -19,7 +19,7 @@ pub use instance::{Instance, claim_instance};
 pub use launch::launch;
 pub use menu::show_context_menu;
 pub use places::{drives, known_folder, known_folders, watch_drives};
-pub use thumbs::start_thumb_service;
+pub use thumbs::{preview_png, start_thumb_service};
 pub use time::utc_offset_at;
 
 use std::time::{Duration, SystemTime};
