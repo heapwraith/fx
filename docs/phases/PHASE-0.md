@@ -147,7 +147,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T0.10 — Comparação e relatório do portão
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: Explorador medido por UI Automation na `flat-100k`: 1.048 ms em janela nova e 264 ms navegando (fx: 386–406 e 24 ms). Files e Everything não instalados (roteiro em `bench/ROTEIRO-COMPARACAO.md`). `bench/results/gate-0.md` e o README atualizados. Recomendação: corrigir as pendências (medições elevadas e D-013), sem plano B.
 
 **Fazer**
 - Medir as mesmas pastas no Explorador, no Files e no Everything (busca), na mesma máquina, seguindo `docs/PERFORMANCE.md`. O usuário pode precisar fazer as medições manuais em vídeo; prepare o roteiro para ele.
