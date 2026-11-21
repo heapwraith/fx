@@ -485,6 +485,81 @@ pub fn type_keys() -> std::io::Result<()> {
     Ok(())
 }
 
+const NAV_ROUNDS: usize = 3;
+
+/// P4 for navigation (T1.2): fx on the fixtures root; `bench/nav-p4.ps1`
+/// filters to `flat-100k`, opens it with Enter, moves with arrows, PgDn,
+/// Home/End (with and without Shift) and goes back up with Backspace.
+pub fn nav_keys() -> std::io::Result<()> {
+    let flat = flat_100k()?;
+    let root = flat.parent().unwrap_or(&flat).to_path_buf();
+    let mut child = spawn_fx(&root, false)?;
+    std::thread::sleep(Duration::from_secs(2));
+    let out = Command::new("powershell")
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+        .arg(Path::new("bench").join("nav-p4.ps1"))
+        .args(["-ProcessId", &child.id().to_string()])
+        .args(["-Rounds", &NAV_ROUNDS.to_string()])
+        .output()?;
+    Command::new("powershell")
+        .args(["-NoProfile", "-Command"])
+        .arg(format!(
+            "(Get-Process -Id {}).CloseMainWindow() | Out-Null",
+            child.id()
+        ))
+        .status()?;
+    wait_with_timeout(&mut child, Duration::from_secs(10))?;
+    if !out.status.success() {
+        return Err(std::io::Error::other(format!(
+            "navigation script failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        )));
+    }
+    let trace = read_trace(child.id())?;
+    println!("P4: key -> frame presented, navigating flat-100k (release)");
+    let mut parts = Vec::new();
+    let mut pass = true;
+    for (kind, label) in [
+        ("move", "arrows/PgDn/Home/End"),
+        ("open", "Enter/Backspace"),
+    ] {
+        let samples = trace.numbers(&format!("input_{kind}_ms"));
+        if samples.is_empty() {
+            return Err(std::io::Error::other(format!("no {kind} key recorded")));
+        }
+        let (median, p95) = median_p95(&ms_samples(&samples));
+        let max = samples.iter().copied().fold(0.0, f64::max);
+        let ok = p95 <= TARGET_P4_MS;
+        pass &= ok;
+        println!(
+            "  {label}: {} keys  median {median:.2} ms  p95 {p95:.2} ms  max {max:.2} ms   target ≤ {TARGET_P4_MS} ms  {}",
+            samples.len(),
+            if ok { "pass" } else { "FAIL" }
+        );
+        parts.push(format!(
+            "\"{kind}\": {{ \"keys\": {}, \"median\": {median:.3}, \"p95\": {p95:.3}, \"max\": {max:.3} }}",
+            samples.len()
+        ));
+    }
+    let date = utc_date(SystemTime::now());
+    let json = format!(
+        concat!(
+            "{{\n  \"id\": \"P4\",\n  \"task\": \"T1.2\",\n  \"folder\": \"fx-fixtures -> flat-100k\",\n",
+            "  \"input\": \"bench/nav-p4.ps1: 3 rounds, 60 ms between keys\",\n",
+            "  \"latency_ms\": {{ {parts}, \"target\": {t} }},\n",
+            "  \"pass\": {pass},\n  \"machine\": {machine},\n  \"commit\": {commit},\n  \"date\": {date}\n}}\n"
+        ),
+        parts = parts.join(", "),
+        t = TARGET_P4_MS,
+        pass = pass,
+        machine = json_string(&machine()),
+        commit = json_string(commit()),
+        date = json_string(&date),
+    );
+    std::fs::write(results_dir()?.join(format!("{date}-T1.2-P4.json")), json)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

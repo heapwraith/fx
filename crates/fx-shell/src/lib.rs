@@ -7,4 +7,4 @@
 mod windows;
 
 #[cfg(windows)]
-pub use windows::{process_start_time, supports_mica, windows_build};
+pub use windows::{Instance, claim_instance, process_start_time, supports_mica, windows_build};

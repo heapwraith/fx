@@ -15,7 +15,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.1 — Fundação visual (Fluent 2, claro/escuro, Mica, densidade)
-- [x] Concluída em: 2026-11-21 · Resumo: tokens Fluent 2 claro/escuro seguindo o Windows, Mica (Win11 22H2+), Segoe UI Variable, densidades 24/32/40 (Ctrl+1/2/3), hover, seleção com indicador e foco; contraste ≥ 4,5:1 testado; P4 p95 3,3 ms, P7 0 perdidos em 4.001 quadros. **Capturas em `bench/results/visual-t1.1/` aguardam aprovação do usuário antes da T1.3.**
+- [x] Concluída em: 2026-11-21 · Resumo: tokens Fluent 2 claro/escuro seguindo o Windows, Mica (Win11 22H2+), Segoe UI Variable, densidades 24/32/40 (Ctrl+1/2/3), hover, seleção com indicador e foco; contraste ≥ 4,5:1 testado; P4 p95 3,3 ms, P7 0 perdidos em 4.001 quadros. Capturas em `bench/results/visual-t1.1/` aprovadas pelo usuário em 2026-11-21.
 
 **Fazer**
 - Tokens de tema em `fx-ui` (cores, raios, espaçamentos em múltiplos de 4 px, tipografia Segoe UI Variable), com tema claro e escuro seguindo o Windows e mudando ao vivo quando o sistema muda.
@@ -31,7 +31,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.2 — Seleção e navegação por teclado na lista
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: `fx_core::Selection` (cursor, âncora, Shift/Ctrl, Ctrl+A, mantida ao reordenar e filtrar; 10 testes); setas, Home/End, PgUp/PgDn, Enter/duplo clique entram na pasta, Alt+↑/Backspace sobem e re-selecionam a pasta de origem; instância única por named pipe (D-016: 3 execuções = 1 processo, 3 janelas; a 2ª sai em 40 ms). P4 (`fx-bench nav`, 100 mil): setas p95 3,4 ms (81 teclas), Enter/Backspace p95 3,2 ms. Abrir arquivo fica para a T1.9; ficar residente após fechar a última janela, ver D-016.
 
 **Fazer**
 - Modelo de seleção em `fx-core`: cursor, âncora, seleção múltipla (Shift+setas, Ctrl+clique, Ctrl+A), mantida quando a lista é reordenada ou filtrada.

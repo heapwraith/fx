@@ -1,5 +1,9 @@
 //! Windows implementation.
 
+mod instance;
+
+pub use instance::{Instance, claim_instance};
+
 use std::time::{Duration, SystemTime};
 
 use windows::Wdk::System::SystemServices::RtlGetVersion;
@@ -50,6 +54,16 @@ fn filetime_to_system_time(ft: FILETIME) -> SystemTime {
     let ticks = (u64::from(ft.dwHighDateTime) << 32) | u64::from(ft.dwLowDateTime);
     let since_1970 = ticks.saturating_sub(TICKS_1601_TO_1970);
     SystemTime::UNIX_EPOCH + Duration::from_nanos(since_1970.saturating_mul(100))
+}
+
+/// `windows::core::Error` as `io::Error`, keeping Win32 error codes.
+fn to_io(e: windows::core::Error) -> std::io::Error {
+    let code = e.code().0 as u32;
+    if code & 0xFFFF_0000 == 0x8007_0000 {
+        std::io::Error::from_raw_os_error((code & 0xFFFF) as i32)
+    } else {
+        std::io::Error::from_raw_os_error(code as i32)
+    }
 }
 
 #[cfg(test)]

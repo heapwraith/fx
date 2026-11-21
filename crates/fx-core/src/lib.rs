@@ -8,6 +8,8 @@ mod entry;
 pub mod format;
 mod list;
 pub mod natural;
+mod selection;
 
 pub use entry::{Attributes, Entry};
 pub use list::{Direction, FileList, SortKey};
+pub use selection::{MoveMode, Selection, Step};

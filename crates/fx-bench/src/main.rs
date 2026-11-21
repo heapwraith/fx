@@ -9,6 +9,7 @@
 //! fx-bench scroll             P7: frame times while scrolling (moves the mouse!) (T0.5)
 //! fx-bench responsive <dir>   window responsiveness while <dir> loads (T0.5)
 //! fx-bench type               P4: key -> frame latency typing to filter (sends keys!) (T0.6)
+//! fx-bench nav                P4: arrows, Enter and Backspace on flat-100k (sends keys!) (T1.2)
 //! fx-bench index --volume C:  P6/P9: index the real MFT (needs Administrator) (T0.7)
 //! fx-bench index --synthetic N  index N generated files in memory (T0.7)
 //! fx-bench search (--volume C: | --synthetic N) [--interactive]  P5 (T0.8)
@@ -34,7 +35,7 @@ use std::time::Instant;
 
 use fixtures::{Outcome, Spec};
 
-const USAGE: &str = "usage: fx-bench fixtures [--clean] | enum | list | open | scroll | responsive <folder> | type | index (--volume C: | --synthetic N) | search (--volume C: | --synthetic N) [--interactive] | all";
+const USAGE: &str = "usage: fx-bench fixtures [--clean] | enum | list | open | scroll | responsive <folder> | type | nav | index (--volume C: | --synthetic N) | search (--volume C: | --synthetic N) [--interactive] | all";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -47,6 +48,7 @@ fn main() -> ExitCode {
         ["open"] => ui_bench::open(),
         ["scroll"] => ui_bench::scroll(),
         ["type"] => ui_bench::type_keys(),
+        ["nav"] => ui_bench::nav_keys(),
         ["all"] => run_all(),
         ["index", "--volume", volume] => index_bench::volume(volume),
         ["search", "--volume", v] => {
@@ -111,7 +113,7 @@ fn run_all() -> std::io::Result<()> {
         }
     }
     println!(
-        "== skipped (run by hand): scroll (moves the mouse), type (sends keys), index/search --volume C: (Administrator)"
+        "== skipped (run by hand): scroll (moves the mouse), type and nav (send keys), index/search --volume C: (Administrator)"
     );
     if failed.is_empty() {
         Ok(())

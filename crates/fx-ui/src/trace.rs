@@ -32,9 +32,10 @@ pub struct Trace {
     /// Frame intervals, grouped by continuous scrolling session.
     sessions: Vec<Vec<f64>>,
     /// Earliest key event not yet shown on screen (P4).
-    pending_input: Option<Instant>,
-    /// Key event -> end of the frame that shows its result, in ms (P4).
-    input_ms: Vec<f64>,
+    pending_input: Option<(Instant, &'static str)>,
+    /// Key event -> end of the frame that shows its result, in ms (P4), with
+    /// the kind of key ("filter", "move", "open").
+    input_ms: Vec<(f64, &'static str)>,
 }
 
 impl Trace {
@@ -137,18 +138,18 @@ impl Trace {
 
     /// A key event changed what is shown; `at` is when its handler started.
     /// Several keys before the next frame keep the earliest timestamp.
-    pub fn input_started(&mut self, at: Instant) {
-        self.pending_input.get_or_insert(at);
+    pub fn input_started(&mut self, at: Instant, kind: &'static str) {
+        self.pending_input.get_or_insert((at, kind));
     }
 
     /// Takes the pending key event, if any, so the caller can close it with
     /// [`Trace::record_input`] once the current frame has been presented.
-    pub fn take_pending_input(&mut self) -> Option<Instant> {
+    pub fn take_pending_input(&mut self) -> Option<(Instant, &'static str)> {
         self.pending_input.take()
     }
 
-    pub fn record_input(&mut self, started: Instant) {
-        self.input_ms.push(millis(started.elapsed()));
+    pub fn record_input(&mut self, (started, kind): (Instant, &'static str)) {
+        self.input_ms.push((millis(started.elapsed()), kind));
     }
 
     pub fn write(&self) {
@@ -172,8 +173,9 @@ impl Trace {
         let _ = writeln!(out, "row_height_px {:.1}", self.row_height);
         // Scroll position when the trace was written (negative = scrolled down).
         let _ = writeln!(out, "final_offset_px {:.1}", self.last_offset);
-        for ms in &self.input_ms {
+        for (ms, kind) in &self.input_ms {
             let _ = writeln!(out, "input_ms {ms:.3}");
+            let _ = writeln!(out, "input_{kind}_ms {ms:.3}");
         }
         for session in self.sessions.iter().filter(|s| !s.is_empty()) {
             let _ = writeln!(out, "session {}", session.len());
@@ -237,13 +239,14 @@ mod tests {
     fn input_keeps_earliest_pending_key() {
         let mut t = trace();
         let first = Instant::now();
-        t.input_started(first);
-        t.input_started(first + Duration::from_millis(5));
-        assert_eq!(t.take_pending_input(), Some(first));
+        t.input_started(first, "move");
+        t.input_started(first + Duration::from_millis(5), "filter");
+        assert_eq!(t.take_pending_input(), Some((first, "move")));
         assert_eq!(t.take_pending_input(), None);
-        t.record_input(first);
+        t.record_input((first, "move"));
         assert_eq!(t.input_ms.len(), 1);
-        assert!(t.input_ms[0] >= 0.0);
+        assert!(t.input_ms[0].0 >= 0.0);
+        assert_eq!(t.input_ms[0].1, "move");
     }
 
     #[test]

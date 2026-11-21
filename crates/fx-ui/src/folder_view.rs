@@ -4,17 +4,22 @@
 //! The folder is read on a worker thread (fx-fs); batches are appended on the UI
 //! thread (cheap: ~0.2 ms per 2,000 entries) and the name sort runs on the
 //! background executor, so the UI thread never blocks.
+//!
+//! Selection and keyboard (task T1.2): arrows, Home/End, PgUp/PgDn (Shift
+//! extends, Ctrl moves only the cursor), Ctrl+A, Ctrl+Space, Ctrl/Shift+click;
+//! Enter or double click enters a folder; Alt+Up and Backspace go up.
 
 use std::cell::RefCell;
+use std::ffi::OsString;
 use std::ops::Range;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, channel};
 use std::time::Instant;
 
 use fx_core::format::{date_time_utc, size_kb};
-use fx_core::{Direction, Entry, FileList, SortKey};
+use fx_core::{Direction, Entry, FileList, MoveMode, Selection, SortKey, Step};
 use fx_fs::Strategy;
 use gpui::{
     Context, FocusHandle, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
@@ -67,8 +72,11 @@ pub struct FolderView {
     filter_text: String,
     /// Rows shown while filtering (indices in display order); `None` = all.
     filtered: Option<Vec<u32>>,
-    /// Selected entry (index into the list), if any. Multi-selection is T1.2.
-    selected: Option<u32>,
+    selection: Selection,
+    /// Bumped on every navigation; batches of an older folder read are dropped.
+    generation: u64,
+    /// Entry to select once the folder is loaded (the folder we came up from).
+    reselect: Option<OsString>,
     look: Look,
     trace: Option<Rc<RefCell<Trace>>>,
 }
@@ -79,38 +87,49 @@ impl FolderView {
         if let Some(t) = &mut trace {
             t.mark("folder_requested");
         }
-        let (tx, rx) = channel::<Vec<Entry>>();
-        let worker_path = path.clone();
-        let worker = std::thread::Builder::new()
-            .name("fx-enumerate".into())
-            .spawn(move || fx_fs::enumerate(Strategy::FindFirstFileEx, &worker_path, &tx));
-        let status = match worker {
-            Ok(worker) => {
-                Self::receive(rx, worker, cx);
-                Status::Loading
-            }
-            Err(e) => Status::Failed(format!("could not start reader thread: {e}")),
-        };
         let trace = trace.map(|t| Rc::new(RefCell::new(t)));
-        Self {
+        let mut view = Self {
             path,
             list: Arc::new(FileList::new()),
-            status,
+            status: Status::Loading,
             scroll: UniformListScrollHandle::new(),
             drag_offset: None,
             focus: cx.focus_handle(),
             filter_text: String::new(),
             filtered: None,
-            selected: None,
+            selection: Selection::new(),
+            generation: 0,
+            reselect: None,
             look,
             trace,
-        }
+        };
+        view.start_loading(cx);
+        view
+    }
+
+    /// Starts reading `self.path` on a worker thread.
+    fn start_loading(&mut self, cx: &mut Context<Self>) {
+        let (tx, rx) = channel::<Vec<Entry>>();
+        let worker_path = self.path.clone();
+        let worker = std::thread::Builder::new()
+            .name("fx-enumerate".into())
+            .spawn(move || fx_fs::enumerate(Strategy::FindFirstFileEx, &worker_path, &tx));
+        self.status = match worker {
+            Ok(worker) => {
+                Self::receive(rx, worker, self.generation, cx);
+                Status::Loading
+            }
+            Err(e) => Status::Failed(format!("could not start reader thread: {e}")),
+        };
     }
 
     /// Appends batches as they arrive, then sorts by name off the UI thread.
+    /// Stops as soon as the view navigated elsewhere (`generation` changed):
+    /// dropping the receiver makes the worker stop too.
     fn receive(
         rx: Receiver<Vec<Entry>>,
         worker: std::thread::JoinHandle<std::io::Result<usize>>,
+        generation: u64,
         cx: &mut Context<Self>,
     ) {
         cx.spawn(async move |this, cx| {
@@ -126,15 +145,19 @@ impl FolderView {
                     .await;
                 rx = back;
                 let Ok(batch) = batch else { break };
-                let alive = this.update(cx, |view, cx| {
+                let current = this.update(cx, |view, cx| {
+                    if view.generation != generation {
+                        return false;
+                    }
                     if let Some(trace) = &view.trace {
                         trace.borrow_mut().mark("first_batch");
                     }
                     Arc::make_mut(&mut view.list).extend(batch);
                     view.refilter();
                     cx.notify();
+                    true
                 });
-                if alive.is_err() {
+                if !matches!(current, Ok(true)) {
                     return;
                 }
             }
@@ -145,10 +168,13 @@ impl FolderView {
                 Ok(Err(e)) => Some(e.to_string()),
                 Err(_) => Some("reader thread panicked".to_owned()),
             };
-            let Ok(list) = this.update(cx, |view, cx| {
+            let Ok(Some(list)) = this.update(cx, |view, cx| {
+                if view.generation != generation {
+                    return None;
+                }
                 view.status = Status::Sorting;
                 cx.notify();
-                view.list.clone()
+                Some(view.list.clone())
             }) else {
                 return;
             };
@@ -162,8 +188,12 @@ impl FolderView {
                 })
                 .await;
             let _ = this.update(cx, |view, cx| {
+                if view.generation != generation {
+                    return;
+                }
                 Arc::make_mut(&mut view.list).set_order(order);
                 view.refilter();
+                view.apply_reselect();
                 view.status = match failure {
                     Some(e) => Status::Failed(e),
                     None => Status::Ready,
@@ -193,7 +223,8 @@ impl FolderView {
             .filter_map(|row| order.get(row).copied())
             .map(|i| {
                 let is_dir = self.list.attributes(i).is_dir();
-                let selected = self.selected == Some(i);
+                let selected = self.selection.is_selected(i);
+                let is_cursor = self.selection.cursor() == Some(i);
                 let size: SharedString = if is_dir {
                     SharedString::default()
                 } else {
@@ -215,8 +246,13 @@ impl FolderView {
                             .rounded(px(RADIUS))
                             .when(selected, |d| d.bg(rgba(t.selected)))
                             .when(!selected, |d| d.hover(|s| s.bg(rgba(t.hover))))
-                            .when(selected && focused, |d| {
-                                d.border_1().border_color(rgba(t.focus))
+                            // Always 1 px of border (transparent off the cursor),
+                            // so the focus ring does not shift the text.
+                            .border_1()
+                            .border_color(if is_cursor && focused {
+                                rgba(t.focus)
+                            } else {
+                                rgba(0x00000000)
                             })
                             .when(selected, |d| {
                                 d.child(
@@ -257,9 +293,9 @@ impl FolderView {
                     )
                     .on_mouse_down(
                         MouseButton::Left,
-                        cx.listener(move |view, _: &MouseDownEvent, window, cx| {
-                            view.selected = Some(i);
+                        cx.listener(move |view, ev: &MouseDownEvent, window, cx| {
                             view.focus.focus(window);
+                            view.click(i, ev, window, cx);
                             cx.notify();
                         }),
                     )
@@ -361,7 +397,120 @@ impl FolderView {
 
     /// Rows currently shown, in display order.
     fn rows(&self) -> &[u32] {
-        self.filtered.as_deref().unwrap_or(self.list.order())
+        rows_of(&self.filtered, &self.list)
+    }
+
+    /// Mouse down on entry `i`: click selects it, Ctrl+click toggles it,
+    /// Shift+click selects the range from the anchor, double click opens it.
+    fn click(&mut self, i: u32, ev: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let m = ev.modifiers;
+        if m.shift {
+            self.selection
+                .extend_to(rows_of(&self.filtered, &self.list), i);
+        } else if m.control {
+            self.selection.toggle(i);
+        } else {
+            self.selection.select_only(i);
+            if ev.click_count == 2 {
+                self.open_cursor(window, cx);
+            }
+        }
+    }
+
+    /// Moves the cursor and scrolls just enough to show it.
+    fn move_cursor(&mut self, step: Step, mode: MoveMode) {
+        let rows = rows_of(&self.filtered, &self.list);
+        let before = self
+            .selection
+            .cursor()
+            .and_then(|c| self.selection.position(rows, c));
+        let Some(pos) = self.selection.move_cursor(rows, step, mode) else {
+            return;
+        };
+        // Scrolling up shows the row at the top edge, scrolling down at the
+        // bottom edge (the list only scrolls when the row is outside the view).
+        let up = step == Step::First || before.is_some_and(|b| pos < b);
+        let strategy = if up {
+            ScrollStrategy::Top
+        } else {
+            ScrollStrategy::Bottom
+        };
+        self.scroll.scroll_to_item(pos, strategy);
+    }
+
+    /// Rows that fit in the list viewport, minus one (PgUp/PgDn step).
+    fn page_rows(&self) -> usize {
+        let height = f32::from(self.scroll.0.borrow().base_handle.bounds().size.height);
+        let rows = (height / self.look.density.row_height()).floor() as usize;
+        rows.saturating_sub(1).max(1)
+    }
+
+    /// Enter: opens the cursor entry. Folders open in place; files open in
+    /// task T1.9. Returns whether something happened.
+    fn open_cursor(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let Some(i) = self.selection.cursor() else {
+            return false;
+        };
+        if !self.list.attributes(i).is_dir() {
+            return false;
+        }
+        let path = self.path.join(self.list.os_name(i));
+        self.navigate(path, None, window, cx);
+        true
+    }
+
+    /// Alt+Up / Backspace: opens the parent folder and selects the one we left.
+    fn go_up(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let Some(parent) = self.path.parent().map(Path::to_path_buf) else {
+            return false;
+        };
+        let child = self.path.file_name().map(OsString::from);
+        self.navigate(parent, child, window, cx);
+        true
+    }
+
+    /// Shows another folder in this window.
+    fn navigate(
+        &mut self,
+        path: PathBuf,
+        reselect: Option<OsString>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.generation += 1;
+        self.path = path;
+        self.list = Arc::new(FileList::new());
+        self.filter_text.clear();
+        self.filtered = None;
+        self.selection.clear();
+        self.reselect = reselect;
+        self.scroll
+            .0
+            .borrow()
+            .base_handle
+            .set_offset(point(px(0.0), px(0.0)));
+        window.set_window_title(&window_title(&self.path));
+        self.start_loading(cx);
+        cx.notify();
+    }
+
+    /// After going up, selects the folder we came from (if nothing else was
+    /// selected meanwhile) and centers it.
+    fn apply_reselect(&mut self) {
+        let Some(name) = self.reselect.take() else {
+            return;
+        };
+        if !self.selection.is_empty() {
+            return;
+        }
+        let shown = name.to_string_lossy();
+        let found = (0..self.list.len() as u32)
+            .find(|&i| self.list.name(i) == shown && self.list.os_name(i) == name);
+        let Some(i) = found else { return };
+        self.selection.select_only(i);
+        if let Some(pos) = self.selection.position(self.list.order(), i) {
+            self.scroll.scroll_to_item(pos, ScrollStrategy::Center);
+        }
     }
 
     /// Recomputes the filter from scratch (after the list itself changed).
@@ -382,15 +531,30 @@ impl FolderView {
         };
         self.filter_text = text;
         self.scroll.scroll_to_item(0, ScrollStrategy::Top);
+        // Keep the cursor on a visible row so Enter opens the first match. The
+        // selection itself is kept (fx-core `Selection`).
+        let rows = rows_of(&self.filtered, &self.list);
+        let visible = self
+            .selection
+            .cursor()
+            .is_some_and(|c| self.selection.position(rows, c).is_some());
+        if !visible {
+            self.selection
+                .move_cursor(rows, Step::First, MoveMode::CursorOnly);
+        }
     }
 
-    /// "Type to filter": printable characters extend the filter, Backspace
-    /// removes the last character and Escape clears it.
-    fn on_key_down(&mut self, event: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+    /// Keyboard: navigation keys move the cursor (see the module comment);
+    /// printable characters extend the "type to filter" text, Backspace removes
+    /// its last character (or goes up when it is empty) and Escape clears it
+    /// (or the selection).
+    fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let started = Instant::now();
         let ks = &event.keystroke;
+        let m = ks.modifiers;
+        let only_ctrl = m.control && !m.alt && !m.shift;
         // Ctrl+1/2/3: compact, standard, comfortable rows.
-        if ks.modifiers.control && !ks.modifiers.alt && !ks.modifiers.shift {
+        if only_ctrl {
             let density = match ks.key.as_str() {
                 "1" => Some(Density::Compact),
                 "2" => Some(Density::Standard),
@@ -402,6 +566,58 @@ impl FolderView {
                 cx.notify();
                 return;
             }
+        }
+        let plain = !m.control && !m.alt && !m.shift && !m.platform;
+        let step = match ks.key.as_str() {
+            "up" => Some(Step::Up(1)),
+            "down" => Some(Step::Down(1)),
+            "pageup" => Some(Step::Up(self.page_rows())),
+            "pagedown" => Some(Step::Down(self.page_rows())),
+            "home" => Some(Step::First),
+            "end" => Some(Step::Last),
+            _ => None,
+        };
+        let handled = match ks.key.as_str() {
+            "up" if m.alt && !m.control && !m.shift => self.go_up(window, cx).then_some("open"),
+            _ if m.alt || m.platform => None,
+            _ if step.is_some() => {
+                let mode = if m.shift {
+                    MoveMode::Extend
+                } else if m.control {
+                    MoveMode::CursorOnly
+                } else {
+                    MoveMode::Select
+                };
+                if let Some(step) = step {
+                    self.move_cursor(step, mode);
+                }
+                Some("move")
+            }
+            "enter" if plain => self.open_cursor(window, cx).then_some("open"),
+            "backspace" if plain && self.filter_text.is_empty() => {
+                self.go_up(window, cx).then_some("open")
+            }
+            "a" if only_ctrl => {
+                self.selection
+                    .select_all(rows_of(&self.filtered, &self.list));
+                Some("move")
+            }
+            "space" if only_ctrl => {
+                self.selection.toggle_cursor();
+                Some("move")
+            }
+            "escape" if plain && self.filter_text.is_empty() && !self.selection.is_empty() => {
+                self.selection.clear();
+                Some("move")
+            }
+            _ => None,
+        };
+        if let Some(kind) = handled {
+            if let Some(trace) = &self.trace {
+                trace.borrow_mut().input_started(started, kind);
+            }
+            cx.notify();
+            return;
         }
         let mut text = self.filter_text.clone();
         match ks.key.as_str() {
@@ -425,12 +641,21 @@ impl FolderView {
         }
         self.set_filter(text);
         if let Some(trace) = &self.trace {
-            trace.borrow_mut().input_started(started);
+            trace.borrow_mut().input_started(started, "filter");
         }
         cx.notify();
     }
 
     fn status_text(&self) -> String {
+        let text = self.load_text();
+        match self.selection.len() {
+            0 => text,
+            1 => format!("{text} · 1 selecionado"),
+            k => format!("{text} · {k} selecionados"),
+        }
+    }
+
+    fn load_text(&self) -> String {
         let n = self.list.len();
         if let Some(filtered) = &self.filtered {
             return format!("filtro \"{}\": {} de {n}", self.filter_text, filtered.len());
@@ -483,6 +708,20 @@ impl FolderView {
             trace.borrow().write();
         }
     }
+}
+
+/// Rows shown, in display order: the filter result, or every entry.
+fn rows_of<'a>(filtered: &'a Option<Vec<u32>>, list: &'a FileList) -> &'a [u32] {
+    filtered.as_deref().unwrap_or(list.order())
+}
+
+/// Window title: folder name, then "fx" (read by the taskbar and the Narrator).
+pub fn window_title(path: &Path) -> String {
+    let name = path.file_name().map_or_else(
+        || path.display().to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    format!("{name} — fx")
 }
 
 impl Render for FolderView {
