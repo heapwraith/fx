@@ -189,3 +189,9 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Contagens** com separador de milhar ("100.000 itens") em toda a interface e na árvore de acessibilidade.
 - **Abas:** largura mínima de 112 px; quando não cabem, a faixa rola, e a aba ativa é trazida à vista. O "×" aparece só na aba ativa ou sob o mouse.
 - **Conflito:** o motor (`Event::Ask`) passa tamanho e data dos dois lados, lidos na thread do trabalho; o diálogo mostra "Existente" e "Novo" e marca o mais recente.
+
+## D-028 — Painel de histórico de operações (T1.19, checkup)
+- **Data:** 2026-11-21 · **Status:** aceita
+- **Decisão:** um botão de relógio na faixa de abas (e Ctrl+Shift+H) abre um painel com todas as operações da sessão que podem ser desfeitas, da mais nova para a mais antiga, com hora e uma frase ("Renomeou "b.txt" para "q.txt"", "Enviou 3 itens para a Lixeira"). Cada uma tem o próprio "Desfazer", que reverte só aquela, mesmo que não seja a última; as mais novas ficam como estão. Esc ou clicar fora fecha.
+- **Segurança:** a reversão é um trabalho comum do motor (sem sobrescrever, SAFETY.md §2.3). Se algo mudou depois (o item foi renomeado ou movido), a reversão falha e avisa; a entrada volta ao histórico. `UndoStack` ganhou `undo_entries` e `take_undo_at` (com teste); Ctrl+Z continua desfazendo a mais recente.
+- **Verificado na janela:** criar pasta, renomear arquivo, abrir o painel e desfazer só a criação: a pasta saiu (para a Lixeira, como todo desfazer de "nova pasta") e a renomeação continuou.

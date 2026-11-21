@@ -26,6 +26,29 @@ const NOTICE_FOR: Duration = Duration::from_secs(6);
 struct Entry {
     forward: Job,
     backward: Job,
+    /// For the history panel: what was done, and when.
+    label: String,
+    at: std::time::SystemTime,
+}
+
+impl Entry {
+    fn new(forward: Job, backward: Job, report: &Report) -> Self {
+        Self {
+            label: history_label(&forward, report),
+            forward,
+            backward,
+            at: std::time::SystemTime::now(),
+        }
+    }
+}
+
+/// One line of the history panel.
+#[derive(Debug, Clone)]
+pub struct DoneOp {
+    /// Index for [`Ops::undo_at`].
+    pub index: usize,
+    pub label: String,
+    pub at: std::time::SystemTime,
 }
 
 enum Pending {
@@ -128,6 +151,34 @@ impl Ops {
         self.pending.insert(id, Pending::Do(job));
         self.show_if_started(id);
         Ok(id)
+    }
+
+    /// Operations that can be undone, newest first (history panel).
+    pub fn done(&self) -> Vec<DoneOp> {
+        self.history
+            .undo_entries()
+            .iter()
+            .enumerate()
+            .rev()
+            .map(|(index, e)| DoneOp {
+                index,
+                label: e.label.clone(),
+                at: e.at,
+            })
+            .collect()
+    }
+
+    /// Undoes one operation from the history panel, not necessarily the last
+    /// one. Its reversal goes through the engine like any job: nothing is
+    /// overwritten, and items changed since are reported, not forced.
+    pub fn undo_at(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(engine) = &self.engine else { return };
+        if let Some(entry) = self.history.take_undo_at(index) {
+            let id = engine.submit(entry.backward.clone());
+            self.pending.insert(id, Pending::Undo(entry));
+            self.show_if_started(id);
+        }
+        cx.notify();
     }
 
     pub fn undo(&mut self, cx: &mut Context<Self>) {
@@ -301,10 +352,8 @@ impl Ops {
             Pending::Do(job) => {
                 // Even a cancelled or failed job may have done part of its work.
                 if worked && let Some(backward) = undo_of(&job, &report) {
-                    self.history.record(Entry {
-                        forward: job.clone(),
-                        backward,
-                    });
+                    self.history
+                        .record(Entry::new(job.clone(), backward, &report));
                 }
                 self.say(describe(&job, &outcome, &report, ""));
             }
@@ -319,10 +368,8 @@ impl Ops {
             }
             Pending::Redo(job) => {
                 if worked && let Some(backward) = undo_of(&job, &report) {
-                    self.history.push_undo(Entry {
-                        forward: job.clone(),
-                        backward,
-                    });
+                    self.history
+                        .push_undo(Entry::new(job.clone(), backward, &report));
                 }
                 self.say(describe(&job, &outcome, &report, "refeito: "));
             }
@@ -353,6 +400,30 @@ fn count(n: usize) -> String {
     fx_core::format::items(n)
 }
 
+/// History panel line: what the operation did, in a sentence.
+fn history_label(job: &Job, report: &Report) -> String {
+    let (first, renamed) = job.first_names();
+    let what = match (job.source_count(), first) {
+        (1, Some(name)) => format!("\"{name}\""),
+        (n, _) => count(n),
+    };
+    match job.kind() {
+        OpKind::Copy => format!("Copiou {what} para {}", job.dest_name()),
+        OpKind::Move | OpKind::MoveBack => format!("Moveu {what} para {}", job.dest_name()),
+        OpKind::Recycle => format!("Enviou {what} para a Lixeira"),
+        OpKind::Rename => match renamed {
+            Some(new) => format!("Renomeou {what} para \"{new}\""),
+            None => format!("Renomeou {what}"),
+        },
+        OpKind::NewFolder => match report.created.as_ref().and_then(|p| p.file_name()) {
+            Some(n) => format!("Criou a pasta \"{}\"", n.to_string_lossy()),
+            None => "Criou uma pasta".to_owned(),
+        },
+        OpKind::Restore => format!("Restaurou {what} da Lixeira"),
+        OpKind::DeletePermanent => format!("Excluiu {what} permanentemente"),
+    }
+}
+
 /// Status message for a finished job.
 fn describe(job: &Job, outcome: &Outcome, report: &Report, prefix: &str) -> String {
     let what = match job.kind() {
@@ -380,5 +451,26 @@ fn describe(job: &Job, outcome: &Outcome, report: &Report, prefix: &str) -> Stri
         Outcome::Done => format!("{prefix}{what}"),
         Outcome::Cancelled => format!("{prefix}cancelado ({what})"),
         Outcome::Failed(why) => format!("{prefix}erro: {why}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::history_label;
+    use fx_ops::{Job, Report};
+    use std::path::PathBuf;
+
+    #[test]
+    fn history_labels_say_what_was_done() {
+        let r = Report::default();
+        let one = Job::copy(
+            vec![PathBuf::from(r"C:\a\foto.jpg")],
+            PathBuf::from(r"C:\b"),
+        );
+        assert_eq!(history_label(&one, &r), "Copiou \"foto.jpg\" para b");
+        let many = Job::recycle(vec![PathBuf::from(r"C:\a\x"), PathBuf::from(r"C:\a\y")]);
+        assert_eq!(history_label(&many, &r), "Enviou 2 itens para a Lixeira");
+        let ren = Job::rename(PathBuf::from(r"C:\a\x.txt"), "y.txt".into());
+        assert_eq!(history_label(&ren, &r), "Renomeou \"x.txt\" para \"y.txt\"");
     }
 }

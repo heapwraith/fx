@@ -103,6 +103,7 @@ pub const ICON_GRID: &str = "\u{E80A}";
 pub const ICON_LIST: &str = "\u{E8FD}";
 pub const ICON_PAUSE: &str = "\u{E769}";
 pub const ICON_PLAY: &str = "\u{E768}";
+pub const ICON_HISTORY: &str = "\u{E81C}";
 
 pub fn pick_icon_font(available: &[String]) -> &'static str {
     ICON_FAMILIES

@@ -169,6 +169,19 @@ impl Job {
         self.kind
     }
 
+    /// Name of the first item the job works on, and for renames the new
+    /// name (for messages).
+    pub fn first_names(&self) -> (Option<String>, Option<String>) {
+        let name = |p: &Path| p.file_name().map(|n| n.to_string_lossy().into_owned());
+        match self.pairs.first() {
+            Some((from, to)) => (name(from), name(to)),
+            None => (
+                self.sources.first().and_then(|p| name(p)),
+                (self.kind == OpKind::Rename).then(|| self.name.clone()),
+            ),
+        }
+    }
+
     /// Number of items the job works on.
     pub fn source_count(&self) -> usize {
         self.sources.len().max(self.pairs.len())

@@ -9,6 +9,7 @@
 //! Sidebar (task T1.5, `sidebar.rs`): quick access and drives, left of the
 //! active tab; ☰ or Ctrl+B collapses it.
 
+mod history;
 mod queue;
 mod sidebar;
 
@@ -30,8 +31,8 @@ use crate::folder_view::{FolderView, Look, window_title};
 use crate::icons::Media;
 use crate::places::Places;
 use crate::theme::{
-    BODY_SIZE, CAPTION_SIZE, Density, ICON_ADD, ICON_CLOSE, ICON_MENU, Mode, RADIUS, Theme, rgba,
-    space,
+    BODY_SIZE, CAPTION_SIZE, Density, ICON_ADD, ICON_CLOSE, ICON_HISTORY, ICON_MENU, Mode, RADIUS,
+    Theme, rgba, space,
 };
 use crate::trace::Trace;
 
@@ -65,6 +66,8 @@ pub struct TabsView {
     tab_scroll: ScrollHandle,
     /// Active tab at the last render (to scroll a newly active tab into view).
     shown_active: Option<usize>,
+    /// Operation history panel (Ctrl+Shift+H or the clock button).
+    history_open: bool,
 }
 
 /// What is carried while a tab is dragged (also its drag preview).
@@ -139,6 +142,7 @@ impl TabsView {
             apply_all: false,
             tab_scroll: ScrollHandle::new(),
             shown_active: None,
+            history_open: false,
         };
         view.focus_active(window, cx);
         view
@@ -324,10 +328,17 @@ impl TabsView {
         let started = Instant::now();
         let ks = &event.keystroke;
         let m = ks.modifiers;
+        if self.history_open && ks.key == "escape" {
+            self.history_open = false;
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
         if !m.control || m.alt || m.platform {
             return;
         }
         match (ks.key.as_str(), m.shift) {
+            ("h", true) => self.history_open = !self.history_open,
             ("t", false) => self.open_tab(window, cx),
             ("w", false) => self.close_tab(self.tabs.active_index(), window, cx),
             ("tab", false) => {
@@ -486,25 +497,49 @@ impl TabsView {
                     })),
             );
         }
-        strip.child(row).child(
-            div()
-                .id("new-tab")
-                .flex_none()
-                .mb(px(space(1)))
-                .size(px(28.0))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(px(RADIUS))
-                .font_family(icon_font)
-                .text_size(px(CAPTION_SIZE))
-                .text_color(rgba(t.text_secondary))
-                .hover(|s| s.bg(rgba(t.hover)))
-                .child(ICON_ADD)
-                .on_click(cx.listener(|view, _: &ClickEvent, window, cx| {
-                    view.open_tab(window, cx);
-                })),
-        )
+        strip
+            .child(row)
+            .child(
+                div()
+                    .id("new-tab")
+                    .flex_none()
+                    .mb(px(space(1)))
+                    .size(px(28.0))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(RADIUS))
+                    .font_family(icon_font)
+                    .text_size(px(CAPTION_SIZE))
+                    .text_color(rgba(t.text_secondary))
+                    .hover(|s| s.bg(rgba(t.hover)))
+                    .child(ICON_ADD)
+                    .on_click(cx.listener(|view, _: &ClickEvent, window, cx| {
+                        view.open_tab(window, cx);
+                    })),
+            )
+            .child(div().flex_1())
+            .child(
+                div()
+                    .id("history")
+                    .flex_none()
+                    .mb(px(space(1)))
+                    .size(px(28.0))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(RADIUS))
+                    .font_family(icon_font)
+                    .text_size(px(CAPTION_SIZE))
+                    .text_color(rgba(t.text_secondary))
+                    .hover(|s| s.bg(rgba(t.hover)))
+                    .when(self.history_open, |d| d.bg(rgba(t.selected)))
+                    .child(ICON_HISTORY)
+                    .on_click(cx.listener(|view, _: &ClickEvent, _, cx| {
+                        view.history_open = !view.history_open;
+                        cx.notify();
+                    })),
+            )
     }
 }
 
@@ -542,6 +577,7 @@ impl Render for TabsView {
                     .child(div().flex_1().min_w_0().child(self.tabs.active().clone())),
             )
             .children(self.render_queue(cx))
+            .children(self.render_history(cx))
             .children(self.render_conflict(cx))
     }
 }

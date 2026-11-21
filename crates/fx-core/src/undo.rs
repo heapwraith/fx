@@ -52,6 +52,17 @@ impl<T> UndoStack<T> {
         self.redo.pop()
     }
 
+    /// Entries that can be undone, oldest first (for a history panel).
+    pub fn undo_entries(&self) -> &[T] {
+        &self.undo
+    }
+
+    /// Takes any undoable entry, not only the most recent (index into
+    /// [`UndoStack::undo_entries`]). The caller puts it back on failure.
+    pub fn take_undo_at(&mut self, index: usize) -> Option<T> {
+        (index < self.undo.len()).then(|| self.undo.remove(index))
+    }
+
     pub fn can_undo(&self) -> bool {
         !self.undo.is_empty()
     }
@@ -64,6 +75,19 @@ impl<T> UndoStack<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn any_entry_can_be_taken() {
+        let mut s = UndoStack::new(10);
+        s.record("a");
+        s.record("b");
+        s.record("c");
+        assert_eq!(s.undo_entries(), ["a", "b", "c"]);
+        assert_eq!(s.take_undo_at(1), Some("b"));
+        assert_eq!(s.take_undo_at(5), None);
+        assert_eq!(s.undo_entries(), ["a", "c"]);
+        assert_eq!(s.take_undo(), Some("c"));
+    }
 
     #[test]
     fn undo_redo_round_trip() {
