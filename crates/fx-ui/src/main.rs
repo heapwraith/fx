@@ -116,11 +116,26 @@ fn main() {
             cx.quit();
             return;
         }
+        bench_copy(&shared, cx);
         if let Some(rx) = incoming {
             listen(rx, startup, shared, cx);
         }
         cx.activate(true);
     });
+}
+
+/// Benchmark hook (task T1.13): `FX_BENCH_COPY=<source>|<folder>` starts a
+/// copy at launch, so the list can be measured while it runs.
+fn bench_copy(shared: &Shared, cx: &mut App) {
+    let Ok(spec) = std::env::var("FX_BENCH_COPY") else {
+        return;
+    };
+    let Some((src, dest)) = spec.split_once('|') else {
+        return;
+    };
+    let job = fx_ops::Job::copy(vec![PathBuf::from(src)], PathBuf::from(dest))
+        .on_conflict(fx_ops::Resolution::Ask);
+    let _ = shared.media.ops.update(cx, |ops, _| ops.submit(job));
 }
 
 /// Opens a window for every folder another fx process hands over.

@@ -569,3 +569,88 @@ fn recycle_through_a_junction_can_be_undone() {
     assert_eq!(std::fs::read(real.join("doc.txt")).unwrap(), b"junction");
     std::fs::remove_dir(&link).unwrap(); // the junction only, not its target
 }
+
+// ---- Task T1.13: pause/resume and asked conflicts ----
+
+#[test]
+fn pause_holds_the_job_until_resumed() {
+    let t = tempfile::tempdir().unwrap();
+    let src = t.path().join("muitos");
+    for i in 0..40 {
+        write(&src.join(format!("f{i:02}.bin")), &vec![3u8; 256 * 1024]);
+    }
+    let dest = t.path().join("destino");
+    std::fs::create_dir(&dest).unwrap();
+    let (e, rx) = engine();
+    let id = e.submit(Job::copy(vec![src.clone()], dest.clone()));
+    e.pause(id);
+    std::thread::sleep(Duration::from_millis(400));
+    let copied = std::fs::read_dir(dest.join("muitos")).map_or(0, |d| d.count());
+    assert!(copied <= 1, "paused before the next file: {copied}");
+    e.resume(id);
+    let (_, outcome, _) = collect(&rx, id);
+    assert_eq!(outcome, Outcome::Done);
+    assert_eq!(std::fs::read_dir(dest.join("muitos")).unwrap().count(), 40);
+}
+
+fn ask_setup(t: &Path) -> (Vec<PathBuf>, PathBuf) {
+    let dest = t.join("destino");
+    let mut sources = Vec::new();
+    for n in ["a.txt", "b.txt", "c.txt"] {
+        write(&dest.join(n), b"old");
+        let s = t.join("origem").join(n);
+        write(&s, b"new");
+        sources.push(s);
+    }
+    (sources, dest)
+}
+
+#[test]
+fn asked_conflicts_wait_for_the_answer_and_apply_to_all() {
+    let t = tempfile::tempdir().unwrap();
+    let (sources, dest) = ask_setup(t.path());
+    let (e, rx) = engine();
+    let id = e.submit(Job::copy(sources, dest.clone()).on_conflict(Resolution::Ask));
+    let mut asks = 0;
+    let report = loop {
+        match rx.recv_timeout(WAIT).unwrap() {
+            Event::Ask { job, existing, .. } if job == id => {
+                asks += 1;
+                if existing.ends_with("a.txt") {
+                    e.answer(id, Resolution::Skip, false);
+                } else {
+                    // Replace this one and every later conflict.
+                    e.answer(id, Resolution::Replace, true);
+                }
+            }
+            Event::Finished { job, report, .. } if job == id => break report,
+            _ => {}
+        }
+    };
+    assert_eq!(asks, 2, "c.txt reused the 'apply to all' answer");
+    assert_eq!(std::fs::read(dest.join("a.txt")).unwrap(), b"old");
+    assert_eq!(std::fs::read(dest.join("b.txt")).unwrap(), b"new");
+    assert_eq!(std::fs::read(dest.join("c.txt")).unwrap(), b"new");
+    assert_eq!(report.replaced.len(), 2);
+    assert_eq!(report.skipped.len(), 1);
+}
+
+#[test]
+fn cancel_while_asking_changes_nothing() {
+    let t = tempfile::tempdir().unwrap();
+    let (sources, dest) = ask_setup(t.path());
+    let before = snapshot(&dest);
+    let (e, rx) = engine();
+    let id = e.submit(Job::copy(sources, dest.clone()).on_conflict(Resolution::Ask));
+    loop {
+        if let Event::Ask { job, .. } = rx.recv_timeout(WAIT).unwrap()
+            && job == id
+        {
+            e.cancel(id);
+            break;
+        }
+    }
+    let (_, outcome, _) = collect(&rx, id);
+    assert_eq!(outcome, Outcome::Cancelled);
+    assert_eq!(snapshot(&dest), before);
+}

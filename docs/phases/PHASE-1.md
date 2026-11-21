@@ -165,7 +165,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.13 — Fila visível e diálogo de conflitos
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: painel da fila no rodapé (rótulo, barra, bytes, pausar/retomar, cancelar) e diálogo único de conflito sobre a janela (manter os dois como padrão, substituir, pular, "aplicar a todos"); motor com pausa entre arquivos e política `Ask` que espera a resposta e respeita o cancelamento (3 testes novos, 27 no `fx-ops`). `fx-bench copy` (cópia da `flat-10k-media` em andamento): P4 p95 4,02 ms (81 setas) e Enter/Backspace 3,51 ms; P7 1 perdido em 3.904 quadros (0,03%). O diálogo de conflito foi testado pelo motor, não clicado na janela.
 
 **Fazer**
 - Painel da fila no rodapé com progresso, pausa, retomada e cancelamento; diálogo único de conflitos (manter os dois / substituir / pular, "aplicar a todos").

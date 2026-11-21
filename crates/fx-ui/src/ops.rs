@@ -7,14 +7,15 @@
 //! runs the original job again and records its new reversal. A reversal that
 //! fails keeps its entry where it was, so nothing is silently lost.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use std::time::{Duration, Instant};
 
 use fx_core::UndoStack;
 use fx_ops::{
-    Engine, Event, Job, JobId, OpKind, Outcome, Report, system_dirs, system_guard, undo_of,
+    Engine, Event, Job, JobId, OpKind, Outcome, Report, Resolution, system_dirs, system_guard,
+    undo_of,
 };
 use gpui::Context;
 
@@ -33,8 +34,28 @@ enum Pending {
     Redo(Job),
 }
 
+/// A running copy or move, for the queue panel (task T1.13).
+#[derive(Debug, Clone)]
+pub struct JobView {
+    pub id: JobId,
+    pub label: String,
+    pub bytes: u64,
+    pub done: u64,
+    pub paused: bool,
+}
+
+/// A conflict waiting for the user's decision.
+#[derive(Debug, Clone)]
+pub struct Ask {
+    pub job: JobId,
+    pub name: String,
+    pub folder: String,
+}
+
 pub struct Ops {
     engine: Option<Engine>,
+    active: Vec<JobView>,
+    asks: VecDeque<Ask>,
     pending: HashMap<JobId, Pending>,
     history: UndoStack<Entry>,
     notice: Option<(String, Instant)>,
@@ -46,6 +67,8 @@ impl Ops {
     pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
             engine: Self::start(cx),
+            active: Vec::new(),
+            asks: VecDeque::new(),
             pending: HashMap::new(),
             history: UndoStack::new(UndoStack::<Entry>::DEFAULT_LIMIT),
             notice: None,
@@ -120,6 +143,47 @@ impl Ops {
         cx.notify();
     }
 
+    /// Running copies and moves.
+    pub fn active(&self) -> &[JobView] {
+        &self.active
+    }
+
+    /// The conflict to show now, if any.
+    pub fn current_ask(&self) -> Option<&Ask> {
+        self.asks.front()
+    }
+
+    /// The user decided the current conflict.
+    pub fn answer(&mut self, resolution: Resolution, apply_to_all: bool, cx: &mut Context<Self>) {
+        if let (Some(ask), Some(engine)) = (self.asks.pop_front(), &self.engine) {
+            engine.answer(ask.job, resolution, apply_to_all);
+        }
+        cx.notify();
+    }
+
+    pub fn set_paused(&mut self, id: JobId, paused: bool, cx: &mut Context<Self>) {
+        if let Some(engine) = &self.engine {
+            if paused {
+                engine.pause(id);
+            } else {
+                engine.resume(id);
+            }
+        }
+        if let Some(j) = self.active.iter_mut().find(|j| j.id == id) {
+            j.paused = paused;
+        }
+        cx.notify();
+    }
+
+    pub fn cancel(&mut self, id: JobId, cx: &mut Context<Self>) {
+        if let Some(engine) = &self.engine {
+            engine.resume(id);
+            engine.cancel(id);
+        }
+        self.asks.retain(|a| a.job != id);
+        cx.notify();
+    }
+
     /// The folder made by "new folder" job `id`, once it finished.
     pub fn created_by(&mut self, id: JobId) -> Option<PathBuf> {
         self.created.remove(&id)
@@ -138,14 +202,55 @@ impl Ops {
     }
 
     fn on_event(&mut self, event: Event, cx: &mut Context<Self>) {
-        let Event::Finished {
-            job: id,
-            outcome,
-            report,
-        } = event
-        else {
-            return;
+        let (id, outcome, report) = match event {
+            Event::Started { job, bytes, .. } => {
+                if let Some(label) = self.pending.get(&job).and_then(start_label) {
+                    self.active.push(JobView {
+                        id: job,
+                        label,
+                        bytes,
+                        done: 0,
+                        paused: false,
+                    });
+                    cx.notify();
+                }
+                return;
+            }
+            Event::Progress {
+                job, done_bytes, ..
+            } => {
+                if let Some(j) = self.active.iter_mut().find(|j| j.id == job) {
+                    j.done = done_bytes;
+                    cx.notify();
+                }
+                return;
+            }
+            Event::Ask {
+                job,
+                source,
+                existing,
+            } => {
+                self.asks.push_back(Ask {
+                    job,
+                    name: source
+                        .file_name()
+                        .map_or_else(String::new, |n| n.to_string_lossy().into_owned()),
+                    folder: existing
+                        .parent()
+                        .map_or_else(String::new, |p| p.display().to_string()),
+                });
+                cx.notify();
+                return;
+            }
+            Event::Conflict { .. } => return,
+            Event::Finished {
+                job,
+                outcome,
+                report,
+            } => (job, outcome, report),
         };
+        self.active.retain(|j| j.id != id);
+        self.asks.retain(|a| a.job != id);
         let Some(pending) = self.pending.remove(&id) else {
             return;
         };
@@ -185,6 +290,24 @@ impl Ops {
         }
         cx.notify();
     }
+}
+
+/// Panel label of a long job (copies and moves only).
+fn start_label(pending: &Pending) -> Option<String> {
+    let job = match pending {
+        Pending::Do(j) | Pending::Redo(j) => j,
+        Pending::Undo(e) => &e.backward,
+    };
+    let verb = match job.kind() {
+        OpKind::Copy => "Copiando",
+        OpKind::Move | OpKind::MoveBack => "Movendo",
+        _ => return None,
+    };
+    Some(format!(
+        "{verb} {} para {}",
+        count(job.source_count()),
+        job.dest_name()
+    ))
 }
 
 fn count(n: usize) -> String {

@@ -72,6 +72,8 @@ pub enum Resolution {
     Replace,
     /// Leave this item out.
     Skip,
+    /// Ask the user ([`Event::Ask`], answered with [`Engine::answer`]).
+    Ask,
 }
 
 /// A copy or move of some items into a folder.
@@ -165,6 +167,23 @@ impl Job {
 
     pub fn kind(&self) -> OpKind {
         self.kind
+    }
+
+    /// Number of items the job works on.
+    pub fn source_count(&self) -> usize {
+        self.sources.len().max(self.pairs.len())
+    }
+
+    /// Name of the destination folder (for messages).
+    pub fn dest_name(&self) -> String {
+        let dest = match self.pairs.first() {
+            Some((_, to)) => to.parent().unwrap_or(to),
+            None => self.dest.as_path(),
+        };
+        dest.file_name().map_or_else(
+            || dest.display().to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        )
     }
 
     /// Whether the user confirmed touching a system folder or drive root.
@@ -301,6 +320,13 @@ pub enum Event {
         total_bytes: u64,
         current: PathBuf,
     },
+    /// A conflict under [`Resolution::Ask`]: the job waits for
+    /// [`Engine::answer`] (or a cancel).
+    Ask {
+        job: JobId,
+        source: PathBuf,
+        existing: PathBuf,
+    },
     Conflict {
         job: JobId,
         source: PathBuf,
@@ -318,16 +344,27 @@ pub enum Event {
 
 const PROGRESS_EVERY: Duration = Duration::from_millis(50);
 
+/// The user's handles on a job.
+struct Control {
+    cancel: Arc<AtomicI32>,
+    paused: std::sync::atomic::AtomicBool,
+    /// Answers to [`Event::Ask`]: the resolution and "apply to all".
+    answers: Mutex<Sender<(Resolution, bool)>>,
+}
+
+type Controls = Arc<Mutex<HashMap<JobId, Arc<Control>>>>;
+
 struct Work {
     id: JobId,
     job: Box<Job>,
-    cancel: Arc<AtomicI32>,
+    control: Arc<Control>,
+    answers: Receiver<(Resolution, bool)>,
 }
 
 /// The queue. Dropping it lets running jobs finish and stops the workers.
 pub struct Engine {
     tx: Mutex<Sender<Work>>,
-    cancels: Arc<Mutex<HashMap<JobId, Arc<AtomicI32>>>>,
+    controls: Controls,
     next: AtomicU64,
 }
 
@@ -341,14 +378,14 @@ impl Engine {
     /// Starts the queue; events of every job arrive on `events`.
     pub fn start(events: Sender<Event>) -> io::Result<Self> {
         let (tx, rx) = channel::<Work>();
-        let cancels: Arc<Mutex<HashMap<JobId, Arc<AtomicI32>>>> = Arc::default();
-        let done = cancels.clone();
+        let controls: Controls = Arc::default();
+        let done = controls.clone();
         std::thread::Builder::new()
             .name("fx-ops".into())
             .spawn(move || schedule(&rx, &events, &done))?;
         Ok(Self {
             tx: Mutex::new(tx),
-            cancels,
+            controls,
             next: AtomicU64::new(1),
         })
     }
@@ -356,21 +393,52 @@ impl Engine {
     /// Queues a job; returns its id (used in its events).
     pub fn submit(&self, job: Job) -> JobId {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
-        let cancel = Arc::new(AtomicI32::new(0));
-        lock(&self.cancels).insert(id, cancel.clone());
+        let (answer_tx, answers) = channel();
+        let control = Arc::new(Control {
+            cancel: Arc::new(AtomicI32::new(0)),
+            paused: std::sync::atomic::AtomicBool::new(false),
+            answers: Mutex::new(answer_tx),
+        });
+        lock(&self.controls).insert(id, control.clone());
         let _ = lock(&self.tx).send(Work {
             id,
             job: Box::new(job),
-            cancel,
+            control,
+            answers,
         });
         id
+    }
+
+    fn control(&self, id: JobId) -> Option<Arc<Control>> {
+        lock(&self.controls).get(&id).cloned()
     }
 
     /// Cancels a queued or running job (the current file is abandoned and its
     /// temporary file removed; finished files stay).
     pub fn cancel(&self, id: JobId) {
-        if let Some(flag) = lock(&self.cancels).get(&id) {
-            flag.store(1, Ordering::SeqCst);
+        if let Some(c) = self.control(id) {
+            c.cancel.store(1, Ordering::SeqCst);
+        }
+    }
+
+    /// Pauses a job before its next file (the file being copied finishes).
+    pub fn pause(&self, id: JobId) {
+        if let Some(c) = self.control(id) {
+            c.paused.store(true, Ordering::SeqCst);
+        }
+    }
+
+    pub fn resume(&self, id: JobId) {
+        if let Some(c) = self.control(id) {
+            c.paused.store(false, Ordering::SeqCst);
+        }
+    }
+
+    /// Answers a job's [`Event::Ask`]; `apply_to_all` reuses the answer for
+    /// the job's later conflicts.
+    pub fn answer(&self, id: JobId, resolution: Resolution, apply_to_all: bool) {
+        if let Some(c) = self.control(id) {
+            let _ = lock(&c.answers).send((resolution, apply_to_all));
         }
     }
 }
@@ -392,11 +460,7 @@ pub fn volume_key(path: &Path) -> String {
 }
 
 /// Hands each job to the worker of its destination volume.
-fn schedule(
-    rx: &Receiver<Work>,
-    events: &Sender<Event>,
-    cancels: &Arc<Mutex<HashMap<JobId, Arc<AtomicI32>>>>,
-) {
+fn schedule(rx: &Receiver<Work>, events: &Sender<Event>, controls: &Controls) {
     let mut workers: HashMap<String, Sender<Work>> = HashMap::new();
     for work in rx {
         let key = volume_key(&work.job.dest);
@@ -408,7 +472,7 @@ fn schedule(
         if let Some(work) = pending {
             let (tx, wrx) = channel::<Work>();
             let events = events.clone();
-            let cancels = cancels.clone();
+            let controls = controls.clone();
             let spawned = std::thread::Builder::new()
                 .name(format!("fx-ops {key}"))
                 .spawn(move || {
@@ -417,7 +481,7 @@ fn schedule(
                     for w in wrx {
                         let id = w.id;
                         run_job(&w, &events);
-                        lock(&cancels).remove(&id);
+                        lock(&controls).remove(&id);
                     }
                 });
             if spawned.is_ok() {
@@ -472,6 +536,10 @@ struct Run<'a> {
     id: JobId,
     job: &'a Job,
     cancel: &'a AtomicI32,
+    control: &'a Control,
+    answers: &'a Receiver<(Resolution, bool)>,
+    /// "Apply to all" answer for later conflicts.
+    sticky: Option<Resolution>,
     events: &'a Sender<Event>,
     total: u64,
     done: u64,
@@ -526,7 +594,10 @@ fn run_job(work: &Work, events: &Sender<Event>) {
     let mut run = Run {
         id: work.id,
         job,
-        cancel: &work.cancel,
+        cancel: &work.control.cancel,
+        control: &work.control,
+        answers: &work.answers,
+        sticky: None,
         events,
         total: bytes,
         done: 0,
@@ -680,11 +751,58 @@ impl Run<'_> {
         self.cancel.load(Ordering::SeqCst) != 0
     }
 
+    /// Between files: waits while paused; stops when cancelled.
+    fn checkpoint(&self) -> Result<(), Stop> {
+        while self.control.paused.load(Ordering::SeqCst) && !self.cancelled() {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        if self.cancelled() {
+            Err(Stop::Cancelled)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// The resolution of a conflict: the job's policy, a previous "apply to
+    /// all" answer, or the user's answer (waiting for it, cancellable).
+    fn resolve(&mut self, source: &Path, existing: &Path) -> Result<Resolution, Stop> {
+        if self.job.on_conflict != Resolution::Ask {
+            return Ok(self.job.on_conflict);
+        }
+        if let Some(r) = self.sticky {
+            return Ok(r);
+        }
+        let _ = self.events.send(Event::Ask {
+            job: self.id,
+            source: source.to_path_buf(),
+            existing: existing.to_path_buf(),
+        });
+        loop {
+            if self.cancelled() {
+                return Err(Stop::Cancelled);
+            }
+            match self.answers.recv_timeout(Duration::from_millis(100)) {
+                Ok((resolution, all)) => {
+                    // "Ask" is not an answer: fall back to the safe default.
+                    let r = if resolution == Resolution::Ask {
+                        Resolution::KeepBoth
+                    } else {
+                        resolution
+                    };
+                    if all {
+                        self.sticky = Some(r);
+                    }
+                    return Ok(r);
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                Err(_) => return Err(Stop::Cancelled),
+            }
+        }
+    }
+
     /// One top-level source.
     fn item(&mut self, src: &Path) -> Result<(), Stop> {
-        if self.cancelled() {
-            return Err(Stop::Cancelled);
-        }
+        self.checkpoint()?;
         let src = std::path::absolute(src)?;
         let meta = std::fs::symlink_metadata(&src)?;
         let name = src
@@ -705,9 +823,11 @@ impl Run<'_> {
         let mut target = dest_dir.join(&name);
         let mut replace = false;
         if exists(&target) {
-            let resolution = self.job.on_conflict;
+            let resolution = self.resolve(&src, &target)?;
             let placed = match resolution {
-                Resolution::KeepBoth => Some(keep_both_name(&dest_dir, &name, exists)),
+                Resolution::KeepBoth | Resolution::Ask => {
+                    Some(keep_both_name(&dest_dir, &name, exists))
+                }
                 Resolution::Replace => Some(target.clone()),
                 Resolution::Skip => None,
             };
@@ -758,9 +878,7 @@ impl Run<'_> {
     }
 
     fn copy_tree(&mut self, src: &Path, target: &Path, replace: bool) -> Result<(), Stop> {
-        if self.cancelled() {
-            return Err(Stop::Cancelled);
-        }
+        self.checkpoint()?;
         let meta = std::fs::symlink_metadata(src)?;
         if meta.is_dir() {
             if is_link(&meta) {

@@ -9,6 +9,7 @@
 //! Sidebar (task T1.5, `sidebar.rs`): quick access and drives, left of the
 //! active tab; ☰ or Ctrl+B collapses it.
 
+mod queue;
 mod sidebar;
 
 use std::cell::RefCell;
@@ -54,6 +55,8 @@ pub struct TabsView {
     media: Media,
     a11y: Option<A11yHandle>,
     sidebar_open: bool,
+    /// "Apply to all" box of the conflict dialog.
+    apply_all: bool,
 }
 
 /// What is carried while a tab is dragged (also its drag preview).
@@ -116,6 +119,7 @@ impl TabsView {
             cx,
         );
         cx.observe(&places, |_, _, cx| cx.notify()).detach();
+        cx.observe(&media.ops, |_, _, cx| cx.notify()).detach();
         let view = Self {
             tabs: Tabs::new(first),
             look,
@@ -124,6 +128,7 @@ impl TabsView {
             media,
             a11y,
             sidebar_open: true,
+            apply_all: false,
         };
         view.focus_active(window, cx);
         view
@@ -441,5 +446,7 @@ impl Render for TabsView {
                     .when(self.sidebar_open, |d| d.child(self.render_sidebar(cx)))
                     .child(div().flex_1().min_w_0().child(self.tabs.active().clone())),
             )
+            .children(self.render_queue(cx))
+            .children(self.render_conflict(cx))
     }
 }

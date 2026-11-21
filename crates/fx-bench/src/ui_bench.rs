@@ -844,6 +844,55 @@ pub fn grid() -> std::io::Result<()> {
     scroll_in(&folder, "flat-10k-media (grid)", &env, "T1.7")
 }
 
+/// T1.13: P4 and P7 while fx copies `flat-10k-media` (10,000 files) into
+/// `%TEMP%\fx-fixtures\copy-out` (deleted before and after each run).
+pub fn copy_while_using() -> std::io::Result<()> {
+    let root = fixtures_root()?;
+    let out = root.join("copy-out");
+    let source = root.join("flat-10k-media");
+    let fresh = || -> std::io::Result<()> {
+        if out.exists() {
+            std::fs::remove_dir_all(&out)?;
+        }
+        std::fs::create_dir(&out)
+    };
+    let spec = format!("{}|{}", source.display(), out.display());
+    let env = [("FX_BENCH_COPY", spec.as_str())];
+    let copied = || std::fs::read_dir(out.join("flat-10k-media")).map_or(0, |d| d.count());
+
+    fresh()?;
+    let trace = run_key_script_with(&root, "nav-p4.ps1", &env)?;
+    println!(
+        "  (files copied when the navigation run ended: {} of 10000)",
+        copied()
+    );
+    report_keys(
+        &trace,
+        "P4: key -> frame presented while copying 10,000 files (release)",
+        &[
+            ("move", "arrows/PgDn/Home/End"),
+            ("open", "Enter/Backspace"),
+        ],
+        "T1.13",
+        "fx-fixtures -> flat-100k, copying flat-10k-media",
+        "bench/nav-p4.ps1 during FX_BENCH_COPY",
+    )?;
+
+    fresh()?;
+    let result = scroll_in(
+        &root.join("flat-100k"),
+        "flat-100k while copying",
+        &env,
+        "T1.13",
+    );
+    println!(
+        "  (files copied when the scroll run ended: {} of 10000)",
+        copied()
+    );
+    let _ = std::fs::remove_dir_all(&out);
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

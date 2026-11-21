@@ -13,6 +13,7 @@
 //! fx-bench path               P4: path bar autocompletion and history (sends keys!) (T1.3)
 //! fx-bench tabs               P2 (b) for new tabs and P4 for tab keys (sends keys!) (T1.4)
 //! fx-bench drives             new drive letter -> sidebar, with subst (T1.5)
+//! fx-bench copy               P4 and P7 while copying flat-10k-media (sends keys, moves the mouse!) (T1.13)
 //! fx-bench grid               grid view: P2 (b) and P7 on flat-10k-media (sends keys, moves the mouse!) (T1.7)
 //! fx-bench index --volume C:  P6/P9: index the real MFT (needs Administrator) (T0.7)
 //! fx-bench index --synthetic N  index N generated files in memory (T0.7)
@@ -39,7 +40,7 @@ use std::time::Instant;
 
 use fixtures::{Outcome, Spec};
 
-const USAGE: &str = "usage: fx-bench fixtures [--clean] | enum | list | open | scroll | responsive <folder> | type | nav | path | tabs | drives | grid | index (--volume C: | --synthetic N) | search (--volume C: | --synthetic N) [--interactive] | all";
+const USAGE: &str = "usage: fx-bench fixtures [--clean] | enum | list | open | scroll | responsive <folder> | type | nav | path | tabs | drives | grid | copy | index (--volume C: | --synthetic N) | search (--volume C: | --synthetic N) [--interactive] | all";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -57,6 +58,7 @@ fn main() -> ExitCode {
         ["tabs"] => ui_bench::tab_keys(),
         ["drives"] => ui_bench::drive_latency(),
         ["grid"] => ui_bench::grid(),
+        ["copy"] => ui_bench::copy_while_using(),
         ["all"] => run_all(),
         ["index", "--volume", volume] => index_bench::volume(volume),
         ["search", "--volume", v] => {
