@@ -11,8 +11,10 @@ mod history;
 mod list;
 pub mod natural;
 mod selection;
+mod tabs;
 
 pub use entry::{Attributes, Entry};
 pub use history::History;
 pub use list::{Direction, FileList, SortKey};
 pub use selection::{MoveMode, Selection, Step};
+pub use tabs::Tabs;

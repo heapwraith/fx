@@ -82,6 +82,8 @@ pub const ICON_BACK: &str = "\u{E72B}";
 pub const ICON_FORWARD: &str = "\u{E72A}";
 pub const ICON_UP: &str = "\u{E74A}";
 pub const ICON_CHEVRON: &str = "\u{E76C}";
+pub const ICON_ADD: &str = "\u{E710}";
+pub const ICON_CLOSE: &str = "\u{E711}";
 
 pub fn pick_icon_font(available: &[String]) -> &'static str {
     ICON_FAMILIES

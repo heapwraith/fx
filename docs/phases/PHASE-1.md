@@ -58,7 +58,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.4 — Abas
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: `fx_core::Tabs` (abre após a ativa, fecha escolhendo a vizinha, Ctrl+Tab circular, mover mantém a ativa; 5 testes); `TabsView` como raiz da janela, cada aba uma `FolderView` com histórico próprio; Ctrl+T/Ctrl+W/Ctrl+Tab/Ctrl+Shift+Tab, clique do meio e × fecham, + abre, arrastar reordena, fechar a última aba fecha a janela; Ctrl+1/2/3 vale para todas as abas. P2 (b) (`fx-bench tabs`, `flat-100k`): Ctrl+T até o quadro com linhas mediana 10,2 ms, p95 11,4 ms (10 abas); teclas de aba p95 2,9 ms (34 teclas). Arrastar para reordenar e clique do meio compilam e seguem o modelo testado, mas ainda não foram exercitados na janela.
 
 **Fazer**
 - Abas com Ctrl+T, Ctrl+W, Ctrl+Tab/Ctrl+Shift+Tab, clique do meio fecha, arrastar para reordenar; cada aba com seu histórico.

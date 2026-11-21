@@ -36,6 +36,8 @@ pub struct Trace {
     /// Key event -> end of the frame that shows its result, in ms (P4), with
     /// the kind of key ("filter", "move", "open").
     input_ms: Vec<(f64, &'static str)>,
+    /// Ctrl+T -> first frame with rows of the new tab, in ms (P2 b, T1.4).
+    tab_open_ms: Vec<f64>,
 }
 
 impl Trace {
@@ -60,6 +62,7 @@ impl Trace {
             sessions: Vec::new(),
             pending_input: None,
             input_ms: Vec::new(),
+            tab_open_ms: Vec::new(),
         })
     }
 
@@ -152,6 +155,10 @@ impl Trace {
         self.input_ms.push((millis(started.elapsed()), kind));
     }
 
+    pub fn record_tab_open(&mut self, opened: Instant) {
+        self.tab_open_ms.push(millis(opened.elapsed()));
+    }
+
     pub fn write(&self) {
         if let Err(e) = self.try_write() {
             eprintln!("fx: could not write trace: {e}");
@@ -176,6 +183,9 @@ impl Trace {
         for (ms, kind) in &self.input_ms {
             let _ = writeln!(out, "input_ms {ms:.3}");
             let _ = writeln!(out, "input_{kind}_ms {ms:.3}");
+        }
+        for ms in &self.tab_open_ms {
+            let _ = writeln!(out, "tab_open_ms {ms:.3}");
         }
         for session in self.sessions.iter().filter(|s| !s.is_empty()) {
             let _ = writeln!(out, "session {}", session.len());
@@ -214,6 +224,7 @@ mod tests {
             sessions: Vec::new(),
             pending_input: None,
             input_ms: Vec::new(),
+            tab_open_ms: Vec::new(),
         }
     }
 

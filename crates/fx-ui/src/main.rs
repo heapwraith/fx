@@ -14,6 +14,7 @@
 #![windows_subsystem = "windows"]
 
 mod folder_view;
+mod tabs_view;
 mod theme;
 mod trace;
 
@@ -25,7 +26,8 @@ use gpui::{
     WindowBounds, WindowOptions, px, size,
 };
 
-use folder_view::{FolderView, Look, window_title};
+use folder_view::{Look, window_title};
+use tabs_view::TabsView;
 use theme::{Density, Mode, Theme};
 use trace::Trace;
 
@@ -165,16 +167,13 @@ fn open_folder_window(
                 mica_supported,
                 mica,
             };
-            let view = cx.new(|cx| FolderView::new(path, look, trace, cx));
+            let view = cx.new(|cx| TabsView::new(path, look, trace, window, cx));
             // Follow the Windows light/dark setting live.
             let themed = view.clone();
             window
                 .observe_window_appearance(move |window, cx| {
                     let system = Mode::from_appearance(window.appearance());
-                    let mica = themed.update(cx, |view, cx| {
-                        cx.notify();
-                        view.set_system_mode(system)
-                    });
+                    let mica = themed.update(cx, |view, cx| view.set_system_mode(system, cx));
                     if mica_supported {
                         window.set_background_appearance(if mica {
                             WindowBackgroundAppearance::MicaBackdrop
@@ -184,8 +183,6 @@ fn open_folder_window(
                     }
                 })
                 .detach();
-            // Keys go to the list from the start ("type to filter").
-            view.read(cx).focus_handle().focus(window);
             window.activate_window();
             let for_close = view.clone();
             window.on_window_should_close(cx, move |_, cx| {

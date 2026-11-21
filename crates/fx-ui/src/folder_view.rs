@@ -122,15 +122,23 @@ pub struct FolderView {
     completion: Option<path_bar::Completion>,
     look: Look,
     trace: Option<Rc<RefCell<Trace>>>,
+    /// Set until the first frame with rows of a tab opened with Ctrl+T.
+    opened: Option<Instant>,
 }
 
 impl FolderView {
-    pub fn new(path: PathBuf, look: Look, trace: Option<Trace>, cx: &mut Context<Self>) -> Self {
-        let mut trace = trace;
-        if let Some(t) = &mut trace {
-            t.mark("folder_requested");
+    /// `opened`: when the user asked for this tab (Ctrl+T), to time its first
+    /// frame with rows (`FX_TRACE`).
+    pub fn new(
+        path: PathBuf,
+        look: Look,
+        trace: Option<Rc<RefCell<Trace>>>,
+        opened: Option<Instant>,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        if let Some(t) = &trace {
+            t.borrow_mut().mark("folder_requested");
         }
-        let trace = trace.map(|t| Rc::new(RefCell::new(t)));
         let history = History::new(
             Visit {
                 path: path.clone(),
@@ -155,6 +163,7 @@ impl FolderView {
             completion: None,
             look,
             trace,
+            opened,
         };
         view.start_loading(cx);
         view
@@ -444,6 +453,15 @@ impl FolderView {
         self.look.mica
     }
 
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Row density (Ctrl+1/2/3, applied to every tab by the window).
+    pub fn set_density(&mut self, density: Density) {
+        self.look.density = density;
+    }
+
     pub fn focus_handle(&self) -> FocusHandle {
         self.focus.clone()
     }
@@ -716,20 +734,6 @@ impl FolderView {
             }
             return;
         }
-        // Ctrl+1/2/3: compact, standard, comfortable rows.
-        if only_ctrl {
-            let density = match ks.key.as_str() {
-                "1" => Some(Density::Compact),
-                "2" => Some(Density::Standard),
-                "3" => Some(Density::Comfortable),
-                _ => None,
-            };
-            if let Some(d) = density {
-                self.look.density = d;
-                cx.notify();
-                return;
-            }
-        }
         let plain = !m.control && !m.alt && !m.shift && !m.platform;
         let step = match ks.key.as_str() {
             "up" => Some(Step::Up(1)),
@@ -834,7 +838,7 @@ impl FolderView {
     }
 
     /// Frame bookkeeping for `FX_TRACE=1`.
-    fn trace_frame(&self, window: &mut Window) {
+    fn trace_frame(&mut self, window: &mut Window) {
         let Some(trace) = &self.trace else { return };
         let mut t = trace.borrow_mut();
         t.mark("first_render");
@@ -842,6 +846,10 @@ impl FolderView {
         let items = self.list.len();
         if items > 0 {
             t.mark("first_render_with_rows");
+            if let Some(opened) = self.opened.take() {
+                let trace = trace.clone();
+                window.on_next_frame(move |_, _| trace.borrow_mut().record_tab_open(opened));
+            }
         }
         if items > 0 && !t.has_first_frame() {
             let trace = trace.clone();
@@ -865,12 +873,6 @@ impl FolderView {
             let trace = trace.clone();
             window.on_next_frame(move |_, _| trace.borrow_mut().record_frame());
             window.request_animation_frame();
-        }
-    }
-
-    pub fn write_trace(&self) {
-        if let Some(trace) = &self.trace {
-            trace.borrow().write();
         }
     }
 }

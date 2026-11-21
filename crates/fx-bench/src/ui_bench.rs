@@ -611,6 +611,53 @@ pub fn path_keys() -> std::io::Result<()> {
     )
 }
 
+/// P2 (b) for tabs (T1.4): fx on `flat-100k`; `bench/tabs-p2.ps1` opens 10
+/// tabs with Ctrl+T (each reads the 100,000 files again), switches and closes
+/// them. Reports Ctrl+T -> first frame with rows, and P4 for the tab keys.
+pub fn tab_keys() -> std::io::Result<()> {
+    let trace = run_key_script(&flat_100k()?, "tabs-p2.ps1")?;
+    let samples = trace.numbers("tab_open_ms");
+    if samples.is_empty() {
+        return Err(std::io::Error::other("no tab opening recorded"));
+    }
+    let (median, p95) = median_p95(&ms_samples(&samples));
+    let max = samples.iter().copied().fold(0.0, f64::max);
+    let pass = p95 <= TARGET_P2_MS;
+    println!("P2 (b): Ctrl+T -> first frame with rows of the new tab, flat-100k (release)");
+    println!(
+        "  {} tabs: median {median:.1} ms  p95 {p95:.1} ms  max {max:.1} ms   target ≤ {TARGET_P2_MS} ms  {}",
+        samples.len(),
+        if pass { "pass" } else { "FAIL" }
+    );
+    report_keys(
+        &trace,
+        "P4: key -> frame presented, tab keys (release)",
+        &[("tab", "Ctrl+T/Ctrl+W/Ctrl+Tab")],
+        "T1.4",
+        "flat-100k",
+        "bench/tabs-p2.ps1: 10 x Ctrl+T, 10 x Ctrl+Tab, 5 x Ctrl+Shift+Tab, 9 x Ctrl+W",
+    )?;
+    let date = utc_date(SystemTime::now());
+    let json = format!(
+        concat!(
+            "{{\n  \"id\": \"P2b-tab\",\n  \"task\": \"T1.4\",\n  \"folder\": \"flat-100k\",\n",
+            "  \"tabs\": {n},\n  \"first_frame_ms\": {{ \"median\": {m:.3}, \"p95\": {p:.3}, \"max\": {x:.3}, \"target\": {t} }},\n",
+            "  \"pass\": {pass},\n  \"machine\": {machine},\n  \"commit\": {commit},\n  \"date\": {date}\n}}\n"
+        ),
+        n = samples.len(),
+        m = median,
+        p = p95,
+        x = max,
+        t = TARGET_P2_MS,
+        pass = pass,
+        machine = json_string(&machine()),
+        commit = json_string(commit()),
+        date = json_string(&date),
+    );
+    std::fs::write(results_dir()?.join(format!("{date}-T1.4-P2.json")), json)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
