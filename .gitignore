@@ -1,0 +1,6 @@
+/target
+**/*.rs.bk
+*.pdb
+bench/results/*.json
+!bench/results/.gitkeep
+.claude/settings.local.json

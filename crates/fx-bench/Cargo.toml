@@ -1,0 +1,16 @@
+[package]
+name = "fx-bench"
+description = "Fixture generator and benchmarks."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fx-core.workspace = true
+fx-fs.workspace = true
+fx-index.workspace = true

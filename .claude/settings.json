@@ -1,0 +1,47 @@
+{
+  "env": {
+    "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER": "/usr/bin/env"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(cargo build:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo test:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo fmt:*)",
+      "Bash(cargo run -p fx-ui:*)",
+      "Bash(cargo run -p fx-bench:*)",
+      "Bash(cargo tree:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ],
+    "ask": [
+      "Bash(cargo add:*)",
+      "Bash(cargo update:*)",
+      "Bash(git push:*)",
+      "Bash(git reset:*)",
+      "Bash(git checkout:*)",
+      "Bash(rm:*)",
+      "Bash(del:*)",
+      "Bash(Remove-Item:*)",
+      "Bash(Start-Process:*)"
+    ],
+    "deny": [
+      "Bash(reg add:*)",
+      "Bash(reg delete:*)",
+      "Bash(reg import:*)",
+      "Bash(sc create:*)",
+      "Bash(sc delete:*)",
+      "Bash(New-Service:*)",
+      "Bash(format:*)",
+      "Bash(diskpart:*)",
+      "Bash(Set-MpPreference:*)",
+      "Bash(git push --force:*)",
+      "Bash(git config --global:*)",
+      "Bash(cargo publish:*)"
+    ]
+  }
+}

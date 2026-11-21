@@ -1,0 +1,4 @@
+# fx is developed in WSL and cross-compiled to Windows (docs/DECISIONS.md D-005).
+# Build with `cargo xwin <cmd>`, which provides the MSVC CRT/SDK and the lld-link linker.
+[build]
+target = "x86_64-pc-windows-msvc"

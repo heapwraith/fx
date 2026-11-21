@@ -1,0 +1,18 @@
+[package]
+name = "fx-index"
+description = "NTFS MFT/USN reader, in-memory index and fuzzy search."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fx-core.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows.workspace = true
+ntfs-reader.workspace = true

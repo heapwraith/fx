@@ -1,0 +1,457 @@
+diff -ru -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch a/Cargo.toml ./Cargo.toml
+--- a/Cargo.toml	2006-07-23 21:21:28.000000000 -0400
++++ b/Cargo.toml	2026-11-21 00:13:31.907328651 -0400
+@@ -576,7 +576,9 @@
+ ]
+ optional = true
+ 
+-[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.build-dependencies.naga]
++# fx patch: naga is used by build.rs on Linux hosts (WGSL check), so it is a
++# host build-dependency here (it is skipped at runtime for Windows targets).
++[build-dependencies.naga]
+ version = "25.0"
+ features = ["wgsl-in"]
+ 
+@@ -724,7 +726,7 @@
+ [target.'cfg(target_os = "windows")'.dependencies.windows-registry]
+ version = "0.5"
+ 
+-[target.'cfg(target_os = "windows")'.build-dependencies.embed-resource]
++[build-dependencies.embed-resource]
+ version = "3.0"
+ 
+ [lints.clippy]
+diff -ru -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch a/build.rs ./build.rs
+--- a/build.rs	2006-07-23 21:21:28.000000000 -0400
++++ b/build.rs	2026-11-21 00:16:16.109490537 -0400
+@@ -10,11 +10,17 @@
+     let target = env::var("CARGO_CFG_TARGET_OS");
+     println!("cargo::rustc-check-cfg=cfg(gles)");
+ 
++    // fx patch: the WGSL check is selected by the build-script *host* cfg, but its
++    // `naga` build-dependency is selected by the *target*, so a Linux -> Windows
++    // cross build fails to compile it. fx only targets Windows: run it only when
++    // the target needs WGSL shaders and the host matches.
+     #[cfg(any(
+         not(any(target_os = "macos", target_os = "windows")),
+         all(target_os = "macos", feature = "macos-blade")
+     ))]
+-    check_wgsl_shaders();
++    if !matches!(target.as_deref(), Ok("windows")) {
++        check_wgsl_shaders();
++    }
+ 
+     match target.as_deref() {
+         Ok("macos") => {
+@@ -22,7 +28,7 @@
+             macos::build();
+         }
+         Ok("windows") => {
+-            #[cfg(target_os = "windows")]
++            // fx patch: dispatch on the target, not on the build-script host.
+             windows::build();
+         }
+         _ => (),
+@@ -245,20 +251,12 @@
+     }
+ }
+ 
+-#[cfg(target_os = "windows")]
++// fx patch: this module used to be `#[cfg(target_os = "windows")]`, which tests the
++// *host* of the build script, so cross-compiling from Linux skipped it. It is now
++// selected only by the target (see `main`). HLSL shaders are no longer precompiled
++// with fxc.exe; they are compiled at runtime with D3DCompile (see directx_renderer.rs).
+ mod windows {
+-    use std::{
+-        fs,
+-        io::Write,
+-        path::{Path, PathBuf},
+-        process::{self, Command},
+-    };
+-
+     pub(super) fn build() {
+-        // Compile HLSL shaders
+-        #[cfg(not(debug_assertions))]
+-        compile_shaders();
+-
+         // Embed the Windows manifest and resource file
+         #[cfg(feature = "windows-manifest")]
+         embed_resource();
+@@ -270,188 +268,20 @@
+         let rc_file = std::path::Path::new("resources/windows/gpui.rc");
+         println!("cargo:rerun-if-changed={}", manifest.display());
+         println!("cargo:rerun-if-changed={}", rc_file.display());
+-        embed_resource::compile(rc_file, embed_resource::NONE)
++        // fx patch: llvm-rc (used when cross-compiling) resolves the manifest path relative
++        // to the preprocessed .rc in OUT_DIR, so write an .rc with an absolute path.
++        let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
++        let manifest_abs = manifest_dir.join(manifest);
++        let rc_abs = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("gpui.rc");
++        let rc_text = std::fs::read_to_string(manifest_dir.join(rc_file))
++            .unwrap()
++            .replace(
++                "\"resources/windows/gpui.manifest.xml\"",
++                &format!("\"{}\"", manifest_abs.display().to_string().replace('\\', "/")),
++            );
++        std::fs::write(&rc_abs, rc_text).unwrap();
++        embed_resource::compile(&rc_abs, embed_resource::NONE)
+             .manifest_required()
+             .unwrap();
+     }
+-
+-    /// You can set the `GPUI_FXC_PATH` environment variable to specify the path to the fxc.exe compiler.
+-    fn compile_shaders() {
+-        let shader_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+-            .join("src/platform/windows/shaders.hlsl");
+-        let out_dir = std::env::var("OUT_DIR").unwrap();
+-
+-        println!("cargo:rerun-if-changed={}", shader_path.display());
+-
+-        // Check if fxc.exe is available
+-        let fxc_path = find_fxc_compiler();
+-
+-        // Define all modules
+-        let modules = [
+-            "quad",
+-            "shadow",
+-            "path_rasterization",
+-            "path_sprite",
+-            "underline",
+-            "monochrome_sprite",
+-            "polychrome_sprite",
+-        ];
+-
+-        let rust_binding_path = format!("{}/shaders_bytes.rs", out_dir);
+-        if Path::new(&rust_binding_path).exists() {
+-            fs::remove_file(&rust_binding_path)
+-                .expect("Failed to remove existing Rust binding file");
+-        }
+-        for module in modules {
+-            compile_shader_for_module(
+-                module,
+-                &out_dir,
+-                &fxc_path,
+-                shader_path.to_str().unwrap(),
+-                &rust_binding_path,
+-            );
+-        }
+-
+-        {
+-            let shader_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+-                .join("src/platform/windows/color_text_raster.hlsl");
+-            compile_shader_for_module(
+-                "emoji_rasterization",
+-                &out_dir,
+-                &fxc_path,
+-                shader_path.to_str().unwrap(),
+-                &rust_binding_path,
+-            );
+-        }
+-    }
+-
+-    /// You can set the `GPUI_FXC_PATH` environment variable to specify the path to the fxc.exe compiler.
+-    fn find_fxc_compiler() -> String {
+-        // Check environment variable
+-        if let Ok(path) = std::env::var("GPUI_FXC_PATH")
+-            && Path::new(&path).exists()
+-        {
+-            return path;
+-        }
+-
+-        // Try to find in PATH
+-        // NOTE: This has to be `where.exe` on Windows, not `where`, it must be ended with `.exe`
+-        if let Ok(output) = std::process::Command::new("where.exe")
+-            .arg("fxc.exe")
+-            .output()
+-            && output.status.success()
+-        {
+-            let path = String::from_utf8_lossy(&output.stdout);
+-            return path.trim().to_string();
+-        }
+-
+-        // Check the default path
+-        if Path::new(r"C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\fxc.exe")
+-            .exists()
+-        {
+-            return r"C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\fxc.exe"
+-                .to_string();
+-        }
+-
+-        panic!("Failed to find fxc.exe");
+-    }
+-
+-    fn compile_shader_for_module(
+-        module: &str,
+-        out_dir: &str,
+-        fxc_path: &str,
+-        shader_path: &str,
+-        rust_binding_path: &str,
+-    ) {
+-        // Compile vertex shader
+-        let output_file = format!("{}/{}_vs.h", out_dir, module);
+-        let const_name = format!("{}_VERTEX_BYTES", module.to_uppercase());
+-        compile_shader_impl(
+-            fxc_path,
+-            &format!("{module}_vertex"),
+-            &output_file,
+-            &const_name,
+-            shader_path,
+-            "vs_4_1",
+-        );
+-        generate_rust_binding(&const_name, &output_file, rust_binding_path);
+-
+-        // Compile fragment shader
+-        let output_file = format!("{}/{}_ps.h", out_dir, module);
+-        let const_name = format!("{}_FRAGMENT_BYTES", module.to_uppercase());
+-        compile_shader_impl(
+-            fxc_path,
+-            &format!("{module}_fragment"),
+-            &output_file,
+-            &const_name,
+-            shader_path,
+-            "ps_4_1",
+-        );
+-        generate_rust_binding(&const_name, &output_file, rust_binding_path);
+-    }
+-
+-    fn compile_shader_impl(
+-        fxc_path: &str,
+-        entry_point: &str,
+-        output_path: &str,
+-        var_name: &str,
+-        shader_path: &str,
+-        target: &str,
+-    ) {
+-        let output = Command::new(fxc_path)
+-            .args([
+-                "/T",
+-                target,
+-                "/E",
+-                entry_point,
+-                "/Fh",
+-                output_path,
+-                "/Vn",
+-                var_name,
+-                "/O3",
+-                shader_path,
+-            ])
+-            .output();
+-
+-        match output {
+-            Ok(result) => {
+-                if result.status.success() {
+-                    return;
+-                }
+-                println!(
+-                    "cargo::error=Shader compilation failed for {}:\n{}",
+-                    entry_point,
+-                    String::from_utf8_lossy(&result.stderr)
+-                );
+-                process::exit(1);
+-            }
+-            Err(e) => {
+-                println!("cargo::error=Failed to run fxc for {}: {}", entry_point, e);
+-                process::exit(1);
+-            }
+-        }
+-    }
+-
+-    fn generate_rust_binding(const_name: &str, head_file: &str, output_path: &str) {
+-        let header_content = fs::read_to_string(head_file).expect("Failed to read header file");
+-        let const_definition = {
+-            let global_var_start = header_content.find("const BYTE").unwrap();
+-            let global_var = &header_content[global_var_start..];
+-            let equal = global_var.find('=').unwrap();
+-            global_var[equal + 1..].trim()
+-        };
+-        let rust_binding = format!(
+-            "const {}: &[u8] = &{}\n",
+-            const_name,
+-            const_definition.replace('{', "[").replace('}', "]")
+-        );
+-        let mut options = fs::OpenOptions::new()
+-            .create(true)
+-            .append(true)
+-            .open(output_path)
+-            .expect("Failed to open Rust binding file");
+-        options
+-            .write_all(rust_binding.as_bytes())
+-            .expect("Failed to write Rust binding file");
+-    }
+ }
+diff -ru -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch a/src/platform/windows/directx_renderer.rs ./src/platform/windows/directx_renderer.rs
+--- a/src/platform/windows/directx_renderer.rs	2006-07-23 21:21:28.000000000 -0400
++++ b/src/platform/windows/directx_renderer.rs	2026-11-21 00:13:50.350539702 -0400
+@@ -1391,15 +1391,23 @@
+ pub(crate) mod shader_resources {
+     use anyhow::Result;
+ 
++    // fx patch: shaders are always compiled at runtime from source embedded in the
++    // binary (D3DCompile, d3dcompiler_47.dll ships with Windows 10/11). Upstream
++    // precompiles them with fxc.exe in build.rs (release) or reads the .hlsl files
++    // from CARGO_MANIFEST_DIR (debug); neither works when cross-compiling from Linux.
+     #[cfg(debug_assertions)]
++    use windows::Win32::Graphics::Direct3D::Fxc::{D3DCOMPILE_DEBUG, D3DCOMPILE_SKIP_OPTIMIZATION};
++    #[cfg(not(debug_assertions))]
++    use windows::Win32::Graphics::Direct3D::Fxc::D3DCOMPILE_OPTIMIZATION_LEVEL3;
+     use windows::{
+-        Win32::Graphics::Direct3D::{
+-            Fxc::{D3DCOMPILE_DEBUG, D3DCOMPILE_SKIP_OPTIMIZATION, D3DCompileFromFile},
+-            ID3DBlob,
+-        },
+-        core::{HSTRING, PCSTR},
++        Win32::Graphics::Direct3D::{Fxc::D3DCompile, ID3DBlob},
++        core::PCSTR,
+     };
+ 
++    const ALPHA_CORRECTION_HLSL: &str = include_str!("alpha_correction.hlsl");
++    const SHADERS_HLSL: &str = include_str!("shaders.hlsl");
++    const COLOR_TEXT_RASTER_HLSL: &str = include_str!("color_text_raster.hlsl");
++
+     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+     pub(crate) enum ShaderModule {
+         Quad,
+@@ -1420,86 +1428,32 @@
+ 
+     pub(crate) struct RawShaderBytes<'t> {
+         inner: &'t [u8],
+-
+-        #[cfg(debug_assertions)]
+         _blob: ID3DBlob,
+     }
+ 
+     impl<'t> RawShaderBytes<'t> {
+         pub(crate) fn new(module: ShaderModule, target: ShaderTarget) -> Result<Self> {
+-            #[cfg(not(debug_assertions))]
+-            {
+-                Ok(Self::from_bytes(module, target))
+-            }
+-            #[cfg(debug_assertions)]
+-            {
+-                let blob = build_shader_blob(module, target)?;
+-                let inner = unsafe {
+-                    std::slice::from_raw_parts(
+-                        blob.GetBufferPointer() as *const u8,
+-                        blob.GetBufferSize(),
+-                    )
+-                };
+-                Ok(Self { inner, _blob: blob })
+-            }
++            let blob = build_shader_blob(module, target)?;
++            let inner = unsafe {
++                std::slice::from_raw_parts(blob.GetBufferPointer() as *const u8, blob.GetBufferSize())
++            };
++            Ok(Self { inner, _blob: blob })
+         }
+ 
+         pub(crate) fn as_bytes(&'t self) -> &'t [u8] {
+             self.inner
+         }
+-
+-        #[cfg(not(debug_assertions))]
+-        fn from_bytes(module: ShaderModule, target: ShaderTarget) -> Self {
+-            let bytes = match module {
+-                ShaderModule::Quad => match target {
+-                    ShaderTarget::Vertex => QUAD_VERTEX_BYTES,
+-                    ShaderTarget::Fragment => QUAD_FRAGMENT_BYTES,
+-                },
+-                ShaderModule::Shadow => match target {
+-                    ShaderTarget::Vertex => SHADOW_VERTEX_BYTES,
+-                    ShaderTarget::Fragment => SHADOW_FRAGMENT_BYTES,
+-                },
+-                ShaderModule::Underline => match target {
+-                    ShaderTarget::Vertex => UNDERLINE_VERTEX_BYTES,
+-                    ShaderTarget::Fragment => UNDERLINE_FRAGMENT_BYTES,
+-                },
+-                ShaderModule::PathRasterization => match target {
+-                    ShaderTarget::Vertex => PATH_RASTERIZATION_VERTEX_BYTES,
+-                    ShaderTarget::Fragment => PATH_RASTERIZATION_FRAGMENT_BYTES,
+-                },
+-                ShaderModule::PathSprite => match target {
+-                    ShaderTarget::Vertex => PATH_SPRITE_VERTEX_BYTES,
+-                    ShaderTarget::Fragment => PATH_SPRITE_FRAGMENT_BYTES,
+-                },
+-                ShaderModule::MonochromeSprite => match target {
+-                    ShaderTarget::Vertex => MONOCHROME_SPRITE_VERTEX_BYTES,
+-                    ShaderTarget::Fragment => MONOCHROME_SPRITE_FRAGMENT_BYTES,
+-                },
+-                ShaderModule::PolychromeSprite => match target {
+-                    ShaderTarget::Vertex => POLYCHROME_SPRITE_VERTEX_BYTES,
+-                    ShaderTarget::Fragment => POLYCHROME_SPRITE_FRAGMENT_BYTES,
+-                },
+-                ShaderModule::EmojiRasterization => match target {
+-                    ShaderTarget::Vertex => EMOJI_RASTERIZATION_VERTEX_BYTES,
+-                    ShaderTarget::Fragment => EMOJI_RASTERIZATION_FRAGMENT_BYTES,
+-                },
+-            };
+-            Self { inner: bytes }
+-        }
+     }
+ 
+-    #[cfg(debug_assertions)]
+     pub(super) fn build_shader_blob(entry: ShaderModule, target: ShaderTarget) -> Result<ID3DBlob> {
+         unsafe {
+-            use windows::Win32::Graphics::{
+-                Direct3D::ID3DInclude, Hlsl::D3D_COMPILE_STANDARD_FILE_INCLUDE,
+-            };
+-
+-            let shader_name = if matches!(entry, ShaderModule::EmojiRasterization) {
+-                "color_text_raster.hlsl"
++            let main_source = if matches!(entry, ShaderModule::EmojiRasterization) {
++                COLOR_TEXT_RASTER_HLSL
+             } else {
+-                "shaders.hlsl"
++                SHADERS_HLSL
+             };
++            // Resolve the only #include used by the shaders without touching the disk.
++            let source = main_source.replace("#include \"alpha_correction.hlsl\"", ALPHA_CORRECTION_HLSL);
+ 
+             let entry = format!(
+                 "{}_{}\0",
+@@ -1516,25 +1470,23 @@
+ 
+             let mut compile_blob = None;
+             let mut error_blob = None;
+-            let shader_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+-                .join(&format!("src/platform/windows/{}", shader_name))
+-                .canonicalize()?;
+-
+             let entry_point = PCSTR::from_raw(entry.as_ptr());
+             let target_cstr = PCSTR::from_raw(target.as_ptr());
+ 
+-            // really dirty trick because winapi bindings are unhappy otherwise
+-            let include_handler = &std::mem::transmute::<usize, ID3DInclude>(
+-                D3D_COMPILE_STANDARD_FILE_INCLUDE as usize,
+-            );
++            #[cfg(debug_assertions)]
++            let flags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
++            #[cfg(not(debug_assertions))]
++            let flags = D3DCOMPILE_OPTIMIZATION_LEVEL3;
+ 
+-            let ret = D3DCompileFromFile(
+-                &HSTRING::from(shader_path.to_str().unwrap()),
++            let ret = D3DCompile(
++                source.as_ptr() as *const _,
++                source.len(),
++                PCSTR::null(),
++                None,
+                 None,
+-                include_handler,
+                 entry_point,
+                 target_cstr,
+-                D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
++                flags,
+                 0,
+                 &mut compile_blob,
+                 Some(&mut error_blob),
+@@ -1554,10 +1506,6 @@
+         }
+     }
+ 
+-    #[cfg(not(debug_assertions))]
+-    include!(concat!(env!("OUT_DIR"), "/shaders_bytes.rs"));
+-
+-    #[cfg(debug_assertions)]
+     impl ShaderModule {
+         pub fn as_str(&self) -> &str {
+             match self {

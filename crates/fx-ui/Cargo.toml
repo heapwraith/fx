@@ -1,0 +1,23 @@
+[package]
+name = "fx-ui"
+description = "The fx application (GPUI)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "fx"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+fx-core.workspace = true
+fx-fs.workspace = true
+fx-index.workspace = true
+fx-shell.workspace = true
+fx-ops.workspace = true
+gpui.workspace = true
