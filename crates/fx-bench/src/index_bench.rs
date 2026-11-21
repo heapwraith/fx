@@ -117,7 +117,15 @@ fn report(m: &Measured, real_volume: bool) -> std::io::Result<()> {
 /// `fx-bench index --volume C:` (needs Administrator).
 pub fn volume(volume: &str) -> std::io::Result<()> {
     let start = Instant::now();
-    let index = fx_index::read_volume(volume)?;
+    let (index, stats) = fx_index::read_volume_with_stats(volume)?;
+    println!(
+        "  breakdown: load MFT {:.2} s ({} records, {:.0} MB) · parse {:.2} s · merge {:.2} s",
+        stats.load.as_secs_f64(),
+        stats.records,
+        stats.mft_bytes as f64 / (1024.0 * 1024.0),
+        stats.parse.as_secs_f64(),
+        stats.merge.as_secs_f64()
+    );
     report(
         &Measured {
             source: format!("volume {volume}"),

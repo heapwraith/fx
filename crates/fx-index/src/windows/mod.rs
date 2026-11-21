@@ -55,9 +55,34 @@ fn open_volume(volume: &str) -> io::Result<Volume> {
     Volume::new(device_path(volume)?).map_err(to_io)
 }
 
+/// Where the time of [`read_volume_with_stats`] went.
+#[derive(Debug, Clone, Default)]
+pub struct ReadStats {
+    /// Reading the raw MFT from disk and applying fixups (`ntfs-reader`).
+    pub load: std::time::Duration,
+    /// Parsing records into per-thread indexes.
+    pub parse: std::time::Duration,
+    /// Merging the per-thread indexes.
+    pub merge: std::time::Duration,
+    /// MFT records (used or not) and bytes read.
+    pub records: u64,
+    pub mft_bytes: u64,
+}
+
 /// Reads the whole MFT of `volume` (e.g. `"C:"`) into an index, using all cores.
 pub fn read_volume(volume: &str) -> io::Result<Index> {
+    read_volume_with_stats(volume).map(|(index, _)| index)
+}
+
+/// [`read_volume`], plus a breakdown of where the time went.
+pub fn read_volume_with_stats(volume: &str) -> io::Result<(Index, ReadStats)> {
+    let mut stats = ReadStats::default();
+    let started = std::time::Instant::now();
     let mft = Mft::new(open_volume(volume)?).map_err(to_io)?;
+    stats.load = started.elapsed();
+    stats.records = mft.max_record;
+    stats.mft_bytes = mft.data.len() as u64;
+    let started = std::time::Instant::now();
     let first = FIRST_NORMAL_RECORD;
     let last = mft.max_record;
     let threads = thread::available_parallelism()
@@ -83,12 +108,15 @@ pub fn read_volume(volume: &str) -> io::Result<Index> {
             .collect()
     });
 
+    stats.parse = started.elapsed();
+    let started = std::time::Instant::now();
     let mut index = Index::new(ROOT_RECORD);
     for part in parts {
         index.append(part?).map_err(io::Error::other)?;
     }
     index.shrink_to_fit();
-    Ok(index)
+    stats.merge = started.elapsed();
+    Ok((index, stats))
 }
 
 fn read_range(mft: &Mft, start: u64, end: u64) -> io::Result<Index> {

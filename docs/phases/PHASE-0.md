@@ -102,8 +102,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T0.7 — Leitura da MFT e índice em memória (fx-index)
-- [ ] Concluída em: ____ · Resumo: ____
-- **Status 2026-11-21:** implementada, mas **falta a medição elevada**. Índice em colunas (`fx_index::Index`), leitura paralela da MFT (`read_volume`) e diário USN (`JournalWatcher`). Sem admin, o comando falha com "execute como Administrador" (testado). No sintético de 2 milhões de arquivos: montagem em 0,31 s e **71 MB por milhão** (P9 ≤ 150). Falta rodar elevado. No WSL: `bench/prepare-elevated.sh` (compila e copia para `%TEMP%\fx-elevated`). Depois, num PowerShell **como Administrador**: `cd $env:TEMP\fx-elevated; powershell -ExecutionPolicy Bypass -File .\run-elevated.ps1`. Ele mede P6 e P9 reais, o P5 da T0.8 e roda o teste USN, gravando `elevated.log`.
+- [x] Concluída em: 2026-11-21 · Resumo: C: real com **763.507 arquivos** indexados em **7,56 s** (P6 ≤ 10 s) e **96,5 MB por milhão** (P9 ≤ 150); o teste USN (criar, renomear e apagar em `%TEMP%`) passou elevado. Sem admin, o comando falha com "execute como Administrador". **Risco:** o disco tem 0,76M arquivos, não ~2M; se o tempo crescer de forma linear, seriam ~20 s. Falta medir onde vai o tempo (`fx-bench index --volume C:` já imprime a divisão leitura/parse/merge).
 
 **Fazer**
 - Com `ntfs-reader`, ler a MFT do volume C: e montar um índice em memória: nome compactado, id do registro, id do pai, flag de pasta, tamanho, data.
@@ -119,8 +118,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T0.8 — Busca difusa por tecla
-- [ ] Concluída em: ____ · Resumo: ____
-- **Status 2026-11-21:** implementada (`fx_index::search`): subsequência com pontuação no estilo fzf, sem maiúscula nem acento, em todos os núcleos, cancelável, com os 200 primeiros enviados antes do fim. No **índice sintético de 2 milhões**: 83 teclas (12 consultas de 1 a 12 caracteres), **p95 7,0 ms**, máx. 10,1 ms (P5 ≤ 50). Falta o P5 no índice real do C:, que o mesmo `run-elevated.ps1` da T0.7 mede. Para digitar consultas: `.\fx-bench.exe search --volume C: --interactive`, na mesma pasta e também elevado.
+- [x] Concluída em: 2026-11-21 · Resumo: no índice real do C: (763.510 arquivos), 83 teclas de 12 consultas (1 a 12 caracteres): **p95 4,1 ms**, mediana 2,8, máx. 5,9 (P5 ≤ 50); sintético de 2M: p95 7,0 ms. Usa todos os núcleos, é cancelável e envia os 200 primeiros antes do fim.
 
 **Fazer**
 - Busca por nome sobre o índice da T0.7: correspondência por subsequência com pontuação (estilo fzf/nucleo), sem diferenciar maiúsculas e acentos, com resultados parciais (primeiros 200) devolvidos antes do fim.

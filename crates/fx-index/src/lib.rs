@@ -14,4 +14,4 @@ pub use search::{Hit, MAX_RESULTS, search};
 mod windows;
 
 #[cfg(windows)]
-pub use windows::{JournalWatcher, NEEDS_ADMIN, read_volume};
+pub use windows::{JournalWatcher, NEEDS_ADMIN, ReadStats, read_volume, read_volume_with_stats};

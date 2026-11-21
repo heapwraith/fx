@@ -14,10 +14,11 @@ Fase 0, num Ryzen 7 5700X com NVMe e monitor de 239 Hz, cache quente, build rele
 | Pasta com 100 mil arquivos, janela nova (processo novo) | ≤ 100 ms | 386–406 ms ¹ | 1.048 ms | — |
 | Lista completa e ordenada, 100 mil (app aberto) | ≤ 300 ms | **86–117 ms** | — | — |
 | Tecla → quadro (digitar para filtrar), p95 | ≤ 16 ms | **3,4 ms** | — | — |
-| Busca por nome, por tecla, p95 | ≤ 50 ms | **7,0 ms** ² | — | — |
+| Busca por nome no disco inteiro, por tecla, p95 | ≤ 50 ms | **4,1 ms** ² | — | — |
+| Índice do disco (MFT) | ≤ 10 s | **7,6 s** ² | — | — |
 | Memória parado | ≤ 80 MB | 72 MB | — | — |
 
-¹ Limitado pela inicialização do driver da GPU (~200 ms); ver `docs/DECISIONS.md` D-013. ² Índice sintético de 2 milhões de arquivos; a medida no disco C: real exige Administrador e está pendente. O Files não estava instalado na máquina de teste.
+¹ Limitado pela inicialização do driver da GPU (~200 ms); ver `docs/DECISIONS.md` D-013. ² Disco C: real, com 763 mil arquivos (a meta é para ~2 milhões). O Files não estava instalado na máquina de teste.
 
 ## Desenvolver
 

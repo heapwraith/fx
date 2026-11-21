@@ -25,8 +25,8 @@ Cache de disco **quente** em todas as medidas (as pastas foram abertas antes). N
 | T0.4 Lista, ordenação natural e filtro | ✅ |
 | T0.5 Lista virtualizada no GPUI | ✅ (P2 da partida falha; ver abaixo) |
 | T0.6 Latência de input | ✅ |
-| **T0.7 MFT e índice** | ⏳ **implementada; falta a medição elevada (P6, teste USN)** |
-| **T0.8 Busca difusa** | ⏳ **implementada; falta o P5 no índice real do C:** |
+| T0.7 MFT e índice | ✅ (medido elevado no C: real) |
+| T0.8 Busca difusa | ✅ (medido no índice real do C:) |
 | T0.9 Acessibilidade | ✅ (não funciona no GPUI; caminho viável) |
 | T0.10 Comparação e relatório | ✅ Explorador medido; Files e Everything não instalados (roteiro em `bench/ROTEIRO-COMPARACAO.md`) |
 
@@ -38,11 +38,11 @@ Cache de disco **quente** em todas as medidas (as pastas foram abertas antes). N
 | **P2** primeira pintura, 100 mil arquivos | ≤ 100 ms | (a) desde a partida do processo: **mediana 386–406 ms**, p95 400–439<br>(b) app já aberto, desde o pedido da pasta: **mediana 24–25 ms**, p95 27–33 | (a) ❌ (b) ✅ |
 | **P3** lista completa e ordenada, 100 mil | ≤ 300 ms | app aberto: **86–117 ms**; desde a partida: 418–474 ms | ✅ (app aberto) |
 | **P4** tecla → quadro | ≤ 16 ms (p95) | **p95 3,4 ms**, mediana 2,7, máx. 3,4 (33 teclas reais) | ✅ |
-| **P5** busca por tecla, ~2M arquivos | ≤ 50 ms (p95) | índice **sintético** de 2M: **p95 7,0 ms**, máx. 10,1 (83 teclas). Índice real do C:: **não medido** (exige admin) | ⏳ (sintético ✅) |
-| **P6** índice da MFT, ~2M arquivos | ≤ 10 s | **não medido** (exige admin). Montagem em memória (sintético 2M): 0,31 s | ⏳ |
+| **P5** busca por tecla, ~2M arquivos | ≤ 50 ms (p95) | índice real do C: (763.510 arquivos): **p95 4,1 ms**, máx. 5,9 (83 teclas); sintético de 2M: p95 7,0 ms | ✅ |
+| **P6** índice da MFT, ~2M arquivos | ≤ 10 s | C: real: **763.507 arquivos em 7,56 s**. O disco tem 0,76M, não 2M: em escala linear seriam ~20 s (ver riscos) | ✅ no disco real · ⚠️ extrapolado |
 | **P7** rolagem, 100 mil itens | sem quadros > 4,2 ms (p95; um quadro a 239 Hz, escolha do usuário) | arraste + roda até o fim: mediana 4,17, **p95 4,38 ms**, máx. 6,3; **1 quadro perdido em 3.425**; ≤ 26 linhas construídas por quadro | ❌ pela letra; ✅ se a meta for 120 Hz (8,3 ms) |
 | **P8** memória parado, 1 janela | ≤ 80 MB | **72,4 MB** privados (52 MB de working set) | ✅ |
-| **P9** índice por milhão de arquivos | ≤ 150 MB | sintético: **71 MB/milhão**. Real: não medido | ⏳ (sintético ✅) |
+| **P9** índice por milhão de arquivos | ≤ 150 MB | C: real: **96,5 MB/milhão** (73,7 MB no total); sintético: 71 MB/milhão | ✅ |
 | Outras | — | enumeração `FindFirstFileExW` da `flat-100k`: 1º lote 2,9 ms, total 50 ms; ordenar 100 mil 36 ms; filtrar 1 ms; janela responde (máx. 2,9 ms) carregando 1M arquivos via `\\wsl.localhost` | ✅ |
 
 ### Sobre a P7 (por que "falha pela letra")
@@ -65,8 +65,8 @@ Do tempo até o primeiro quadro, ~200 ms são o `D3D11CreateDevice` (driver da N
 
 ## Critérios do portão
 
-1. **P2, P4, P5 e P7 passaram?** P4 ✅. P2 ✅ com o app aberto e ❌ desde a partida do processo. P7 ❌ só pela letra (1 quadro perdido em 3.425). P5 ⏳ (sintético ✅, falta o C: real).
-2. **P6 e P9 passaram ou têm plano?** P9 ✅ no sintético. P6 ⏳: o código está pronto e falta a medição elevada.
+1. **P2, P4, P5 e P7 passaram?** P4 ✅ e P5 ✅ (disco real). P2 ✅ com o app aberto e ❌ desde a partida do processo. P7 ❌ só pela letra (1 quadro perdido em 3.425).
+2. **P6 e P9 passaram ou têm plano?** P9 ✅ (96,5 MB/milhão no disco real). P6 ✅ no disco real (7,56 s para 763 mil arquivos). Para ~2M, o plano é medir a divisão leitura/parse/merge (o comando já imprime) e otimizar a parte dominante.
 3. **Acessibilidade tem caminho viável?** ✅ Sim: AccessKit com `SubclassingAdapter` (D-008).
 
 ## Riscos encontrados
@@ -75,13 +75,13 @@ Do tempo até o primeiro quadro, ~200 ms são o `D3D11CreateDevice` (driver da N
 - **Patch próprio do GPUI** (`third_party/gpui`, 3 arquivos mais os shaders pré-compilados): custo de manutenção a cada atualização.
 - **Acessibilidade:** depende de uma camada própria (AccessKit) que ainda não existe; listas virtualizadas enormes exigem expor só a janela visível.
 - **MFT:** `ntfs-reader` carrega a MFT inteira na memória durante a leitura (~1 KB por registro, ~2,5 GB num disco de 2M arquivos), um pico transitório fora da P9. Medir na execução elevada.
-- **Medições pendentes que exigem admin** (P5 real, P6, P9 real, teste USN): rodar antes de decidir.
+- **P6 em discos maiores:** 7,56 s para 763 mil arquivos sugere ~20 s para 2 milhões se o custo for linear. Próximo passo: rodar `fx-bench index --volume C:` elevado, que agora mostra quanto é leitura da MFT (I/O sequencial, limitado pelo disco) e quanto é parse (já paralelo).
 
 ## Recomendação
 
-**Corrigir antes de passar (pendências curtas), não acionar o plano B.**
+**Passar com duas decisões (D-013 e régua da P7) e uma verificação (P6 em ~2M), sem plano B.**
 
-1. Rodar as medições elevadas e completar P5, P6 e P9 reais: no WSL, `bench/prepare-elevated.sh`; depois, num PowerShell como Administrador, `cd $env:TEMP\fx-elevated; powershell -ExecutionPolicy Bypass -File .\run-elevated.ps1`.
+1. (Feito: P5, P6, P9 e o teste USN passaram no disco real.) Medir a divisão do tempo da P6 para garantir o caso de ~2M arquivos.
 2. Decidir a D-013: recomendo **(a) processo residente** (o fx fica carregado e "abrir pasta" cria só a janela: ~24 ms medidos, contra 264 ms do Explorador navegando e 1.048 ms abrindo janela), mantendo a P1 como meta de "primeira abertura do dia".
 3. Decidir a régua da P7: manter 4,2 ms (o protótipo já fica a 1 quadro perdido em 3.425) ou voltar à meta escrita de 120 Hz.
 
