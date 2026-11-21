@@ -588,6 +588,21 @@ impl FolderView {
                             cx.notify();
                         }),
                     )
+                    // Right click: the row joins (or becomes) the selection,
+                    // then the shell menu opens for it.
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        cx.listener(move |view, _: &MouseDownEvent, window, cx| {
+                            view.focus.focus(window);
+                            if !view.selection.is_selected(i) {
+                                view.selection.select_only(i);
+                            }
+                            let items = view.targets();
+                            view.open_menu(items, window, cx);
+                            cx.stop_propagation();
+                            cx.notify();
+                        }),
+                    )
                     // Files dropped on a folder row go into that folder.
                     .when(is_dir, |d| {
                         let target = self.path.join(self.list.os_name(i));
@@ -1434,6 +1449,13 @@ impl Render for FolderView {
                             .on_mouse_move(cx.listener(|view, ev: &MouseMoveEvent, window, cx| {
                                 view.maybe_drag(ev, window, cx);
                             }))
+                            // Right click on the empty part: the folder's own menu.
+                            .on_mouse_down(
+                                MouseButton::Right,
+                                cx.listener(|view, _: &MouseDownEvent, window, cx| {
+                                    view.open_menu(Vec::new(), window, cx);
+                                }),
+                            )
                             .drag_over::<ExternalPaths>(move |s, _, _, _| {
                                 s.border_1().border_color(rgba(t.accent))
                             })

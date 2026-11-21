@@ -893,6 +893,52 @@ pub fn copy_while_using() -> std::io::Result<()> {
     result
 }
 
+/// T1.16: the context menu must be on screen within this (p95).
+const TARGET_MENU_MS: f64 = 150.0;
+
+/// T1.16: right click -> shell context menu on screen, 20 menus on
+/// `flat-100k` rows (several file types, so several shell handlers).
+pub fn menu_latency() -> std::io::Result<()> {
+    let trace = run_key_script(&flat_100k()?, "menu-p95.ps1")?;
+    let samples = trace.numbers("menu_ready_ms");
+    if samples.is_empty() {
+        return Err(std::io::Error::other("no context menu recorded"));
+    }
+    let (median, p95) = median_p95(&ms_samples(&samples));
+    let max = samples.iter().copied().fold(0.0, f64::max);
+    let pass = p95 <= TARGET_MENU_MS;
+    let built = trace.numbers("menu_built_ms");
+    let (_, built_p95) = median_p95(&ms_samples(&built));
+    println!("T1.16: right click -> context menu on screen, flat-100k (release)");
+    println!(
+        "  built on the worker (without waiting for the previous menu): p95 {built_p95:.1} ms"
+    );
+    println!(
+        "  {} menus: median {median:.1} ms  p95 {p95:.1} ms  max {max:.1} ms   target ≤ {TARGET_MENU_MS} ms  {}",
+        samples.len(),
+        if pass { "pass" } else { "FAIL" }
+    );
+    let date = utc_date(SystemTime::now());
+    let json = format!(
+        concat!(
+            "{{\n  \"id\": \"context-menu\",\n  \"task\": \"T1.16\",\n  \"folder\": \"flat-100k\",\n",
+            "  \"menus\": {n},\n  \"ready_ms\": {{ \"median\": {m:.3}, \"p95\": {p:.3}, \"max\": {x:.3}, \"target\": {t} }},\n",
+            "  \"pass\": {pass},\n  \"machine\": {machine},\n  \"commit\": {commit},\n  \"date\": {date}\n}}\n"
+        ),
+        n = samples.len(),
+        m = median,
+        p = p95,
+        x = max,
+        t = TARGET_MENU_MS,
+        pass = pass,
+        machine = json_string(&machine()),
+        commit = json_string(commit()),
+        date = json_string(&date),
+    );
+    std::fs::write(results_dir()?.join(format!("{date}-T1.16-menu.json")), json)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

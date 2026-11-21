@@ -198,7 +198,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.16 — Menu de contexto do shell
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: menu completo do shell (`IContextMenu`/`IContextMenu3`, extensões de terceiros, fundo da pasta) numa thread STA com tempo limite de montagem (extensão travada → "indisponível", testado); itens do fx no topo; verbos de excluir/renomear/copiar/recortar/colar executados pelo motor do fx; botão direito, tecla Menu e Shift+F10; aquecimento ao abrir (D-025). **Meta de p95 ≤ 150 ms não atingida neste PC:** mediana 64 ms, p95 259 ms em 20 menus, por extensões do shell na primeira abertura de cada tipo (repetidos: 41–69 ms). Risco para o portão (T1.18). Verbos interceptados não foram clicados na janela.
 
 **Fazer**
 - `IContextMenu` / `IContextMenu3` completo (inclui extensões de terceiros) na thread STA, com tempo limite; itens próprios do fx no topo.

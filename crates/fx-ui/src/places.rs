@@ -59,6 +59,18 @@ impl Places {
                         }
                     }
                 }
+                // Warm the context menu up (COM, OLE, common shell
+                // extensions) so the first right click is not the slow one.
+                if let Some(home) = known.iter().find(|(k, _)| *k == KnownFolder::Home) {
+                    let _ = fx_shell::show_context_menu(fx_shell::menu::MenuRequest {
+                        items: Vec::new(),
+                        folder: home.1.clone(),
+                        fx_items: Vec::new(),
+                        owner: 0,
+                        started: std::time::Instant::now(),
+                        warm_up: true,
+                    });
+                }
                 places.known = known;
                 cx.notify();
             });

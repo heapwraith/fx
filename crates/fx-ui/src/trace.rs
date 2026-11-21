@@ -43,6 +43,9 @@ pub struct Trace {
     drives_seen: Vec<(u128, usize)>,
     /// Items of the virtualized list (rows, or rows of tiles in the grid).
     list_items: usize,
+    /// Right click -> context menu on screen, and the part spent building
+    /// it, in ms (T1.16).
+    menu_ms: Vec<(f64, f64)>,
 }
 
 impl Trace {
@@ -70,6 +73,7 @@ impl Trace {
             tab_open_ms: Vec::new(),
             drives_seen: Vec::new(),
             list_items: 0,
+            menu_ms: Vec::new(),
         })
     }
 
@@ -166,6 +170,10 @@ impl Trace {
         self.tab_open_ms.push(millis(opened.elapsed()));
     }
 
+    pub fn record_menu(&mut self, ready: Duration, built: Duration) {
+        self.menu_ms.push((millis(ready), millis(built)));
+    }
+
     pub fn set_list_items(&mut self, n: usize) {
         self.list_items = n;
     }
@@ -205,6 +213,10 @@ impl Trace {
         }
         for ms in &self.tab_open_ms {
             let _ = writeln!(out, "tab_open_ms {ms:.3}");
+        }
+        for (ready, built) in &self.menu_ms {
+            let _ = writeln!(out, "menu_ready_ms {ready:.3}");
+            let _ = writeln!(out, "menu_built_ms {built:.3}");
         }
         for (at, count) in &self.drives_seen {
             let _ = writeln!(out, "drives_seen {at},{count}");
@@ -249,6 +261,7 @@ mod tests {
             tab_open_ms: Vec::new(),
             drives_seen: Vec::new(),
             list_items: 0,
+            menu_ms: Vec::new(),
         }
     }
 

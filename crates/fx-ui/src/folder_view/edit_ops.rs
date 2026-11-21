@@ -204,59 +204,19 @@ impl FolderView {
                 true
             }
             "c" | "x" if only_ctrl => {
-                let items = self.targets();
-                if items.is_empty() {
-                    return true;
-                }
-                let cut = ks.key == "x";
-                let n = items.len();
-                cx.spawn(async move |this, cx| {
-                    let done = cx
-                        .background_spawn(async move { fx_shell::set_clipboard_files(&items, cut) })
-                        .await;
-                    let _ = this.update(cx, |view, cx| {
-                        view.notice = Some(match done {
-                            Ok(()) if cut => format!("recortado: {} (cole com Ctrl+V)", count(n)),
-                            Ok(()) => format!("copiado: {} (cole com Ctrl+V)", count(n)),
-                            Err(e) => format!("área de transferência indisponível: {e}"),
-                        });
-                        cx.notify();
-                    });
-                })
-                .detach();
+                self.put_on_clipboard(ks.key == "x", cx);
                 true
             }
             "v" if only_ctrl => {
-                let dest = self.path.clone();
-                cx.spawn_in(window, async move |this, cx| {
-                    let clip = cx
-                        .background_spawn(async { fx_shell::clipboard_files() })
-                        .await;
-                    let _ = this.update_in(cx, |view, window, cx| match clip {
-                        Ok(Some(files)) if !files.paths.is_empty() => {
-                            let job = if files.cut {
-                                Job::move_to(files.paths, dest)
-                            } else {
-                                Job::copy(files.paths, dest)
-                            };
-                            let id = view.submit_job(job.on_conflict(Resolution::Ask), window, cx);
-                            if files.cut
-                                && let Some(id) = id
-                            {
-                                view.ops.update(cx, |ops, _| ops.clear_clipboard_after(id));
-                            }
-                        }
-                        Ok(_) => {
-                            view.notice = Some("nada para colar".into());
-                            cx.notify();
-                        }
-                        Err(e) => {
-                            view.notice = Some(format!("área de transferência indisponível: {e}"));
-                            cx.notify();
-                        }
-                    });
-                })
-                .detach();
+                self.paste(window, cx);
+                true
+            }
+            "menu" if plain => {
+                self.open_menu(self.targets(), window, cx);
+                true
+            }
+            "f10" if m.shift && !m.control && !m.alt => {
+                self.open_menu(self.targets(), window, cx);
                 true
             }
             "z" if only_ctrl => {
@@ -273,6 +233,145 @@ impl FolderView {
             }
             _ => false,
         }
+    }
+
+    /// Ctrl+C / Ctrl+X: the targets on the clipboard (off the UI thread).
+    pub(super) fn put_on_clipboard(&mut self, cut: bool, cx: &mut Context<Self>) {
+        let items = self.targets();
+        if items.is_empty() {
+            return;
+        }
+        let n = items.len();
+        cx.spawn(async move |this, cx| {
+            let done = cx
+                .background_spawn(async move { fx_shell::set_clipboard_files(&items, cut) })
+                .await;
+            let _ = this.update(cx, |view, cx| {
+                view.notice = Some(match done {
+                    Ok(()) if cut => format!("recortado: {} (cole com Ctrl+V)", count(n)),
+                    Ok(()) => format!("copiado: {} (cole com Ctrl+V)", count(n)),
+                    Err(e) => format!("área de transferência indisponível: {e}"),
+                });
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Ctrl+V: files on the clipboard (from fx or any app) into this folder.
+    pub(super) fn paste(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let dest = self.path.clone();
+        cx.spawn_in(window, async move |this, cx| {
+            let clip = cx
+                .background_spawn(async { fx_shell::clipboard_files() })
+                .await;
+            let _ = this.update_in(cx, |view, window, cx| match clip {
+                Ok(Some(files)) if !files.paths.is_empty() => {
+                    let job = if files.cut {
+                        Job::move_to(files.paths, dest)
+                    } else {
+                        Job::copy(files.paths, dest)
+                    };
+                    let id = view.submit_job(job.on_conflict(Resolution::Ask), window, cx);
+                    if files.cut
+                        && let Some(id) = id
+                    {
+                        view.ops.update(cx, |ops, _| ops.clear_clipboard_after(id));
+                    }
+                }
+                Ok(_) => {
+                    view.notice = Some("nada para colar".into());
+                    cx.notify();
+                }
+                Err(e) => {
+                    view.notice = Some(format!("área de transferência indisponível: {e}"));
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// The shell context menu for `items`, or for this folder when empty
+    /// (task T1.16). fx's items come first; shell verbs fx performs itself
+    /// come back here so they use the queue, the Recycle Bin and undo.
+    pub(super) fn open_menu(
+        &mut self,
+        items: Vec<PathBuf>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(owner) = fx_shell::window_id(window) else {
+            return;
+        };
+        let request = fx_shell::menu::MenuRequest {
+            items: items.clone(),
+            folder: self.path.clone(),
+            fx_items: vec!["Abrir no Terminal aqui".into(), "Copiar caminho".into()],
+            owner,
+            started: std::time::Instant::now(),
+            warm_up: false,
+        };
+        let rx = fx_shell::show_context_menu(request);
+        cx.spawn_in(window, async move |this, cx| {
+            let reply = cx.background_spawn(async move { rx.recv() }).await;
+            let Ok(reply) = reply else { return };
+            let _ = this.update_in(cx, |view, window, cx| {
+                view.on_menu(reply, items, window, cx)
+            });
+        })
+        .detach();
+    }
+
+    fn on_menu(
+        &mut self,
+        reply: fx_shell::menu::MenuReply,
+        items: Vec<PathBuf>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        use fx_shell::menu::MenuOutcome;
+        if let (Some(trace), Some(ready), Some(built)) =
+            (&self.trace, reply.ready_after, reply.built_in)
+        {
+            trace.borrow_mut().record_menu(ready, built);
+        }
+        match reply.outcome {
+            MenuOutcome::Fx(0) => {
+                self.launch(fx_shell::launch::Launch::Terminal(self.path.clone()), cx);
+            }
+            MenuOutcome::Fx(_) => {
+                let paths = if items.is_empty() {
+                    vec![self.path.clone()]
+                } else {
+                    items
+                };
+                let text = paths
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join("\r\n");
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+                self.notice = Some("caminho copiado".into());
+            }
+            MenuOutcome::Verb(verb) => match verb.as_str() {
+                "delete" if !items.is_empty() => {
+                    self.submit_job(Job::recycle(items), window, cx);
+                }
+                "rename" => {
+                    if let Some(c) = self.selection.cursor() {
+                        self.begin_rename(c);
+                    }
+                }
+                "copy" => self.put_on_clipboard(false, cx),
+                "cut" => self.put_on_clipboard(true, cx),
+                "paste" => self.paste(window, cx),
+                _ => {}
+            },
+            MenuOutcome::Unavailable(why) => self.notice = Some(why),
+            MenuOutcome::Shell | MenuOutcome::Cancelled => {}
+        }
+        cx.notify();
     }
 
     pub(super) fn begin_rename(&mut self, entry: u32) {
