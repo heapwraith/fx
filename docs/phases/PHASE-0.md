@@ -28,7 +28,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T0.2 — Gerador de fixtures
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: `fx-bench fixtures` gera as 4 pastas (161.100 arquivos) em 37–40 s (release); 2ª execução 0,00 s; apagar e regenerar dá listagem idêntica (sha256); `--clean` protegido por guarda com testes.
 
 **Fazer**
 - `cargo run -p fx-bench --release -- fixtures` cria as pastas descritas em `docs/PERFORMANCE.md` dentro de `%TEMP%\fx-fixtures`.

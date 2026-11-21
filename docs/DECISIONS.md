@@ -50,3 +50,8 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Contexto:** o usuário decidiu não desenvolver no Windows nativo.
 - **Decisão:** o código e o Claude Code ficam no WSL. O build é cruzado para `x86_64-pc-windows-msvc` com `cargo xwin` (CRT e SDK da Microsoft baixados pelo xwin, linker `lld-link`, `clang-cl` e `llvm-rc`). `.cargo/config.toml` fixa esse alvo como padrão. Os `.exe` (app, testes e benchmarks) rodam no Windows pela interoperabilidade do WSL: `cargo xwin run` e `cargo xwin test` os executam direto.
 - **Consequência:** todo comando de build usa `cargo xwin` em vez de `cargo`. Dependências cujo `build.rs` assume host Windows precisam de patch (ex.: gpui, D-007). Testes e benchmarks que exigem Administrador precisam que o processo Windows rode elevado: a definir quando chegarmos neles (T0.5+). Os benchmarks de disco devem usar pastas do Windows (`%TEMP%`), não do sistema de arquivos do WSL.
+
+## D-011 — Dependência: `tempfile` (dev) e fixtures sem dependências
+- **Data:** 2026-11-21 · **Status:** aceita
+- **Decisão:** `tempfile = "=3.27.0"` em `[workspace.dependencies]`, usado só como dev-dependency (testes que tocam o disco, conforme o `CLAUDE.md`; previsto na T0.3). O gerador de fixtures (T0.2) não usa crates externos: PRNG SplitMix64 próprio (a sequência não pode mudar com a versão de um crate) e codificador PNG mínimo sem compressão (são só dados de teste).
+- **Consequência:** as imagens de `flat-10k-media` têm cerca de 12 KB cada (~124 MB no total), porque não são comprimidas. `clippy.toml` permite `unwrap()`/`expect()` em testes, como já dizia o `CLAUDE.md`.

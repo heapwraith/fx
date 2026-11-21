@@ -23,6 +23,7 @@ fx-shell = { path = "crates/fx-shell" }
 fx-ops = { path = "crates/fx-ops" }
 
 ntfs-reader = "=0.4.6"
+tempfile = "=3.27.0"
 
 # GPUI: fixado na T0.1 (D-007). Resolvido para a cópia com patch em third_party/gpui
 # via [patch.crates-io] abaixo, para compilar de forma cruzada WSL -> Windows (D-005).
