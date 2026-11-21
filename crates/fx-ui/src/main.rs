@@ -60,7 +60,20 @@ struct Startup {
     density: Density,
 }
 
+/// A window app has no console: write panics to `%TEMP%\fx-crash-<pid>.log`
+/// so a crash can be diagnosed.
+fn log_panics() {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let file = std::env::temp_dir().join(format!("fx-crash-{}.log", std::process::id()));
+        let trace = std::backtrace::Backtrace::force_capture();
+        let _ = std::fs::write(file, format!("{info}\n\n{trace}"));
+        previous(info);
+    }));
+}
+
 fn main() {
+    log_panics();
     let path = std::env::args_os()
         .nth(1)
         .map(PathBuf::from)

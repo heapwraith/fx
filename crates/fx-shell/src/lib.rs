@@ -14,7 +14,8 @@ mod windows;
 
 #[cfg(windows)]
 pub use windows::{
-    A11y, Instance, LatestTree, claim_instance, clear_clipboard, clipboard_files, drives,
-    known_folder, known_folders, launch, process_start_time, set_clipboard_files,
-    start_icon_service, start_thumb_service, supports_mica, watch_drives, windows_build,
+    A11y, DragResult, Instance, LatestTree, claim_instance, clear_clipboard, clipboard_files,
+    drag_files, drives, drop_keys, known_folder, known_folders, launch, process_start_time,
+    set_clipboard_files, start_icon_service, start_thumb_service, supports_mica, watch_drives,
+    window_id, windows_build,
 };

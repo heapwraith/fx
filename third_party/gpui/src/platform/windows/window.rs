@@ -922,9 +922,12 @@ impl IDropTarget_Impl for WindowsDragDropHandler_Impl {
                 if idata.u.hGlobal.is_invalid() {
                     return Ok(());
                 }
-                let hdrop = idata.u.hGlobal.0 as *mut HDROP;
+                // fx patch: for CF_HDROP the HGLOBAL *is* the HDROP. Reading it
+                // as a pointer to an HDROP crashes with movable memory (the
+                // shell's data objects, e.g. drags from the Explorer).
+                let hdrop = HDROP(idata.u.hGlobal.0);
                 let mut paths = SmallVec::<[PathBuf; 2]>::new();
-                with_file_names(*hdrop, |file_name| {
+                with_file_names(hdrop, |file_name| {
                     if let Some(path) = PathBuf::from_str(&file_name).log_err() {
                         paths.push(path);
                     }

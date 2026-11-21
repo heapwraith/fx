@@ -187,7 +187,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.15 — Arrastar e soltar
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: soltar na lista ou numa pasta (via `IDropTarget` do GPUI) vira trabalho do motor com o efeito do Explorador (mesma unidade move, outra copia, Shift/Ctrl lidos do Windows na hora); arrastar para fora com o data object do shell (`SHDoDragDrop`); clicar numa linha já selecionada mantém a seleção para arrastar várias (D-024). Corrigido no GPUI um crash (violação de acesso) no `DragEnter` com data objects do shell. Verificado: arrastar entre dois processos do fx (OLE entre apps) moveu o arquivo pelo motor; regra do efeito com teste. **Testes manuais pendentes:** Explorador ↔ fx, área de trabalho e navegador (arquivos "virtuais" de navegador, sem caminho, não são aceitos).
 
 **Fazer**
 - OLE `IDropTarget` / `IDataObject` / `DoDragDrop` entre o fx, o Explorador e outros apps, com o efeito padrão do Windows (mesma unidade move, outra copia; Shift/Ctrl mudam).

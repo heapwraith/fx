@@ -654,3 +654,26 @@ fn cancel_while_asking_changes_nothing() {
     assert_eq!(outcome, Outcome::Cancelled);
     assert_eq!(snapshot(&dest), before);
 }
+
+#[test]
+fn drop_operation_follows_the_explorer() {
+    let c = |p: &str| PathBuf::from(p);
+    let same = [c(r"C:\a\x.txt")];
+    let other = [c(r"D:\y.txt")];
+    let dest = Path::new(r"C:\destino");
+    assert_eq!(drop_operation(&same, dest, false, false), OpKind::Move);
+    assert_eq!(drop_operation(&other, dest, false, false), OpKind::Copy);
+    assert_eq!(
+        drop_operation(&same, dest, false, true),
+        OpKind::Copy,
+        "Ctrl copies"
+    );
+    assert_eq!(
+        drop_operation(&other, dest, true, false),
+        OpKind::Move,
+        "Shift moves"
+    );
+    assert_eq!(drop_operation(&same, dest, true, true), OpKind::Copy);
+    let mixed = [c(r"C:\a"), c(r"D:\b")];
+    assert_eq!(drop_operation(&mixed, dest, false, false), OpKind::Copy);
+}

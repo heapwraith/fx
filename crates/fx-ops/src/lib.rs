@@ -256,6 +256,24 @@ pub fn undo_of(job: &Job, report: &Report) -> Option<Job> {
     })
 }
 
+/// What dropping `sources` on folder `dest` does, like the Explorer: Ctrl
+/// copies, Shift moves (Ctrl+Shift would link: fx copies), and without keys
+/// items on the same volume move and others copy.
+pub fn drop_operation(sources: &[PathBuf], dest: &Path, shift: bool, ctrl: bool) -> OpKind {
+    match (shift, ctrl) {
+        (_, true) => OpKind::Copy,
+        (true, false) => OpKind::Move,
+        (false, false) => {
+            let dest_volume = volume_key(dest);
+            if sources.iter().all(|s| volume_key(s) == dest_volume) {
+                OpKind::Move
+            } else {
+                OpKind::Copy
+            }
+        }
+    }
+}
+
 /// Folders where a slip is dangerous: Windows and the program folders.
 pub fn system_dirs() -> Vec<PathBuf> {
     [

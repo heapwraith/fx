@@ -16,6 +16,7 @@
 //! forward, restoring each folder's scroll position and selection. The path
 //! bar is in `path_bar.rs`.
 
+mod dnd;
 mod edit_ops;
 mod grid;
 mod path_bar;
@@ -36,8 +37,8 @@ use fx_fs::Strategy;
 use fx_shell::icons::icon_key;
 use fx_shell::launch::Launch;
 use gpui::{
-    Context, Entity, FocusHandle, Image, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, NavigationDirection, Pixels, ScrollStrategy, SharedString,
+    Context, Entity, ExternalPaths, FocusHandle, Image, KeyDownEvent, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, NavigationDirection, Pixels, ScrollStrategy, SharedString,
     UniformListScrollHandle, Window, canvas, div, img, point, prelude::*, px, uniform_list,
 };
 
@@ -162,6 +163,8 @@ pub struct FolderView {
     /// A "new folder" job whose folder should be renamed when it appears.
     awaiting_folder: Option<fx_ops::JobId>,
     rename_when_listed: Option<OsString>,
+    /// Where and which row was pressed (a drag out may start, task T1.15).
+    press: Option<(gpui::Point<Pixels>, u32)>,
 }
 
 impl FolderView {
@@ -231,6 +234,7 @@ impl FolderView {
             renaming: None,
             awaiting_folder: None,
             rename_when_listed: None,
+            press: None,
         };
         view.start_loading(cx);
         view
@@ -577,6 +581,22 @@ impl FolderView {
                             cx.notify();
                         }),
                     )
+                    .on_mouse_up(
+                        MouseButton::Left,
+                        cx.listener(move |view, _: &MouseUpEvent, _, cx| {
+                            view.release_on(i);
+                            cx.notify();
+                        }),
+                    )
+                    // Files dropped on a folder row go into that folder.
+                    .when(is_dir, |d| {
+                        let target = self.path.join(self.list.os_name(i));
+                        d.drag_over::<ExternalPaths>(move |s, _, _, _| s.bg(rgba(t.selected)))
+                            .on_drop(cx.listener(move |view, paths: &ExternalPaths, window, cx| {
+                                view.drop_into(paths.paths().to_vec(), target.clone(), window, cx);
+                                cx.stop_propagation();
+                            }))
+                    })
             })
             .collect()
     }
@@ -779,9 +799,15 @@ impl FolderView {
         } else if m.control {
             self.selection.toggle(i);
         } else {
-            self.selection.select_only(i);
+            // Pressing an already selected row keeps the selection, so the
+            // whole selection can be dragged.
+            if !self.selection.is_selected(i) || ev.click_count == 2 {
+                self.selection.select_only(i);
+            }
             if ev.click_count == 2 {
                 self.open_cursor(window, cx);
+            } else {
+                self.press_row(ev.position, i);
             }
         }
     }
@@ -1401,9 +1427,20 @@ impl Render for FolderView {
                     )
                     .child(
                         div()
+                            .id("list-area")
                             .relative()
                             .flex_1()
                             .min_h_0()
+                            .on_mouse_move(cx.listener(|view, ev: &MouseMoveEvent, window, cx| {
+                                view.maybe_drag(ev, window, cx);
+                            }))
+                            .drag_over::<ExternalPaths>(move |s, _, _, _| {
+                                s.border_1().border_color(rgba(t.accent))
+                            })
+                            .on_drop(cx.listener(|view, paths: &ExternalPaths, window, cx| {
+                                let dest = view.path.clone();
+                                view.drop_into(paths.paths().to_vec(), dest, window, cx);
+                            }))
                             .child(if grid_view {
                                 uniform_list(
                                     "tiles",
