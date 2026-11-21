@@ -76,6 +76,21 @@ pub const RADIUS: f32 = 4.0;
 /// Windows 11; Windows 10 has Segoe UI).
 pub const FONT_FAMILIES: [&str; 2] = ["Segoe UI Variable Text", "Segoe UI"];
 
+/// Icon fonts (Windows 11, then Windows 10). Glyphs below exist in both.
+pub const ICON_FAMILIES: [&str; 2] = ["Segoe Fluent Icons", "Segoe MDL2 Assets"];
+pub const ICON_BACK: &str = "\u{E72B}";
+pub const ICON_FORWARD: &str = "\u{E72A}";
+pub const ICON_UP: &str = "\u{E74A}";
+pub const ICON_CHEVRON: &str = "\u{E76C}";
+
+pub fn pick_icon_font(available: &[String]) -> &'static str {
+    ICON_FAMILIES
+        .iter()
+        .find(|f| available.iter().any(|a| a == *f))
+        .copied()
+        .unwrap_or(ICON_FAMILIES[1])
+}
+
 pub fn pick_font(available: &[String]) -> &'static str {
     FONT_FAMILIES
         .iter()

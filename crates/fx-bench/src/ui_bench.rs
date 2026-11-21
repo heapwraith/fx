@@ -485,21 +485,18 @@ pub fn type_keys() -> std::io::Result<()> {
     Ok(())
 }
 
-const NAV_ROUNDS: usize = 3;
+const KEY_ROUNDS: usize = 3;
 
-/// P4 for navigation (T1.2): fx on the fixtures root; `bench/nav-p4.ps1`
-/// filters to `flat-100k`, opens it with Enter, moves with arrows, PgDn,
-/// Home/End (with and without Shift) and goes back up with Backspace.
-pub fn nav_keys() -> std::io::Result<()> {
-    let flat = flat_100k()?;
-    let root = flat.parent().unwrap_or(&flat).to_path_buf();
-    let mut child = spawn_fx(&root, false)?;
+/// Runs a PowerShell key script against fx opened on `folder` and returns the
+/// trace fx wrote.
+fn run_key_script(folder: &Path, script: &str) -> std::io::Result<TraceFile> {
+    let mut child = spawn_fx(folder, false)?;
     std::thread::sleep(Duration::from_secs(2));
     let out = Command::new("powershell")
         .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
-        .arg(Path::new("bench").join("nav-p4.ps1"))
+        .arg(Path::new("bench").join(script))
         .args(["-ProcessId", &child.id().to_string()])
-        .args(["-Rounds", &NAV_ROUNDS.to_string()])
+        .args(["-Rounds", &KEY_ROUNDS.to_string()])
         .output()?;
     Command::new("powershell")
         .args(["-NoProfile", "-Command"])
@@ -511,18 +508,26 @@ pub fn nav_keys() -> std::io::Result<()> {
     wait_with_timeout(&mut child, Duration::from_secs(10))?;
     if !out.status.success() {
         return Err(std::io::Error::other(format!(
-            "navigation script failed: {}",
+            "{script} failed: {}",
             String::from_utf8_lossy(&out.stderr)
         )));
     }
-    let trace = read_trace(child.id())?;
-    println!("P4: key -> frame presented, navigating flat-100k (release)");
+    read_trace(child.id())
+}
+
+/// Prints and saves P4 per kind of key (`input_<kind>_ms` in the trace).
+fn report_keys(
+    trace: &TraceFile,
+    title: &str,
+    kinds: &[(&str, &str)],
+    task: &str,
+    folder: &str,
+    input: &str,
+) -> std::io::Result<()> {
+    println!("{title}");
     let mut parts = Vec::new();
     let mut pass = true;
-    for (kind, label) in [
-        ("move", "arrows/PgDn/Home/End"),
-        ("open", "Enter/Backspace"),
-    ] {
+    for &(kind, label) in kinds {
         let samples = trace.numbers(&format!("input_{kind}_ms"));
         if samples.is_empty() {
             return Err(std::io::Error::other(format!("no {kind} key recorded")));
@@ -544,11 +549,14 @@ pub fn nav_keys() -> std::io::Result<()> {
     let date = utc_date(SystemTime::now());
     let json = format!(
         concat!(
-            "{{\n  \"id\": \"P4\",\n  \"task\": \"T1.2\",\n  \"folder\": \"fx-fixtures -> flat-100k\",\n",
-            "  \"input\": \"bench/nav-p4.ps1: 3 rounds, 60 ms between keys\",\n",
+            "{{\n  \"id\": \"P4\",\n  \"task\": {task},\n  \"folder\": {folder},\n",
+            "  \"input\": {input},\n",
             "  \"latency_ms\": {{ {parts}, \"target\": {t} }},\n",
             "  \"pass\": {pass},\n  \"machine\": {machine},\n  \"commit\": {commit},\n  \"date\": {date}\n}}\n"
         ),
+        task = json_string(task),
+        folder = json_string(folder),
+        input = json_string(input),
         parts = parts.join(", "),
         t = TARGET_P4_MS,
         pass = pass,
@@ -556,8 +564,51 @@ pub fn nav_keys() -> std::io::Result<()> {
         commit = json_string(commit()),
         date = json_string(&date),
     );
-    std::fs::write(results_dir()?.join(format!("{date}-T1.2-P4.json")), json)?;
+    std::fs::write(results_dir()?.join(format!("{date}-{task}-P4.json")), json)?;
     Ok(())
+}
+
+/// The folder that holds every fixture.
+fn fixtures_root() -> std::io::Result<PathBuf> {
+    let flat = flat_100k()?;
+    Ok(flat.parent().unwrap_or(&flat).to_path_buf())
+}
+
+/// P4 for navigation (T1.2): fx on the fixtures root; `bench/nav-p4.ps1`
+/// filters to `flat-100k`, opens it with Enter, moves with arrows, PgDn,
+/// Home/End (with and without Shift) and goes back up with Backspace.
+pub fn nav_keys() -> std::io::Result<()> {
+    let trace = run_key_script(&fixtures_root()?, "nav-p4.ps1")?;
+    report_keys(
+        &trace,
+        "P4: key -> frame presented, navigating flat-100k (release)",
+        &[
+            ("move", "arrows/PgDn/Home/End"),
+            ("open", "Enter/Backspace"),
+        ],
+        "T1.2",
+        "fx-fixtures -> flat-100k",
+        "bench/nav-p4.ps1: 3 rounds, 60 ms between keys",
+    )
+}
+
+/// P4 for the path bar (T1.3): fx on the fixtures root; `bench/path-p4.ps1`
+/// opens the field, completes folders with Tab (each Tab changes the parent
+/// folder, so the next keys hit a cache that is still loading), types and
+/// erases, and goes back and forth in the history.
+pub fn path_keys() -> std::io::Result<()> {
+    let trace = run_key_script(&fixtures_root()?, "path-p4.ps1")?;
+    report_keys(
+        &trace,
+        "P4: key -> frame presented, path bar autocompletion and history (release)",
+        &[
+            ("path", "path field keys"),
+            ("open", "Enter/Alt+Left/Alt+Right"),
+        ],
+        "T1.3",
+        "fx-fixtures",
+        "bench/path-p4.ps1: 3 rounds, 60 ms between keys",
+    )
 }
 
 #[cfg(test)]

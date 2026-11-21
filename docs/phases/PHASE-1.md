@@ -45,7 +45,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.3 — Histórico, barra de caminho e autocompletar
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: `fx_core::History` (ramifica ao navegar depois de voltar, limite de 100) e `fx_core::complete` (prefixo sem caixa nem acento), com testes; botões ←/→/↑, Alt+←/→ e botões 4/5 do mouse restauram rolagem e seleção; migalhas clicáveis; Ctrl+L / Alt+D / clique no vazio abrem o campo com sugestões de pastas (cache da pasta pai lido em segundo plano; Tab completa, Enter confere a pasta fora da UI). P4 (`fx-bench path`): teclas do campo p95 3,35 ms (39 teclas, incluindo as que caem com o cache ainda carregando), voltar/avançar p95 3,26 ms. O histórico vive na janela até a T1.4 trazer as abas.
 
 **Fazer**
 - Histórico voltar/avançar por aba em `fx-core` (Alt+←/→, botões do mouse 4/5), guardando a posição de rolagem e a seleção de cada pasta.

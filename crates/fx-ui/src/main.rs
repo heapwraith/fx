@@ -34,6 +34,7 @@ use trace::Trace;
 struct Startup {
     mica_supported: bool,
     font: &'static str,
+    icon_font: &'static str,
     forced: Option<Mode>,
     density: Density,
 }
@@ -70,10 +71,12 @@ fn main() {
         if let Some(t) = &mut trace {
             t.mark("app_running");
         }
+        let fonts = cx.text_system().all_font_names();
         let startup = Startup {
             mica_supported: fx_shell::supports_mica()
                 && std::env::var_os("FX_MICA").is_none_or(|v| v != "0"),
-            font: theme::pick_font(&cx.text_system().all_font_names()),
+            font: theme::pick_font(&fonts),
+            icon_font: theme::pick_icon_font(&fonts),
             forced: Mode::from_env(),
             density: Density::from_env().unwrap_or(Density::Standard),
         };
@@ -125,6 +128,7 @@ fn open_folder_window(
     let Startup {
         mica_supported,
         font,
+        icon_font,
         forced,
         density,
     } = startup;
@@ -157,6 +161,7 @@ fn open_folder_window(
                 forced_mode: forced.is_some(),
                 density,
                 font,
+                icon_font,
                 mica_supported,
                 mica,
             };

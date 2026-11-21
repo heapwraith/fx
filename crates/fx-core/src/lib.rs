@@ -4,12 +4,15 @@
 //! Everything here must be unit-testable on any machine.
 #![forbid(unsafe_code)]
 
+pub mod complete;
 mod entry;
 pub mod format;
+mod history;
 mod list;
 pub mod natural;
 mod selection;
 
 pub use entry::{Attributes, Entry};
+pub use history::History;
 pub use list::{Direction, FileList, SortKey};
 pub use selection::{MoveMode, Selection, Step};

@@ -8,8 +8,15 @@
 //! Selection and keyboard (task T1.2): arrows, Home/End, PgUp/PgDn (Shift
 //! extends, Ctrl moves only the cursor), Ctrl+A, Ctrl+Space, Ctrl/Shift+click;
 //! Enter or double click enters a folder; Alt+Up and Backspace go up.
+//!
+//! History (task T1.3): Alt+Left/Right and mouse buttons 4/5 go back and
+//! forward, restoring each folder's scroll position and selection. The path
+//! bar is in `path_bar.rs`.
+
+mod path_bar;
 
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::ffi::OsString;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -19,12 +26,12 @@ use std::sync::mpsc::{Receiver, channel};
 use std::time::Instant;
 
 use fx_core::format::{date_time_utc, size_kb};
-use fx_core::{Direction, Entry, FileList, MoveMode, Selection, SortKey, Step};
+use fx_core::{Direction, Entry, FileList, History, MoveMode, Selection, SortKey, Step};
 use fx_fs::Strategy;
 use gpui::{
     Context, FocusHandle, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    Pixels, ScrollStrategy, SharedString, UniformListScrollHandle, Window, canvas, div, point,
-    prelude::*, px, uniform_list,
+    NavigationDirection, Pixels, ScrollStrategy, SharedString, UniformListScrollHandle, Window,
+    canvas, div, point, prelude::*, px, uniform_list,
 };
 
 use crate::theme::{BODY_SIZE, CAPTION_SIZE, Density, Mode, RADIUS, Theme, rgba, space};
@@ -46,10 +53,42 @@ pub struct Look {
     pub forced_mode: bool,
     pub density: Density,
     pub font: &'static str,
+    pub icon_font: &'static str,
     /// Mica is available (Windows 11 22H2+ and not disabled by `FX_MICA=0`).
     pub mica_supported: bool,
     /// Mica shows through right now (see `FolderView::set_system_mode`).
     pub mica: bool,
+}
+
+/// What a folder looked like when we left it, to restore it on the way back.
+#[derive(Debug, Clone, Default)]
+struct Restore {
+    /// Selected names (at most `MAX_RESTORED` of them).
+    selected: Vec<OsString>,
+    cursor: Option<OsString>,
+    /// Scroll offset (`None`: center the cursor).
+    scroll: Option<f32>,
+}
+
+impl Restore {
+    /// Select and center one entry (going up, or clicking a breadcrumb).
+    fn cursor_on(name: OsString) -> Self {
+        Restore {
+            selected: vec![name.clone()],
+            cursor: Some(name),
+            scroll: None,
+        }
+    }
+}
+
+/// Larger selections are not remembered by the history (only the cursor), so
+/// leaving a folder never copies more than this many names on the UI thread.
+const MAX_RESTORED: usize = 10_000;
+
+#[derive(Debug, Clone)]
+struct Visit {
+    path: PathBuf,
+    restore: Restore,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -75,8 +114,12 @@ pub struct FolderView {
     selection: Selection,
     /// Bumped on every navigation; batches of an older folder read are dropped.
     generation: u64,
-    /// Entry to select once the folder is loaded (the folder we came up from).
-    reselect: Option<OsString>,
+    /// Selection and scroll to apply once the folder is loaded.
+    restore: Option<Restore>,
+    history: History<Visit>,
+    /// The path bar while it is a text field.
+    edit: Option<path_bar::PathEdit>,
+    completion: Option<path_bar::Completion>,
     look: Look,
     trace: Option<Rc<RefCell<Trace>>>,
 }
@@ -88,6 +131,13 @@ impl FolderView {
             t.mark("folder_requested");
         }
         let trace = trace.map(|t| Rc::new(RefCell::new(t)));
+        let history = History::new(
+            Visit {
+                path: path.clone(),
+                restore: Restore::default(),
+            },
+            History::<Visit>::DEFAULT_LIMIT,
+        );
         let mut view = Self {
             path,
             list: Arc::new(FileList::new()),
@@ -99,7 +149,10 @@ impl FolderView {
             filtered: None,
             selection: Selection::new(),
             generation: 0,
-            reselect: None,
+            restore: None,
+            history,
+            edit: None,
+            completion: None,
             look,
             trace,
         };
@@ -193,7 +246,7 @@ impl FolderView {
                 }
                 Arc::make_mut(&mut view.list).set_order(order);
                 view.refilter();
-                view.apply_reselect();
+                view.apply_restore();
                 view.status = match failure {
                     Some(e) => Status::Failed(e),
                     None => Status::Ready,
@@ -403,6 +456,7 @@ impl FolderView {
     /// Mouse down on entry `i`: click selects it, Ctrl+click toggles it,
     /// Shift+click selects the range from the anchor, double click opens it.
     fn click(&mut self, i: u32, ev: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        self.edit = None;
         let m = ev.modifiers;
         if m.shift {
             self.selection
@@ -455,7 +509,7 @@ impl FolderView {
             return false;
         }
         let path = self.path.join(self.list.os_name(i));
-        self.navigate(path, None, window, cx);
+        self.go_to(path, None, window, cx);
         true
     }
 
@@ -465,25 +519,85 @@ impl FolderView {
             return false;
         };
         let child = self.path.file_name().map(OsString::from);
-        self.navigate(parent, child, window, cx);
+        self.go_to(parent, child.map(Restore::cursor_on), window, cx);
         true
     }
 
-    /// Shows another folder in this window.
-    fn navigate(
+    /// Opens another folder in this window, as a new history entry.
+    fn go_to(
         &mut self,
         path: PathBuf,
-        reselect: Option<OsString>,
+        restore: Option<Restore>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.history.current_mut().restore = self.snapshot();
+        self.history.push(Visit {
+            path: path.clone(),
+            restore: Restore::default(),
+        });
+        self.load(path, restore, window, cx);
+    }
+
+    /// Alt+Left / mouse button 4.
+    fn go_back(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let snapshot = self.snapshot();
+        if !self.history.can_go_back() {
+            return false;
+        }
+        self.history.current_mut().restore = snapshot;
+        if let Some(v) = self.history.go_back().cloned() {
+            self.load(v.path, Some(v.restore), window, cx);
+        }
+        true
+    }
+
+    /// Alt+Right / mouse button 5.
+    fn go_forward(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let snapshot = self.snapshot();
+        if !self.history.can_go_forward() {
+            return false;
+        }
+        self.history.current_mut().restore = snapshot;
+        if let Some(v) = self.history.go_forward().cloned() {
+            self.load(v.path, Some(v.restore), window, cx);
+        }
+        true
+    }
+
+    /// Selection and scroll position of the folder shown now.
+    fn snapshot(&self) -> Restore {
+        let selected = if self.selection.len() <= MAX_RESTORED {
+            self.selection
+                .selected()
+                .map(|i| self.list.os_name(i))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        Restore {
+            selected,
+            cursor: self.selection.cursor().map(|i| self.list.os_name(i)),
+            scroll: Some(f32::from(self.scroll.0.borrow().base_handle.offset().y)),
+        }
+    }
+
+    /// Shows another folder in this window (history is the caller's job).
+    fn load(
+        &mut self,
+        path: PathBuf,
+        restore: Option<Restore>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit = None;
         self.generation += 1;
         self.path = path;
         self.list = Arc::new(FileList::new());
         self.filter_text.clear();
         self.filtered = None;
         self.selection.clear();
-        self.reselect = reselect;
+        self.restore = restore;
         self.scroll
             .0
             .borrow()
@@ -494,22 +608,51 @@ impl FolderView {
         cx.notify();
     }
 
-    /// After going up, selects the folder we came from (if nothing else was
-    /// selected meanwhile) and centers it.
-    fn apply_reselect(&mut self) {
-        let Some(name) = self.reselect.take() else {
+    /// Once loaded, restores the selection and scroll position saved for this
+    /// folder (unless the user selected something meanwhile). Names that no
+    /// longer exist are skipped.
+    fn apply_restore(&mut self) {
+        let Some(r) = self.restore.take() else {
             return;
         };
         if !self.selection.is_empty() {
             return;
         }
-        let shown = name.to_string_lossy();
-        let found = (0..self.list.len() as u32)
-            .find(|&i| self.list.name(i) == shown && self.list.os_name(i) == name);
-        let Some(i) = found else { return };
-        self.selection.select_only(i);
-        if let Some(pos) = self.selection.position(self.list.order(), i) {
-            self.scroll.scroll_to_item(pos, ScrollStrategy::Center);
+        let exact: HashSet<&OsString> = r.selected.iter().chain(&r.cursor).collect();
+        let shown: HashSet<String> = exact
+            .iter()
+            .map(|n| n.to_string_lossy().into_owned())
+            .collect();
+        let mut selected = Vec::new();
+        let mut cursor = None;
+        if !shown.is_empty() {
+            for i in 0..self.list.len() as u32 {
+                if !shown.contains(self.list.name(i)) {
+                    continue;
+                }
+                let name = self.list.os_name(i);
+                if r.cursor.as_ref() == Some(&name) {
+                    cursor = Some(i);
+                }
+                if r.selected.contains(&name) {
+                    selected.push(i);
+                }
+            }
+        }
+        self.selection.restore(selected, cursor);
+        match (r.scroll, cursor) {
+            (Some(y), _) => self
+                .scroll
+                .0
+                .borrow()
+                .base_handle
+                .set_offset(point(px(0.0), px(y))),
+            (None, Some(i)) => {
+                if let Some(pos) = self.selection.position(self.list.order(), i) {
+                    self.scroll.scroll_to_item(pos, ScrollStrategy::Center);
+                }
+            }
+            (None, None) => {}
         }
     }
 
@@ -553,6 +696,26 @@ impl FolderView {
         let ks = &event.keystroke;
         let m = ks.modifiers;
         let only_ctrl = m.control && !m.alt && !m.shift;
+        let only_alt = m.alt && !m.control && !m.shift;
+        if self.edit_key(ks, window, cx) {
+            if let Some(trace) = &self.trace {
+                trace.borrow_mut().input_started(started, "path");
+            }
+            cx.notify();
+            return;
+        }
+        let bar = match ks.key.as_str() {
+            "l" if only_ctrl => true,
+            "d" if only_alt => true,
+            _ => false,
+        };
+        if bar {
+            self.begin_edit(window, cx);
+            if let Some(trace) = &self.trace {
+                trace.borrow_mut().input_started(started, "path");
+            }
+            return;
+        }
         // Ctrl+1/2/3: compact, standard, comfortable rows.
         if only_ctrl {
             let density = match ks.key.as_str() {
@@ -578,7 +741,9 @@ impl FolderView {
             _ => None,
         };
         let handled = match ks.key.as_str() {
-            "up" if m.alt && !m.control && !m.shift => self.go_up(window, cx).then_some("open"),
+            "up" if only_alt => self.go_up(window, cx).then_some("open"),
+            "left" if only_alt => self.go_back(window, cx).then_some("open"),
+            "right" if only_alt => self.go_forward(window, cx).then_some("open"),
             _ if m.alt || m.platform => None,
             _ if step.is_some() => {
                 let mode = if m.shift {
@@ -749,22 +914,19 @@ impl Render for FolderView {
             .font_family(self.look.font)
             .text_size(px(BODY_SIZE))
             .text_color(rgba(t.text))
-            .child(
-                div()
-                    .h(px(space(10)))
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .px(px(space(4)))
-                    .child(div().truncate().child(self.path.display().to_string()))
-                    .child(
-                        div()
-                            .flex_none()
-                            .pl(px(space(4)))
-                            .text_color(rgba(t.text_secondary))
-                            .child(self.status_text()),
-                    ),
+            .on_mouse_down(
+                MouseButton::Navigate(NavigationDirection::Back),
+                cx.listener(|view, _: &MouseDownEvent, window, cx| {
+                    view.go_back(window, cx);
+                }),
             )
+            .on_mouse_down(
+                MouseButton::Navigate(NavigationDirection::Forward),
+                cx.listener(|view, _: &MouseDownEvent, window, cx| {
+                    view.go_forward(window, cx);
+                }),
+            )
+            .child(self.render_path_bar(cx))
             .child(
                 div()
                     .flex_1()

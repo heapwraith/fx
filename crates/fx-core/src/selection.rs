@@ -130,6 +130,17 @@ impl Selection {
         self.hint = to;
     }
 
+    /// Replaces the selection (e.g. when coming back to a folder through the
+    /// history); the cursor becomes the anchor too.
+    pub fn restore(&mut self, selected: impl IntoIterator<Item = u32>, cursor: Option<u32>) {
+        self.clear_bits();
+        for i in selected {
+            self.set(i, true);
+        }
+        self.cursor = cursor;
+        self.anchor = cursor;
+    }
+
     /// Ctrl+A: selects every row; the cursor stays (or goes to the first row).
     pub fn select_all(&mut self, rows: &[u32]) {
         self.clear_bits();
@@ -363,6 +374,17 @@ mod tests {
         // Extending to an entry that is not shown does nothing.
         s.extend_to(&[1, 2, 3], 7);
         assert_eq!(sel(&s), [2]);
+    }
+
+    #[test]
+    fn restore_replaces_selection_and_cursor() {
+        let mut s = Selection::new();
+        s.select_only(1);
+        s.restore([4, 9, 4], Some(9));
+        assert_eq!((sel(&s), s.len()), (vec![4, 9], 2));
+        assert_eq!((s.cursor(), s.anchor()), (Some(9), Some(9)));
+        s.extend_to(&rows(12), 11);
+        assert_eq!(sel(&s), [9, 10, 11]);
     }
 
     #[test]
