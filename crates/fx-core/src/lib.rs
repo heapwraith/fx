@@ -17,7 +17,7 @@ mod undo;
 
 pub use entry::{Attributes, Change, Entry};
 pub use history::History;
-pub use list::{Applied, Direction, FileList, SortKey};
+pub use list::{Applied, Direction, FileList, SortKey, next_sort, type_label};
 pub use pinned::Pinned;
 pub use selection::{MoveMode, Selection, Step};
 pub use tabs::Tabs;

@@ -87,6 +87,30 @@ pub fn run() -> std::io::Result<()> {
         }
     }
 
+    // Re-sort from the name order by each header (T1.20): what a click on a
+    // column costs on the background thread (informative).
+    let mut resorts = Vec::new();
+    for key in [
+        SortKey::Size,
+        SortKey::Modified,
+        SortKey::Type,
+        SortKey::Name,
+    ] {
+        let mut times = Vec::with_capacity(RUNS);
+        for k in 0..RUNS {
+            let direction = if k % 2 == 0 {
+                key.first_direction()
+            } else {
+                Direction::Ascending
+            };
+            let start = Instant::now();
+            let order = list.sorted_order(key, direction);
+            times.push(start.elapsed());
+            assert_eq!(order.len(), n);
+        }
+        resorts.push((key.id(), median_p95(&times)));
+    }
+
     let (extend_med, extend_p95) = median_p95(&extend);
     let (sort_med, sort_p95) = median_p95(&sort);
     let (filter_med, filter_p95) = median_p95(&filter);
@@ -104,6 +128,11 @@ pub fn run() -> std::io::Result<()> {
     println!(
         "  filter per key    {filter_med:>8.2} ms  p95 {filter_p95:>8.2} ms   target ≤ {TARGET_FILTER_MS} ms (max {filter_max:.2} ms; typed {TYPED:?}, matches {matches:?})"
     );
+    for (id, (med, p95)) in &resorts {
+        println!(
+            "  re-sort by {id:<9}{med:>8.2} ms  p95 {p95:>8.2} ms   (informative, background thread)"
+        );
+    }
     println!("  {}", if pass { "pass" } else { "FAIL" });
 
     let date = utc_date(SystemTime::now());

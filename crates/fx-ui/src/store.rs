@@ -50,6 +50,10 @@ pub struct TabState {
     pub cursor: Option<String>,
     pub back: Vec<PathBuf>,
     pub forward: Vec<PathBuf>,
+    /// Sort column (`SortKey::id`) and direction; `None`: name, A→Z.
+    pub sort: Option<(String, bool)>,
+    /// Widths of the Size, Type and Date columns; `None`: defaults.
+    pub widths: Option<[f32; 3]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -121,6 +125,10 @@ const SCHEMA: &str = "
     CREATE TABLE IF NOT EXISTS tab_history (
         win INTEGER NOT NULL, tab INTEGER NOT NULL, forward INTEGER NOT NULL,
         pos INTEGER NOT NULL, path TEXT NOT NULL);
+    -- T1.20. A table of its own: databases saved before it need no migration.
+    CREATE TABLE IF NOT EXISTS tab_view (
+        win INTEGER NOT NULL, tab INTEGER NOT NULL, sort TEXT, descending INTEGER,
+        size_w REAL, type_w REAL, date_w REAL);
 ";
 
 fn text(p: &Path) -> String {
@@ -144,7 +152,7 @@ impl Db {
     pub fn save(&mut self, s: &Session) -> rusqlite::Result<()> {
         let tx = self.conn.transaction()?;
         tx.execute_batch(
-            "DELETE FROM windows; DELETE FROM tabs; DELETE FROM tab_selected; DELETE FROM tab_history;",
+            "DELETE FROM windows; DELETE FROM tabs; DELETE FROM tab_selected; DELETE FROM tab_history; DELETE FROM tab_view;",
         )?;
         for (w, win) in s.windows.iter().enumerate() {
             let b = win.bounds;
@@ -164,6 +172,21 @@ impl Db {
                     "INSERT INTO tabs (win, pos, path, scroll, grid, cursor) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                     params![w as i64, t as i64, text(&tab.path), tab.scroll, tab.grid, tab.cursor],
                 )?;
+                if tab.sort.is_some() || tab.widths.is_some() {
+                    let w3 = tab.widths;
+                    tx.execute(
+                        "INSERT INTO tab_view (win, tab, sort, descending, size_w, type_w, date_w) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                        params![
+                            w as i64,
+                            t as i64,
+                            tab.sort.as_ref().map(|s| s.0.clone()),
+                            tab.sort.as_ref().map(|s| s.1),
+                            w3.map(|v| v[0]),
+                            w3.map(|v| v[1]),
+                            w3.map(|v| v[2])
+                        ],
+                    )?;
+                }
                 for name in &tab.selected {
                     tx.execute(
                         "INSERT INTO tab_selected (win, tab, name) VALUES (?1, ?2, ?3)",
@@ -259,6 +282,30 @@ impl Db {
                         tab.back.push(PathBuf::from(path));
                     }
                 }
+                let view = self.conn.query_row(
+                    "SELECT sort, descending, size_w, type_w, date_w FROM tab_view WHERE win = ?1 AND tab = ?2",
+                    [*id, pos],
+                    |r| {
+                        Ok((
+                            r.get::<_, Option<String>>(0)?,
+                            r.get::<_, Option<bool>>(1)?,
+                            r.get::<_, Option<f32>>(2)?,
+                            r.get::<_, Option<f32>>(3)?,
+                            r.get::<_, Option<f32>>(4)?,
+                        ))
+                    },
+                );
+                match view {
+                    Ok((sort, desc, a, b, c)) => {
+                        tab.sort = sort.map(|k| (k, desc.unwrap_or(false)));
+                        tab.widths = match (a, b, c) {
+                            (Some(a), Some(b), Some(c)) => Some([a, b, c]),
+                            _ => None,
+                        };
+                    }
+                    Err(rusqlite::Error::QueryReturnedNoRows) => {}
+                    Err(e) => return Err(e),
+                }
                 win.tabs.push(tab);
             }
         }
@@ -340,6 +387,8 @@ mod tests {
                         cursor: Some("b.png".into()),
                         back: vec![PathBuf::from(r"C:\"), PathBuf::from(r"C:\Users")],
                         forward: vec![PathBuf::from(r"C:\Fotos\2026")],
+                        sort: Some(("modified".into(), true)),
+                        widths: Some([90.0, 140.0, 150.0]),
                     },
                     TabState {
                         path: PathBuf::from(r"D:\Projetos"),

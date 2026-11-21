@@ -195,3 +195,12 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Decisão:** um botão de relógio na faixa de abas (e Ctrl+Shift+H) abre um painel com todas as operações da sessão que podem ser desfeitas, da mais nova para a mais antiga, com hora e uma frase ("Renomeou "b.txt" para "q.txt"", "Enviou 3 itens para a Lixeira"). Cada uma tem o próprio "Desfazer", que reverte só aquela, mesmo que não seja a última; as mais novas ficam como estão. Esc ou clicar fora fecha.
 - **Segurança:** a reversão é um trabalho comum do motor (sem sobrescrever, SAFETY.md §2.3). Se algo mudou depois (o item foi renomeado ou movido), a reversão falha e avisa; a entrada volta ao histórico. `UndoStack` ganhou `undo_entries` e `take_undo_at` (com teste); Ctrl+Z continua desfazendo a mais recente.
 - **Verificado na janela:** criar pasta, renomear arquivo, abrir o painel e desfazer só a criação: a pasta saiu (para a Lixeira, como todo desfazer de "nova pasta") e a renomeação continuou.
+
+## D-029 — Ordenar por coluna, coluna Tipo e larguras (T1.20)
+- **Data:** 2026-11-21 · **Status:** aceita
+- **Ordenação:** clicar no cabeçalho ordena por nome, tipo, tamanho ou data; clicar de novo inverte. O primeiro clique em data e tamanho já vem do maior/mais novo para o menor (o que se procura quase sempre); nome e tipo começam de A a Z. Pastas ficam sempre antes. Uma seta no cabeçalho mostra a coluna e a direção.
+- **Fora da thread de UI:** a nova ordem é calculada numa thread de fundo sobre uma cópia barata (`Arc`) da lista e aplicada com `set_sorted_order`. Se entraram ou saíram itens nesse meio-tempo, ela é recalculada; um resultado velho (cliques seguidos) é descartado. Seleção e cursor são guardados por entrada, então sobrevivem (teste em `fx-core`); depois de reordenar, o cursor é trazido à vista.
+- **Custo medido** (`fx-bench list`, 100 mil, thread de fundo): tamanho 9,5 ms, data 8,9 ms, nome 39,5 ms, tipo 69 ms (comparação natural da extensão).
+- **Coluna Tipo:** "Pasta de arquivos", "Arquivo JPG" ou "Arquivo". Os nomes amigáveis do registro ("Documento de Texto") pedem o shell por extensão; ficam para depois, com cache.
+- **Larguras:** arrastar a borda esquerda de Tipo, Tamanho ou Data ajusta a coluna (56 a 480 px); o nome ocupa o resto. Em lista estreita somem nesta ordem: tipo, data, tamanho.
+- **Por aba, persistido:** ordenação e larguras vão numa tabela nova do `state.db` (`tab_view`), para bancos antigos abrirem sem migração.

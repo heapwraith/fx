@@ -29,6 +29,62 @@ pub enum SortKey {
     Type,
 }
 
+impl SortKey {
+    /// Stable identifier, for saved state.
+    pub const fn id(self) -> &'static str {
+        match self {
+            SortKey::Name => "name",
+            SortKey::Size => "size",
+            SortKey::Modified => "modified",
+            SortKey::Type => "type",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        [
+            SortKey::Name,
+            SortKey::Size,
+            SortKey::Modified,
+            SortKey::Type,
+        ]
+        .into_iter()
+        .find(|k| k.id() == id)
+    }
+
+    /// Direction of the first click on a column header: newest and largest
+    /// first for dates and sizes (what one usually looks for), A→Z otherwise.
+    pub const fn first_direction(self) -> Direction {
+        match self {
+            SortKey::Size | SortKey::Modified => Direction::Descending,
+            SortKey::Name | SortKey::Type => Direction::Ascending,
+        }
+    }
+}
+
+/// Header click: the same column flips the direction, another column starts
+/// at its first direction.
+pub fn next_sort(current: (SortKey, Direction), clicked: SortKey) -> (SortKey, Direction) {
+    match current {
+        (key, Direction::Ascending) if key == clicked => (key, Direction::Descending),
+        (key, Direction::Descending) if key == clicked => (key, Direction::Ascending),
+        _ => (clicked, clicked.first_direction()),
+    }
+}
+
+/// "Type" column text: folders, then the extension ("Arquivo JPG"), or just
+/// "Arquivo" without one (a leading dot is not an extension: ".gitignore").
+pub fn type_label(name: &str, is_dir: bool) -> String {
+    if is_dir {
+        return "Pasta de arquivos".to_owned();
+    }
+    match name.rfind('.') {
+        Some(dot) if dot > 0 && dot + 1 < name.len() => {
+            format!("Arquivo {}", name[dot + 1..].to_uppercase())
+        }
+        _ => "Arquivo".to_owned(),
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
     Ascending,
@@ -437,6 +493,87 @@ mod tests {
         list.extend(entries);
         list.sort(key, dir);
         names(&list, list.order())
+    }
+
+    #[test]
+    fn header_clicks_and_ids() {
+        use Direction::*;
+        assert_eq!(
+            next_sort((SortKey::Name, Ascending), SortKey::Name),
+            (SortKey::Name, Descending)
+        );
+        assert_eq!(
+            next_sort((SortKey::Name, Descending), SortKey::Name),
+            (SortKey::Name, Ascending)
+        );
+        assert_eq!(
+            next_sort((SortKey::Name, Ascending), SortKey::Modified),
+            (SortKey::Modified, Descending)
+        );
+        assert_eq!(
+            next_sort((SortKey::Size, Descending), SortKey::Type),
+            (SortKey::Type, Ascending)
+        );
+        for k in [
+            SortKey::Name,
+            SortKey::Size,
+            SortKey::Modified,
+            SortKey::Type,
+        ] {
+            assert_eq!(SortKey::from_id(k.id()), Some(k));
+        }
+        assert_eq!(SortKey::from_id("x"), None);
+    }
+
+    #[test]
+    fn type_labels() {
+        assert_eq!(type_label("foto.jpg", false), "Arquivo JPG");
+        assert_eq!(type_label("a.tar.gz", false), "Arquivo GZ");
+        assert_eq!(type_label("README", false), "Arquivo");
+        assert_eq!(type_label(".gitignore", false), "Arquivo");
+        assert_eq!(type_label("estranho.", false), "Arquivo");
+        assert_eq!(type_label("fotos.2024", true), "Pasta de arquivos");
+    }
+
+    #[test]
+    fn reordering_keeps_selection_and_cursor() {
+        use crate::{MoveMode, Selection, Step};
+        let mut list = FileList::new();
+        list.extend(vec![file("b", 30, 1), file("a", 10, 3), file("c", 20, 2)]);
+        list.sort(SortKey::Name, Direction::Ascending);
+        let mut sel = Selection::default();
+        // A cursor and a two-entry selection.
+        sel.move_cursor(list.order(), Step::Down(1), MoveMode::Select);
+        sel.move_cursor(list.order(), Step::Down(1), MoveMode::Extend);
+        let chosen: Vec<String> = names(&list, list.order())
+            .into_iter()
+            .zip(list.order())
+            .filter(|(_, i)| sel.is_selected(**i))
+            .map(|(n, _)| n)
+            .collect();
+        let cursor = sel.cursor().map(|i| list.name(i).to_owned());
+        // Re-sort off the UI thread's way: compute, then apply.
+        let order = list.sorted_order(SortKey::Size, Direction::Descending);
+        assert!(list.set_sorted_order(order, SortKey::Size, Direction::Descending));
+        assert_eq!(names(&list, list.order()), ["b", "c", "a"]);
+        let after: Vec<String> = list
+            .order()
+            .iter()
+            .filter(|i| sel.is_selected(**i))
+            .map(|&i| list.name(i).to_owned())
+            .collect();
+        let mut before = chosen.clone();
+        before.sort();
+        let mut now = after.clone();
+        now.sort();
+        assert_eq!(before, now, "same entries selected");
+        assert_eq!(sel.cursor().map(|i| list.name(i).to_owned()), cursor);
+        // The cursor's display row follows the entry.
+        let row = names(&list, list.order())
+            .iter()
+            .position(|n| Some(n) == cursor.as_ref());
+        assert!(row.is_some());
+        assert_eq!(sel.position(list.order(), sel.cursor().unwrap()), row);
     }
 
     #[test]

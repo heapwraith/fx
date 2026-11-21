@@ -245,7 +245,7 @@ O usuário pediu que o fx tivesse o básico completo, sem bugs visuais, e três 
 - Lista dos problemas encontrados, com captura antes e depois de cada correção; nada sobreposto, cortado sem reticências ou desalinhado em 640 px de largura.
 
 ## T1.20 — Ordenar por coluna, coluna Tipo e largura das colunas
-- [ ] Concluída em: ____ · Resumo: ____
+- [ ] Concluída em: ____ · Resumo: implementada em 2026-11-21 (D-029): cabeçalho ordena com seta, coluna Tipo, larguras ajustáveis, ordenação em thread de fundo (100 mil: tamanho 9,5 ms, data 8,9, nome 39,5, tipo 69), seleção mantida (teste), persistência por aba. **Falta:** P4 durante a reordenação e a conferência visual na janela (adiadas: o usuário pausou os testes que usam a janela).
 
 **Fazer**
 - Clique no cabeçalho ordena por nome, tamanho, data ou tipo (clicar de novo inverte), com seta indicando; coluna Tipo; arrastar a borda do cabeçalho ajusta a largura. Ordenação fora da thread de UI; persiste por aba.

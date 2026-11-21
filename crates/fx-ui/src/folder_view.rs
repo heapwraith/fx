@@ -32,7 +32,10 @@ use std::sync::mpsc::{Receiver, channel};
 use std::time::{Duration, Instant, SystemTime};
 
 use fx_core::format::{date_time, items, size_kb};
-use fx_core::{Change, Direction, Entry, FileList, History, MoveMode, Selection, SortKey, Step};
+use fx_core::{
+    Change, Direction, Entry, FileList, History, MoveMode, Selection, SortKey, Step, next_sort,
+    type_label,
+};
 use fx_fs::Strategy;
 use fx_shell::icons::icon_key;
 use fx_shell::launch::Launch;
@@ -51,6 +54,14 @@ use crate::trace::Trace;
 
 const SIZE_COL: f32 = 112.0;
 const DATE_COL: f32 = 144.0;
+const TYPE_COL: f32 = 136.0;
+/// Limits when a column is resized by dragging its header border (T1.20).
+const COL_MIN: f32 = 56.0;
+const COL_MAX: f32 = 480.0;
+/// Width of the grab area on a header border.
+const RESIZE_HANDLE: f32 = 8.0;
+const ICON_SORT_UP: &str = "\u{E70E}";
+const ICON_SORT_DOWN: &str = "\u{E70D}";
 const SCROLLBAR_WIDTH: f32 = 12.0;
 const THUMB_MIN: f32 = 24.0;
 /// Width of the accent bar on the selected row (Fluent list selection).
@@ -174,12 +185,19 @@ pub struct FolderView {
     /// whole list sorted (shown in the status bar: speed made visible).
     load_started: Option<Instant>,
     loaded_in: Option<Duration>,
+    /// Sort column and direction of this tab (kept across folders, T1.20).
+    sort: (SortKey, Direction),
+    /// Bumped by each re-sort: a late result of an older one is dropped.
+    sort_ticket: u64,
+    widths: Widths,
+    resizing: Option<Resize>,
 }
 
-/// Which optional columns fit (T1.19): in a narrow list the date goes first,
-/// then the size, so names stay readable.
+/// Which optional columns fit (T1.19): in a narrow list the type goes
+/// first, then the date, then the size, so names stay readable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Columns {
+    kind: bool,
     size: bool,
     date: bool,
 }
@@ -187,20 +205,77 @@ struct Columns {
 impl Columns {
     /// Name column keeps at least this much room.
     const NAME_MIN: f32 = 200.0;
+    const ALL: Columns = Columns {
+        kind: true,
+        size: true,
+        date: true,
+    };
 
-    fn for_width(width: f32) -> Self {
+    fn for_width(width: f32, w: Widths) -> Self {
         if width <= 0.0 {
-            return Self {
-                size: true,
-                date: true,
-            }; // before the first layout
+            return Self::ALL; // before the first layout
         }
         let room = width - SCROLLBAR_WIDTH - 2.0 * space(4) - ICON_SIZE - Self::NAME_MIN;
+        let gap = space(3);
         Self {
-            size: room >= SIZE_COL + space(3),
-            date: room >= SIZE_COL + DATE_COL + 2.0 * space(3),
+            size: room >= w.size + gap,
+            date: room >= w.size + w.date + 2.0 * gap,
+            kind: room >= w.size + w.date + w.kind + 3.0 * gap,
         }
     }
+}
+
+/// Widths of the optional columns (the name takes the rest), per tab.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Widths {
+    kind: f32,
+    size: f32,
+    date: f32,
+}
+
+impl Default for Widths {
+    fn default() -> Self {
+        Self {
+            kind: TYPE_COL,
+            size: SIZE_COL,
+            date: DATE_COL,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Col {
+    Kind,
+    Size,
+    Date,
+}
+
+impl Widths {
+    fn get(&self, c: Col) -> f32 {
+        match c {
+            Col::Kind => self.kind,
+            Col::Size => self.size,
+            Col::Date => self.date,
+        }
+    }
+
+    fn set(&mut self, c: Col, w: f32) {
+        let w = w.clamp(COL_MIN, COL_MAX);
+        match c {
+            Col::Kind => self.kind = w,
+            Col::Size => self.size = w,
+            Col::Date => self.date = w,
+        }
+    }
+}
+
+/// A header border being dragged: the column, where the drag started and
+/// the width then.
+#[derive(Debug, Clone, Copy)]
+struct Resize {
+    col: Col,
+    start_x: f32,
+    start_w: f32,
 }
 
 impl FolderView {
@@ -271,13 +346,14 @@ impl FolderView {
             awaiting_folder: None,
             rename_when_listed: None,
             press: None,
-            columns: Columns {
-                size: true,
-                date: true,
-            },
+            columns: Columns::ALL,
             last_list_width: 0.0,
             load_started: None,
             loaded_in: None,
+            sort: (SortKey::Name, Direction::Ascending),
+            sort_ticket: 0,
+            widths: Widths::default(),
+            resizing: None,
         };
         view.start_loading(cx);
         view
@@ -478,15 +554,16 @@ impl FolderView {
                 }
                 view.status = Status::Sorting;
                 cx.notify();
-                Some(view.list.clone())
+                Some((view.list.clone(), view.sort))
             }) else {
                 return;
             };
+            let (list, (key, direction)) = list;
             // The clone is dropped before we return to the UI thread, so
             // `Arc::make_mut` below does not copy the list.
             let order = background
                 .spawn(async move {
-                    let order = list.sorted_order(SortKey::Name, Direction::Ascending);
+                    let order = list.sorted_order(key, direction);
                     drop(list);
                     order
                 })
@@ -495,11 +572,14 @@ impl FolderView {
                 if view.generation != generation {
                     return;
                 }
-                Arc::make_mut(&mut view.list).set_sorted_order(
-                    order,
-                    SortKey::Name,
-                    Direction::Ascending,
-                );
+                if !Arc::make_mut(&mut view.list).set_sorted_order(order, key, direction)
+                    || view.sort != (key, direction)
+                {
+                    // The sort changed while this one ran: sort again (the
+                    // list keeps its arrival order meanwhile).
+                    view.status = Status::Ready;
+                    view.resort(cx);
+                }
                 view.refilter();
                 view.apply_restore();
                 view.status = match failure {
@@ -530,6 +610,7 @@ impl FolderView {
         let t = self.look.theme;
         let row_h = self.look.density.row_height();
         let columns = self.columns;
+        let widths = self.widths;
         let first = range.start;
         // Icons of the rows drawn; unknown ones are requested after this pass.
         let icons = self.icons.read(cx);
@@ -625,10 +706,23 @@ impl FolderView {
                                     .child(SharedString::from(self.list.name(i).to_owned()))
                                     .into_any_element(),
                             })
+                            .when(columns.kind, |d| {
+                                d.child(
+                                    div()
+                                        .w(px(widths.kind))
+                                        .flex_none()
+                                        .truncate()
+                                        .text_color(rgba(t.text_secondary))
+                                        .child(type_label(
+                                            self.list.name(i),
+                                            self.list.attributes(i).is_dir(),
+                                        )),
+                                )
+                            })
                             .when(columns.size, |d| {
                                 d.child(
                                     div()
-                                        .w(px(SIZE_COL))
+                                        .w(px(widths.size))
                                         .flex_none()
                                         .flex()
                                         .justify_end()
@@ -639,8 +733,9 @@ impl FolderView {
                             .when(columns.date, |d| {
                                 d.child(
                                     div()
-                                        .w(px(DATE_COL))
+                                        .w(px(widths.date))
                                         .flex_none()
+                                        .truncate()
                                         .text_color(rgba(t.text_secondary))
                                         .child(local_date(self.list.modified(i))),
                                 )
@@ -848,6 +943,64 @@ impl FolderView {
         }
     }
 
+    /// A column header was clicked: sort by it (again: other direction).
+    fn sort_by(&mut self, key: SortKey, cx: &mut Context<Self>) {
+        self.sort = next_sort(self.sort, key);
+        self.resort(cx);
+        cx.notify(); // the header arrow changes now; rows when the sort lands
+    }
+
+    /// Sorts the list again by `self.sort`, off the UI thread (T1.20). While
+    /// the folder is still being read, the end of the read sorts it instead.
+    fn resort(&mut self, cx: &mut Context<Self>) {
+        if !matches!(self.status, Status::Ready | Status::Failed(_)) {
+            return;
+        }
+        self.sort_ticket += 1;
+        let (ticket, generation) = (self.sort_ticket, self.generation);
+        let (key, direction) = self.sort;
+        let list = self.list.clone();
+        cx.spawn(async move |this, cx| {
+            let order = cx
+                .background_spawn(async move {
+                    let order = list.sorted_order(key, direction);
+                    drop(list);
+                    order
+                })
+                .await;
+            let _ = this.update(cx, |view, cx| {
+                if view.generation != generation || view.sort_ticket != ticket {
+                    return;
+                }
+                if Arc::make_mut(&mut view.list).set_sorted_order(order, key, direction) {
+                    view.refilter();
+                    view.reveal_cursor();
+                    cx.notify();
+                } else {
+                    // Entries came or went meanwhile: sort the current list.
+                    view.resort(cx);
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// After a re-sort: the cursor row in view (or the top, without one).
+    fn reveal_cursor(&mut self) {
+        let rows = rows_of(&self.filtered, &self.list);
+        let pos = self
+            .selection
+            .cursor()
+            .and_then(|c| self.selection.position(rows, c));
+        match pos {
+            Some(pos) => {
+                let item = if self.grid { pos / self.grid_cols } else { pos };
+                self.scroll.scroll_to_item(item, ScrollStrategy::Center);
+            }
+            None => self.scroll.scroll_to_item(0, ScrollStrategy::Top),
+        }
+    }
+
     /// This tab's state, for the saved session (task T1.17).
     pub fn export(&self) -> crate::store::TabState {
         let r = self.snapshot();
@@ -865,6 +1018,11 @@ impl FolderView {
             cursor: r.cursor.map(|c| c.to_string_lossy().into_owned()),
             back: paths(back),
             forward: paths(forward),
+            sort: Some((
+                self.sort.0.id().to_owned(),
+                self.sort.1 == Direction::Descending,
+            )),
+            widths: Some([self.widths.size, self.widths.kind, self.widths.date]),
         }
     }
 
@@ -872,6 +1030,22 @@ impl FolderView {
     /// history, and the selection and scroll once the folder is read.
     pub fn apply_saved(&mut self, t: crate::store::TabState) {
         self.grid = t.grid;
+        if let Some(key) = t.sort.as_ref().and_then(|(k, _)| SortKey::from_id(k)) {
+            let desc = t.sort.as_ref().is_some_and(|(_, d)| *d);
+            let dir = if desc {
+                Direction::Descending
+            } else {
+                Direction::Ascending
+            };
+            self.sort = (key, dir);
+        }
+        if let Some([size, kind, date]) = t.widths {
+            let mut w = Widths::default();
+            w.set(Col::Size, size);
+            w.set(Col::Kind, kind);
+            w.set(Col::Date, date);
+            self.widths = w;
+        }
         self.restore = Some(Restore {
             selected: t.selected.into_iter().map(OsString::from).collect(),
             cursor: t.cursor.map(OsString::from),
@@ -1481,6 +1655,117 @@ impl FolderView {
     }
 }
 
+impl FolderView {
+    /// A column header: click sorts by it (an arrow shows the direction);
+    /// fixed columns have a grab area on their left border to resize them.
+    fn header_cell(
+        &self,
+        label: &'static str,
+        key: SortKey,
+        col: Option<Col>,
+        cx: &mut Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
+        let t = self.look.theme;
+        let arrow = (self.sort.0 == key).then_some(match self.sort.1 {
+            Direction::Ascending => ICON_SORT_UP,
+            Direction::Descending => ICON_SORT_DOWN,
+        });
+        let mut cell = div()
+            .id(label)
+            .relative()
+            .h_full()
+            .flex()
+            .items_center()
+            .gap(px(space(1)))
+            .min_w_0()
+            .text_size(px(CAPTION_SIZE))
+            .text_color(rgba(t.text_secondary))
+            .hover(|s| s.text_color(rgba(t.text)))
+            // Sizes line up on the right, like the column.
+            .when(key == SortKey::Size, |d| d.justify_end())
+            .child(div().min_w_0().truncate().child(label))
+            .when_some(arrow, |d, glyph| {
+                d.child(
+                    div()
+                        .flex_none()
+                        .font_family(self.look.icon_font)
+                        .text_size(px(8.0))
+                        .child(glyph),
+                )
+            })
+            .on_click(cx.listener(move |view, _: &gpui::ClickEvent, _, cx| {
+                view.sort_by(key, cx);
+            }));
+        if let Some(col) = col {
+            let width = self.widths.get(col);
+            cell = cell.w(px(width)).flex_none().child(
+                div()
+                    .id(SharedString::from(format!("resize-{label}")))
+                    .absolute()
+                    .top_0()
+                    .bottom_0()
+                    // Centered on the gap between this column and the previous one.
+                    .left(px(-(space(3) + RESIZE_HANDLE) / 2.0))
+                    .w(px(RESIZE_HANDLE))
+                    .cursor_col_resize()
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |view, ev: &MouseDownEvent, _, cx| {
+                            view.resizing = Some(Resize {
+                                col,
+                                start_x: f32::from(ev.position.x),
+                                start_w: view.widths.get(col),
+                            });
+                            // Not a click on the header (no sort).
+                            cx.stop_propagation();
+                        }),
+                    ),
+            );
+        }
+        cell
+    }
+
+    /// While a header border is dragged: follows the mouse anywhere in the
+    /// window until the button is released.
+    fn resize_tracker(&self, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
+        self.resizing?;
+        let entity = cx.entity();
+        Some(
+            canvas(
+                |_, _, _| (),
+                move |_, _, window, _| {
+                    window.on_mouse_event({
+                        let entity = entity.clone();
+                        move |_: &MouseUpEvent, _, _, cx| {
+                            entity.update(cx, |view, cx| {
+                                view.resizing = None;
+                                cx.notify();
+                            });
+                        }
+                    });
+                    window.on_mouse_event(move |ev: &MouseMoveEvent, _, _, cx| {
+                        entity.update(cx, |view, cx| {
+                            let Some(r) = view.resizing else { return };
+                            if !ev.dragging() {
+                                // Released outside the window.
+                                view.resizing = None;
+                            } else {
+                                // The border is on the column's left: dragging
+                                // left widens it (the name column gives way).
+                                let x = f32::from(ev.position.x);
+                                view.widths.set(r.col, r.start_w + (r.start_x - x));
+                            }
+                            cx.notify();
+                        });
+                    });
+                },
+            )
+            .absolute()
+            .size_0(),
+        )
+    }
+}
+
 /// Modification date in the local time zone of that date.
 fn local_date(t: SystemTime) -> String {
     date_time(t, fx_shell::utc_offset_at(t))
@@ -1548,7 +1833,7 @@ impl Render for FolderView {
         let grid_view = self.grid;
         let cols = self.grid_cols;
         let list_width = f32::from(self.scroll.0.borrow().base_handle.bounds().size.width);
-        self.columns = Columns::for_width(list_width);
+        self.columns = Columns::for_width(list_width, self.widths);
         // `list_width` is the last frame's. Once this frame is laid out, check
         // the new width: after a resize, draw once more so the columns (and
         // grid tiles) follow it.
@@ -1560,12 +1845,6 @@ impl Render for FolderView {
             }
         });
         let columns = self.columns;
-        let header_cell = |label: &'static str| {
-            div()
-                .text_size(px(CAPTION_SIZE))
-                .text_color(rgba(t.text_secondary))
-                .child(label)
-        };
 
         div()
             .track_focus(&self.focus)
@@ -1609,19 +1888,32 @@ impl Render for FolderView {
                             .gap(px(space(3)))
                             .border_b_1()
                             .border_color(rgba(t.divider))
-                            .child(header_cell("Nome").flex_1())
+                            .child(self.header_cell("Nome", SortKey::Name, None, cx).flex_1())
+                            .when(!grid_view && columns.kind, |d| {
+                                d.child(self.header_cell(
+                                    "Tipo",
+                                    SortKey::Type,
+                                    Some(Col::Kind),
+                                    cx,
+                                ))
+                            })
                             .when(!grid_view && columns.size, |d| {
-                                d.child(
-                                    header_cell("Tamanho")
-                                        .w(px(SIZE_COL))
-                                        .flex_none()
-                                        .flex()
-                                        .justify_end(),
-                                )
+                                d.child(self.header_cell(
+                                    "Tamanho",
+                                    SortKey::Size,
+                                    Some(Col::Size),
+                                    cx,
+                                ))
                             })
                             .when(!grid_view && columns.date, |d| {
-                                d.child(header_cell("Modificado em").w(px(DATE_COL)).flex_none())
+                                d.child(self.header_cell(
+                                    "Modificado em",
+                                    SortKey::Modified,
+                                    Some(Col::Date),
+                                    cx,
+                                ))
                             })
+                            .children(self.resize_tracker(cx))
                             // Room for the scrollbar, so columns line up with the rows.
                             .child(div().w(px(SCROLLBAR_WIDTH)).flex_none()),
                     )
@@ -1699,7 +1991,7 @@ impl Render for FolderView {
 
 #[cfg(test)]
 mod tests {
-    use super::{Columns, elapsed_text, read_failure};
+    use super::{COL_MAX, COL_MIN, Col, Columns, Widths, elapsed_text, read_failure};
     use std::time::Duration;
 
     #[test]
@@ -1723,34 +2015,27 @@ mod tests {
     }
 
     #[test]
-    fn narrow_lists_drop_date_then_size() {
-        assert_eq!(
-            Columns::for_width(0.0),
-            Columns {
-                size: true,
-                date: true
-            }
-        );
-        assert_eq!(
-            Columns::for_width(700.0),
-            Columns {
-                size: true,
-                date: true
-            }
-        );
-        assert_eq!(
-            Columns::for_width(450.0),
-            Columns {
-                size: true,
-                date: false
-            }
-        );
-        assert_eq!(
-            Columns::for_width(300.0),
-            Columns {
-                size: false,
-                date: false
-            }
-        );
+    fn widths_are_clamped() {
+        let mut w = Widths::default();
+        w.set(Col::Date, 10.0);
+        w.set(Col::Kind, 9999.0);
+        assert_eq!((w.get(Col::Date), w.get(Col::Kind)), (COL_MIN, COL_MAX));
+    }
+
+    #[test]
+    fn narrow_lists_drop_type_then_date_then_size() {
+        let w = Widths::default();
+        let at = |width: f32| {
+            let c = Columns::for_width(width, w);
+            (c.kind, c.size, c.date)
+        };
+        assert_eq!(at(0.0), (true, true, true));
+        assert_eq!(at(900.0), (true, true, true));
+        assert_eq!(at(650.0), (false, true, true));
+        assert_eq!(at(450.0), (false, true, false));
+        assert_eq!(at(300.0), (false, false, false));
+        // Wider columns need more room.
+        let wide = Widths { date: 300.0, ..w };
+        assert!(!Columns::for_width(600.0, wide).date);
     }
 }
