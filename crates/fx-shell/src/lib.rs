@@ -5,6 +5,7 @@
 
 pub mod icons;
 pub mod places;
+pub mod thumbs;
 
 #[cfg(windows)]
 mod windows;
@@ -12,5 +13,5 @@ mod windows;
 #[cfg(windows)]
 pub use windows::{
     Instance, claim_instance, drives, known_folder, known_folders, process_start_time,
-    start_icon_service, supports_mica, watch_drives, windows_build,
+    start_icon_service, start_thumb_service, supports_mica, watch_drives, windows_build,
 };

@@ -18,6 +18,7 @@ mod icons;
 mod places;
 mod tabs_view;
 mod theme;
+mod thumbs;
 mod trace;
 
 use std::cell::RefCell;
@@ -31,17 +32,18 @@ use gpui::{
 };
 
 use folder_view::{Look, window_title};
-use icons::Icons;
+use icons::{Icons, Media};
 use places::Places;
 use tabs_view::TabsView;
 use theme::{Density, Mode, Theme};
+use thumbs::Thumbs;
 use trace::Trace;
 
 /// App-wide state shared by every window.
 #[derive(Clone)]
 struct Shared {
     places: Entity<Places>,
-    icons: Entity<Icons>,
+    media: Media,
 }
 
 /// Settings read once at startup and shared by every window.
@@ -100,8 +102,11 @@ fn main() {
         };
         let trace = trace.map(|t| Rc::new(RefCell::new(t)));
         let places = cx.new(|cx| Places::new(trace.clone(), cx));
-        let icons = cx.new(Icons::new);
-        let shared = Shared { places, icons };
+        let media = Media {
+            icons: cx.new(Icons::new),
+            thumbs: cx.new(Thumbs::new),
+        };
+        let shared = Shared { places, media };
         if !open_folder_window(path, startup, trace, shared.clone(), cx) {
             cx.quit();
             return;
@@ -185,11 +190,12 @@ fn open_folder_window(
                 density,
                 font,
                 icon_font,
+                grid: std::env::var_os("FX_VIEW").is_some_and(|v| v == "grid"),
                 mica_supported,
                 mica,
             };
             let view = cx.new(|cx| {
-                TabsView::new(path, look, trace, shared.places, shared.icons, window, cx)
+                TabsView::new(path, look, trace, shared.places, shared.media, window, cx)
             });
             // Follow the Windows light/dark setting live.
             let themed = view.clone();

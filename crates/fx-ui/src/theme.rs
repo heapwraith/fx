@@ -99,6 +99,8 @@ pub const ICON_DRIVE: &str = "\u{EDA2}";
 pub const ICON_USB: &str = "\u{E88E}";
 pub const ICON_NETWORK_DRIVE: &str = "\u{E8CE}";
 pub const ICON_DISC: &str = "\u{E958}";
+pub const ICON_GRID: &str = "\u{E80A}";
+pub const ICON_LIST: &str = "\u{E8FD}";
 
 pub fn pick_icon_font(available: &[String]) -> &'static str {
     ICON_FAMILIES

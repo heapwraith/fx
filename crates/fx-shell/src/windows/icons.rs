@@ -116,8 +116,8 @@ fn icon_rgba(icon: HICON) -> Option<(u32, u32, Vec<u8>)> {
     result
 }
 
-/// A bitmap's pixels as 32-bit top-down BGRA.
-fn bitmap_bgra(bitmap: HBITMAP) -> Option<(u32, u32, Vec<u8>)> {
+/// A bitmap's pixels as 32-bit top-down BGRA (at most 1024 px a side).
+pub(super) fn bitmap_bgra(bitmap: HBITMAP) -> Option<(u32, u32, Vec<u8>)> {
     let mut bm = BITMAP::default();
     // SAFETY: `bm` is a writable BITMAP and its size is passed.
     let got = unsafe {
@@ -127,7 +127,7 @@ fn bitmap_bgra(bitmap: HBITMAP) -> Option<(u32, u32, Vec<u8>)> {
             Some((&raw mut bm).cast()),
         )
     };
-    if got == 0 || bm.bmWidth <= 0 || bm.bmHeight <= 0 || bm.bmWidth > 256 || bm.bmHeight > 256 {
+    if got == 0 || bm.bmWidth <= 0 || bm.bmHeight <= 0 || bm.bmWidth > 1024 || bm.bmHeight > 1024 {
         return None;
     }
     let (w, h) = (bm.bmWidth, bm.bmHeight);

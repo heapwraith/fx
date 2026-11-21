@@ -104,7 +104,16 @@ fn flat_100k() -> std::io::Result<PathBuf> {
 }
 
 fn spawn_fx(folder: &Path, exit_after_first_frame: bool) -> std::io::Result<Child> {
+    spawn_fx_with(folder, exit_after_first_frame, &[])
+}
+
+fn spawn_fx_with(
+    folder: &Path,
+    exit_after_first_frame: bool,
+    env: &[(&str, &str)],
+) -> std::io::Result<Child> {
     let mut cmd = Command::new(fx_exe()?);
+    cmd.envs(env.iter().copied());
     cmd.arg(folder).env("FX_TRACE", "1");
     if exit_after_first_frame {
         cmd.env("FX_TRACE_EXIT", "1");
@@ -241,8 +250,11 @@ fn stats_json(s: &FrameStats) -> String {
 
 /// P7: scroll with the wheel to the end, then drag the thumb end to end.
 pub fn scroll() -> std::io::Result<()> {
-    let folder = flat_100k()?;
-    let mut child = spawn_fx(&folder, false)?;
+    scroll_in(&flat_100k()?, "flat-100k", &[], "T0.5")
+}
+
+fn scroll_in(folder: &Path, label: &str, env: &[(&str, &str)], task: &str) -> std::io::Result<()> {
+    let mut child = spawn_fx_with(folder, false, env)?;
     // Let the folder load and sort before scrolling.
     std::thread::sleep(Duration::from_secs(2));
     let script = Path::new("bench").join("scroll-p7.ps1");
@@ -282,14 +294,18 @@ pub fn scroll() -> std::io::Result<()> {
         .number("row_height_px")
         .filter(|h| *h > 0.0)
         .unwrap_or(24.0);
-    let list_px = fixtures::Spec::FULL.flat_files as f64 * row_px;
+    let items = trace
+        .number("list_items")
+        .filter(|n| *n > 0.0)
+        .unwrap_or(fixtures::Spec::FULL.flat_files as f64);
+    let list_px = items * row_px;
     let reached = -trace.number("final_offset_px").unwrap_or(0.0) / list_px;
     // D-014: at most 0.5% dropped frames (interval ≥ 1.5 refresh periods).
     let dropped_fraction = total.dropped as f64 / total.frames as f64;
     let pass = dropped_fraction <= MAX_DROPPED_FRACTION;
 
     println!(
-        "P7: frame intervals while scrolling flat-100k (display: 239 Hz, target {TARGET_P7_MS} ms), release"
+        "P7: frame intervals while scrolling {label} (display: 239 Hz, target {TARGET_P7_MS} ms), release"
     );
     println!(
         "  window: {window}; max rows built per frame: {rows_built}; wheel reached {:.1}% of the list",
@@ -319,11 +335,13 @@ pub fn scroll() -> std::io::Result<()> {
     let date = utc_date(SystemTime::now());
     let json = format!(
         concat!(
-            "{{\n  \"id\": \"P7\",\n  \"task\": \"T0.5\",\n  \"folder\": \"flat-100k\",\n",
+            "{{\n  \"id\": \"P7\",\n  \"task\": {task_json},\n  \"folder\": {folder_json},\n",
             "  \"display_hz\": 239,\n  \"frame_ms\": {t},\n  \"max_dropped_fraction\": {mdf},\n  \"dropped_fraction\": {df:.5},\n  \"input\": \"bench/scroll-p7.ps1 (wheel to the end, then thumb drag both ways)\",\n",
             "  \"max_rows_built\": {rows},\n  \"wheel_reached_fraction\": {reached:.4},\n  \"all\": {all},\n  \"sessions\": [{sessions}],\n  \"pass\": {pass},\n",
             "  \"machine\": {machine},\n  \"commit\": {commit},\n  \"date\": {date}\n}}\n"
         ),
+        task_json = json_string(task),
+        folder_json = json_string(label),
         t = TARGET_P7_MS,
         mdf = MAX_DROPPED_FRACTION,
         df = dropped_fraction,
@@ -336,7 +354,7 @@ pub fn scroll() -> std::io::Result<()> {
         commit = json_string(commit()),
         date = json_string(&date),
     );
-    std::fs::write(results_dir()?.join(format!("{date}-T0.5-P7.json")), json)?;
+    std::fs::write(results_dir()?.join(format!("{date}-{task}-P7.json")), json)?;
     Ok(())
 }
 
@@ -499,7 +517,15 @@ const KEY_ROUNDS: usize = 3;
 /// Runs a PowerShell key script against fx opened on `folder` and returns the
 /// trace fx wrote.
 fn run_key_script(folder: &Path, script: &str) -> std::io::Result<TraceFile> {
-    let mut child = spawn_fx(folder, false)?;
+    run_key_script_with(folder, script, &[])
+}
+
+fn run_key_script_with(
+    folder: &Path,
+    script: &str,
+    env: &[(&str, &str)],
+) -> std::io::Result<TraceFile> {
+    let mut child = spawn_fx_with(folder, false, env)?;
     std::thread::sleep(Duration::from_secs(2));
     let out = Command::new("powershell")
         .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
@@ -773,6 +799,26 @@ pub fn drive_latency() -> std::io::Result<()> {
         json,
     )?;
     Ok(())
+}
+
+/// T1.7: grid view on `flat-10k-media` (10,000 images): new tab with the fx
+/// already loaded (P2 b) and scrolling while thumbnails arrive (P7).
+pub fn grid() -> std::io::Result<()> {
+    let folder = fixtures_root()?.join("flat-10k-media");
+    let env = [("FX_VIEW", "grid")];
+    let trace = run_key_script_with(&folder, "tabs-p2.ps1", &env)?;
+    let samples = trace.numbers("tab_open_ms");
+    if samples.is_empty() {
+        return Err(std::io::Error::other("no tab opening recorded"));
+    }
+    let (median, p95) = median_p95(&ms_samples(&samples));
+    println!("P2 (b): Ctrl+T -> first frame of the grid, flat-10k-media (release)");
+    println!(
+        "  {} tabs: median {median:.1} ms  p95 {p95:.1} ms   target ≤ {TARGET_P2_MS} ms  {}",
+        samples.len(),
+        if p95 <= TARGET_P2_MS { "pass" } else { "FAIL" }
+    );
+    scroll_in(&folder, "flat-10k-media (grid)", &env, "T1.7")
 }
 
 #[cfg(test)]

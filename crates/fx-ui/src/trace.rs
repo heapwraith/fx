@@ -41,6 +41,8 @@ pub struct Trace {
     /// When the sidebar got a new drive list (Unix ms) and how many drives
     /// it had (T1.5).
     drives_seen: Vec<(u128, usize)>,
+    /// Items of the virtualized list (rows, or rows of tiles in the grid).
+    list_items: usize,
 }
 
 impl Trace {
@@ -67,6 +69,7 @@ impl Trace {
             input_ms: Vec::new(),
             tab_open_ms: Vec::new(),
             drives_seen: Vec::new(),
+            list_items: 0,
         })
     }
 
@@ -163,6 +166,10 @@ impl Trace {
         self.tab_open_ms.push(millis(opened.elapsed()));
     }
 
+    pub fn set_list_items(&mut self, n: usize) {
+        self.list_items = n;
+    }
+
     pub fn record_drives(&mut self, count: usize) {
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -189,6 +196,7 @@ impl Trace {
         let _ = writeln!(out, "loaded_ms {}", opt(self.loaded_ms));
         let _ = writeln!(out, "max_rows_built {}", self.max_rows_built);
         let _ = writeln!(out, "row_height_px {:.1}", self.row_height);
+        let _ = writeln!(out, "list_items {}", self.list_items);
         // Scroll position when the trace was written (negative = scrolled down).
         let _ = writeln!(out, "final_offset_px {:.1}", self.last_offset);
         for (ms, kind) in &self.input_ms {
@@ -240,6 +248,7 @@ mod tests {
             input_ms: Vec::new(),
             tab_open_ms: Vec::new(),
             drives_seen: Vec::new(),
+            list_items: 0,
         }
     }
 

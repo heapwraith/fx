@@ -13,6 +13,7 @@
 //! forward, restoring each folder's scroll position and selection. The path
 //! bar is in `path_bar.rs`.
 
+mod grid;
 mod path_bar;
 
 use std::cell::RefCell;
@@ -35,8 +36,9 @@ use gpui::{
     UniformListScrollHandle, Window, canvas, div, img, point, prelude::*, px, uniform_list,
 };
 
-use crate::icons::Icons;
+use crate::icons::{Icons, Media};
 use crate::theme::{BODY_SIZE, CAPTION_SIZE, Density, Mode, RADIUS, Theme, rgba, space};
+use crate::thumbs::Thumbs;
 use crate::trace::Trace;
 
 const SIZE_COL: f32 = 112.0;
@@ -58,6 +60,8 @@ pub struct Look {
     pub density: Density,
     pub font: &'static str,
     pub icon_font: &'static str,
+    /// New tabs start in the grid view (`FX_VIEW=grid`).
+    pub grid: bool,
     /// Mica is available (Windows 11 22H2+ and not disabled by `FX_MICA=0`).
     pub mica_supported: bool,
     /// Mica shows through right now (see `FolderView::set_system_mode`).
@@ -129,6 +133,11 @@ pub struct FolderView {
     /// Set until the first frame with rows of a tab opened with Ctrl+T.
     opened: Option<Instant>,
     icons: Entity<Icons>,
+    thumbs: Entity<Thumbs>,
+    /// Grid view (task T1.7) instead of the details list.
+    grid: bool,
+    /// Tiles per grid row, from the last layout.
+    grid_cols: usize,
 }
 
 impl FolderView {
@@ -139,11 +148,18 @@ impl FolderView {
         look: Look,
         trace: Option<Rc<RefCell<Trace>>>,
         opened: Option<Instant>,
-        icons: Entity<Icons>,
+        media: Media,
         cx: &mut Context<Self>,
     ) -> Self {
-        // Redraw when icons arrive.
+        let Media { icons, thumbs } = media;
+        // Redraw when icons or thumbnails arrive.
         cx.observe(&icons, |_, _, cx| cx.notify()).detach();
+        cx.observe(&thumbs, |view, _, cx| {
+            if view.grid {
+                cx.notify();
+            }
+        })
+        .detach();
         if let Some(t) = &trace {
             t.borrow_mut().mark("folder_requested");
         }
@@ -173,6 +189,9 @@ impl FolderView {
             trace,
             opened,
             icons,
+            thumbs,
+            grid: look.grid,
+            grid_cols: 1,
         };
         view.start_loading(cx);
         view
@@ -557,14 +576,51 @@ impl FolderView {
         } else {
             ScrollStrategy::Bottom
         };
-        self.scroll.scroll_to_item(pos, strategy);
+        // In the grid each list item is a row of tiles.
+        let item = if self.grid { pos / self.grid_cols } else { pos };
+        self.scroll.scroll_to_item(item, strategy);
     }
 
-    /// Rows that fit in the list viewport, minus one (PgUp/PgDn step).
+    /// Entries a PgUp/PgDn moves: the rows that fit, minus one (whole grid
+    /// rows in the grid).
     fn page_rows(&self) -> usize {
         let height = f32::from(self.scroll.0.borrow().base_handle.bounds().size.height);
-        let rows = (height / self.look.density.row_height()).floor() as usize;
-        rows.saturating_sub(1).max(1)
+        let rows = (height / self.item_height()).floor() as usize;
+        let rows = rows.saturating_sub(1).max(1);
+        if self.grid {
+            rows * self.grid_cols
+        } else {
+            rows
+        }
+    }
+
+    /// Height of one list item: a row, or a row of tiles.
+    fn item_height(&self) -> f32 {
+        if self.grid {
+            grid::TILE_HEIGHT
+        } else {
+            self.look.density.row_height()
+        }
+    }
+
+    /// Ctrl+Shift+2 / Ctrl+Shift+6 and the bar button.
+    fn set_grid(&mut self, grid: bool) {
+        if self.grid != grid {
+            self.grid = grid;
+            self.scroll
+                .0
+                .borrow()
+                .base_handle
+                .set_offset(point(px(0.0), px(0.0)));
+            if let Some(c) = self.selection.cursor()
+                && let Some(pos) = self
+                    .selection
+                    .position(rows_of(&self.filtered, &self.list), c)
+            {
+                let item = if grid { pos / self.grid_cols } else { pos };
+                self.scroll.scroll_to_item(item, ScrollStrategy::Center);
+            }
+        }
     }
 
     /// Enter: opens the cursor entry. Folders open in place; files open in
@@ -785,9 +841,25 @@ impl FolderView {
             return;
         }
         let plain = !m.control && !m.alt && !m.shift && !m.platform;
+        if m.control && m.shift && !m.alt {
+            let grid = match ks.key.as_str() {
+                "2" => Some(true),
+                "6" => Some(false),
+                _ => None,
+            };
+            if let Some(grid) = grid {
+                self.set_grid(grid);
+                cx.notify();
+                return;
+            }
+        }
+        // In the grid, Up/Down move a whole row and Left/Right one tile.
+        let row = if self.grid { self.grid_cols } else { 1 };
         let step = match ks.key.as_str() {
-            "up" => Some(Step::Up(1)),
-            "down" => Some(Step::Down(1)),
+            "up" => Some(Step::Up(row)),
+            "down" => Some(Step::Down(row)),
+            "left" if self.grid && !m.alt => Some(Step::Up(1)),
+            "right" if self.grid && !m.alt => Some(Step::Down(1)),
             "pageup" => Some(Step::Up(self.page_rows())),
             "pagedown" => Some(Step::Down(self.page_rows())),
             "home" => Some(Step::First),
@@ -892,7 +964,7 @@ impl FolderView {
         let Some(trace) = &self.trace else { return };
         let mut t = trace.borrow_mut();
         t.mark("first_render");
-        t.set_row_height(self.look.density.row_height());
+        t.set_row_height(self.item_height());
         let items = self.list.len();
         if items > 0 {
             t.mark("first_render_with_rows");
@@ -945,9 +1017,22 @@ impl Render for FolderView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.trace_frame(window);
         let t = self.look.theme;
-        let count = self.rows().len();
         let focused = self.focus.is_focused(window);
         let row_h = self.look.density.row_height();
+        if self.grid {
+            let width = f32::from(self.scroll.0.borrow().base_handle.bounds().size.width);
+            self.grid_cols = grid::columns(width);
+        }
+        let count = if self.grid {
+            self.rows().len().div_ceil(self.grid_cols)
+        } else {
+            self.rows().len()
+        };
+        if let Some(trace) = &self.trace {
+            trace.borrow_mut().set_list_items(count);
+        }
+        let grid_view = self.grid;
+        let cols = self.grid_cols;
         let header_cell = |label: &'static str| {
             div()
                 .text_size(px(CAPTION_SIZE))
@@ -998,14 +1083,16 @@ impl Render for FolderView {
                             .border_b_1()
                             .border_color(rgba(t.divider))
                             .child(header_cell("Nome").flex_1())
-                            .child(
-                                header_cell("Tamanho")
-                                    .w(px(SIZE_COL))
-                                    .flex_none()
-                                    .flex()
-                                    .justify_end(),
-                            )
-                            .child(header_cell("Data (UTC)").w(px(DATE_COL)).flex_none())
+                            .when(!grid_view, |d| {
+                                d.child(
+                                    header_cell("Tamanho")
+                                        .w(px(SIZE_COL))
+                                        .flex_none()
+                                        .flex()
+                                        .justify_end(),
+                                )
+                                .child(header_cell("Data (UTC)").w(px(DATE_COL)).flex_none())
+                            })
                             // Room for the scrollbar, so columns line up with the rows.
                             .child(div().w(px(SCROLLBAR_WIDTH)).flex_none()),
                     )
@@ -1014,7 +1101,21 @@ impl Render for FolderView {
                             .relative()
                             .flex_1()
                             .min_h_0()
-                            .child(
+                            .child(if grid_view {
+                                uniform_list(
+                                    "tiles",
+                                    count,
+                                    cx.processor(
+                                        move |view: &mut Self, range: Range<usize>, _, cx| {
+                                            view.render_grid_rows(range, cols, focused, cx)
+                                        },
+                                    ),
+                                )
+                                .size_full()
+                                .pr(px(SCROLLBAR_WIDTH))
+                                .track_scroll(self.scroll.clone())
+                                .into_any_element()
+                            } else {
                                 uniform_list(
                                     "rows",
                                     count,
@@ -1026,8 +1127,9 @@ impl Render for FolderView {
                                 )
                                 .size_full()
                                 .pr(px(SCROLLBAR_WIDTH))
-                                .track_scroll(self.scroll.clone()),
-                            )
+                                .track_scroll(self.scroll.clone())
+                                .into_any_element()
+                            })
                             .child(self.render_scrollbar(cx)),
                     ),
             )

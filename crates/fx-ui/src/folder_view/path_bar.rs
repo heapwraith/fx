@@ -20,7 +20,8 @@ use gpui::{
 
 use super::{FolderView, Restore};
 use crate::theme::{
-    CAPTION_SIZE, ICON_BACK, ICON_CHEVRON, ICON_FORWARD, ICON_UP, RADIUS, rgba, space,
+    CAPTION_SIZE, ICON_BACK, ICON_CHEVRON, ICON_FORWARD, ICON_GRID, ICON_LIST, ICON_UP, RADIUS,
+    rgba, space,
 };
 
 /// Suggestions shown under the field.
@@ -333,6 +334,14 @@ impl FolderView {
                 },
             )))
             .child(bar)
+            .child(
+                button("view", if self.grid { ICON_LIST } else { ICON_GRID }, true).on_click(
+                    cx.listener(|view, _: &ClickEvent, _, cx| {
+                        view.set_grid(!view.grid);
+                        cx.notify();
+                    }),
+                ),
+            )
             .child(
                 div()
                     .flex_none()

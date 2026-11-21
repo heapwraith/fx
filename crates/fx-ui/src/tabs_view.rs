@@ -23,7 +23,7 @@ use gpui::{
 };
 
 use crate::folder_view::{FolderView, Look, window_title};
-use crate::icons::Icons;
+use crate::icons::Media;
 use crate::places::Places;
 use crate::theme::{
     BODY_SIZE, CAPTION_SIZE, Density, ICON_ADD, ICON_CLOSE, ICON_MENU, Mode, RADIUS, Theme, rgba,
@@ -40,7 +40,7 @@ pub struct TabsView {
     look: Look,
     trace: Option<Rc<RefCell<Trace>>>,
     places: Entity<Places>,
-    icons: Entity<Icons>,
+    media: Media,
     sidebar_open: bool,
 }
 
@@ -79,18 +79,18 @@ impl TabsView {
         look: Look,
         trace: Option<Rc<RefCell<Trace>>>,
         places: Entity<Places>,
-        icons: Entity<Icons>,
+        media: Media,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let first = Self::new_tab(path, look, trace.clone(), None, icons.clone(), cx);
+        let first = Self::new_tab(path, look, trace.clone(), None, media.clone(), cx);
         cx.observe(&places, |_, _, cx| cx.notify()).detach();
         let view = Self {
             tabs: Tabs::new(first),
             look,
             trace,
             places,
-            icons,
+            media,
             sidebar_open: true,
         };
         view.focus_active(window, cx);
@@ -102,10 +102,10 @@ impl TabsView {
         look: Look,
         trace: Option<Rc<RefCell<Trace>>>,
         opened: Option<Instant>,
-        icons: Entity<Icons>,
+        media: Media,
         cx: &mut Context<Self>,
     ) -> Entity<FolderView> {
-        let tab = cx.new(|cx| FolderView::new(path, look, trace, opened, icons, cx));
+        let tab = cx.new(|cx| FolderView::new(path, look, trace, opened, media, cx));
         // Re-render the strip when the tab's folder (its label) changes.
         cx.observe(&tab, |_, _, cx| cx.notify()).detach();
         tab
@@ -130,7 +130,7 @@ impl TabsView {
             self.look,
             self.trace.clone(),
             opened,
-            self.icons.clone(),
+            self.media.clone(),
             cx,
         );
         self.tabs.open(tab);

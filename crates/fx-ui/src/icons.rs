@@ -11,7 +11,16 @@ use std::sync::Arc;
 use std::sync::mpsc::channel;
 
 use fx_shell::icons::{IconKey, IconService};
-use gpui::{Context, Image, ImageFormat};
+use gpui::{Context, Entity, Image, ImageFormat};
+
+use crate::thumbs::Thumbs;
+
+/// Icon and thumbnail caches, shared by every window and tab.
+#[derive(Clone)]
+pub struct Media {
+    pub icons: Entity<Icons>,
+    pub thumbs: Entity<Thumbs>,
+}
 
 #[derive(Debug, Clone)]
 enum Slot {

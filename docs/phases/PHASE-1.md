@@ -94,7 +94,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.7 — Vista em grade e miniaturas
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: grade virtualizada (linhas de blocos, Ctrl+Shift+2/6 e botão, setas em 2D); miniaturas via `IShellItemImageFactory` em thread STA de fundo, primeiro só do cache do Windows e depois extraídas, fila que segue os itens visíveis (cancela o que saiu da tela), tempo limite de 5 s; cache de 400 na UI liberando a imagem decodificada (D-019). `flat-10k-media` em grade: aba nova (P2 b) mediana 9,3 ms; rolagem 0 perdidos em 3.999 quadros com miniaturas chegando. Memória 85,6 → 102,9 MB após rolar as 10 mil (risco P8 para a T1.18). Usa `IShellItemImageFactory` em vez de `IThumbnailCache` (mesmo cache, API mais simples).
 
 **Fazer**
 - Vista em grade virtualizada; miniaturas via `IThumbnailCache` (primeiro `WTS_INCACHEONLY`, depois extração em segundo plano, com prioridade baixa e cancelamento ao sair da tela).
