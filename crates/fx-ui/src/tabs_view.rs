@@ -490,6 +490,8 @@ impl Render for TabsView {
         let wide = f32::from(window.viewport_size().width) >= SIDEBAR_MIN_WINDOW;
         div()
             .capture_key_down(cx.listener(Self::on_key_down))
+            // Anchor for the dialog overlay (covers the queue panel too).
+            .relative()
             .size_full()
             .flex()
             .flex_col()

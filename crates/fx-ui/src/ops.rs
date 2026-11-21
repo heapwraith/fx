@@ -63,6 +63,9 @@ pub struct Ops {
     created: HashMap<JobId, PathBuf>,
     /// Pastes of cut files: the clipboard is emptied once they succeed.
     clear_after: std::collections::HashSet<JobId>,
+    /// "Started" events that arrived before `submit` registered the job (the
+    /// engine can start it right away): byte totals by job.
+    early_starts: HashMap<JobId, u64>,
 }
 
 impl Ops {
@@ -76,6 +79,7 @@ impl Ops {
             notice: None,
             created: HashMap::new(),
             clear_after: std::collections::HashSet::new(),
+            early_starts: HashMap::new(),
         }
     }
 
@@ -119,6 +123,7 @@ impl Ops {
             .ok_or("fila de operações indisponível")?;
         let id = engine.submit(job.clone());
         self.pending.insert(id, Pending::Do(job));
+        self.show_if_started(id);
         Ok(id)
     }
 
@@ -128,6 +133,7 @@ impl Ops {
             Some(entry) => {
                 let id = engine.submit(entry.backward.clone());
                 self.pending.insert(id, Pending::Undo(entry));
+                self.show_if_started(id);
             }
             None => self.say("nada para desfazer"),
         }
@@ -140,6 +146,7 @@ impl Ops {
             Some(entry) => {
                 let id = engine.submit(entry.forward.clone());
                 self.pending.insert(id, Pending::Redo(entry.forward));
+                self.show_if_started(id);
             }
             None => self.say("nada para refazer"),
         }
@@ -149,6 +156,24 @@ impl Ops {
     /// Empties the clipboard when job `id` succeeds (paste of cut files).
     pub fn clear_clipboard_after(&mut self, id: JobId) {
         self.clear_after.insert(id);
+    }
+
+    /// Adds a started copy/move to the panel once both its "Started" event
+    /// and its registration are in (they can arrive in either order).
+    fn show_if_started(&mut self, id: JobId) {
+        let Some(label) = self.pending.get(&id).and_then(start_label) else {
+            return;
+        };
+        let Some(bytes) = self.early_starts.remove(&id) else {
+            return;
+        };
+        self.active.push(JobView {
+            id,
+            label,
+            bytes,
+            done: 0,
+            paused: false,
+        });
     }
 
     /// Running copies and moves.
@@ -212,16 +237,9 @@ impl Ops {
     fn on_event(&mut self, event: Event, cx: &mut Context<Self>) {
         let (id, outcome, report) = match event {
             Event::Started { job, bytes, .. } => {
-                if let Some(label) = self.pending.get(&job).and_then(start_label) {
-                    self.active.push(JobView {
-                        id: job,
-                        label,
-                        bytes,
-                        done: 0,
-                        paused: false,
-                    });
-                    cx.notify();
-                }
+                self.early_starts.insert(job, bytes);
+                self.show_if_started(job);
+                cx.notify();
                 return;
             }
             Event::Progress {
@@ -259,6 +277,7 @@ impl Ops {
         };
         self.active.retain(|j| j.id != id);
         self.asks.retain(|a| a.job != id);
+        self.early_starts.remove(&id);
         if self.clear_after.remove(&id) && outcome == Outcome::Done {
             std::thread::spawn(|| {
                 let _ = fx_shell::clear_clipboard();
