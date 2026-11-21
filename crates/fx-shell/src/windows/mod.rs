@@ -1,8 +1,10 @@
 //! Windows implementation.
 
+mod icons;
 mod instance;
 mod places;
 
+pub use icons::start_icon_service;
 pub use instance::{Instance, claim_instance};
 pub use places::{drives, known_folder, known_folders, watch_drives};
 

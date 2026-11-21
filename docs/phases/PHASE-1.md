@@ -82,7 +82,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.6 — Ícones de arquivo
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: ícones via `SHGetFileInfoW` numa thread STA do `fx-shell`, cache por extensão (por arquivo para .exe/.lnk/.ico etc.), tempo limite de 2 s por pedido com troca da thread travada (teste com extrator que trava), PNG mínimo entregue ao GPUI (sem dependência nova, D-018); a lista reserva o espaço de 16 px e encaixa o ícone quando chega. `flat-100k` com ícones: aba nova (P2 b) 9,6 ms (10,1 sem), rolagem 0 perdidos em 3.999 quadros. `bench/scroll-p7.ps1` ajustado ao novo layout (o arraste da barra mirava a barra de caminho).
 
 **Fazer**
 - Thread STA em `fx-shell` com fila de pedidos, `SHGetFileInfoW` / `IShellItemImageFactory` para ícones, cache por extensão (e por arquivo para `.exe`, `.lnk`, `.ico`), tempo limite por pedido.

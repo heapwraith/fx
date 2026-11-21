@@ -23,6 +23,7 @@ use gpui::{
 };
 
 use crate::folder_view::{FolderView, Look, window_title};
+use crate::icons::Icons;
 use crate::places::Places;
 use crate::theme::{
     BODY_SIZE, CAPTION_SIZE, Density, ICON_ADD, ICON_CLOSE, ICON_MENU, Mode, RADIUS, Theme, rgba,
@@ -39,6 +40,7 @@ pub struct TabsView {
     look: Look,
     trace: Option<Rc<RefCell<Trace>>>,
     places: Entity<Places>,
+    icons: Entity<Icons>,
     sidebar_open: bool,
 }
 
@@ -77,16 +79,18 @@ impl TabsView {
         look: Look,
         trace: Option<Rc<RefCell<Trace>>>,
         places: Entity<Places>,
+        icons: Entity<Icons>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let first = Self::new_tab(path, look, trace.clone(), None, cx);
+        let first = Self::new_tab(path, look, trace.clone(), None, icons.clone(), cx);
         cx.observe(&places, |_, _, cx| cx.notify()).detach();
         let view = Self {
             tabs: Tabs::new(first),
             look,
             trace,
             places,
+            icons,
             sidebar_open: true,
         };
         view.focus_active(window, cx);
@@ -98,9 +102,10 @@ impl TabsView {
         look: Look,
         trace: Option<Rc<RefCell<Trace>>>,
         opened: Option<Instant>,
+        icons: Entity<Icons>,
         cx: &mut Context<Self>,
     ) -> Entity<FolderView> {
-        let tab = cx.new(|cx| FolderView::new(path, look, trace, opened, cx));
+        let tab = cx.new(|cx| FolderView::new(path, look, trace, opened, icons, cx));
         // Re-render the strip when the tab's folder (its label) changes.
         cx.observe(&tab, |_, _, cx| cx.notify()).detach();
         tab
@@ -120,7 +125,14 @@ impl TabsView {
     fn open_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let path = self.tabs.active().read(cx).path().to_path_buf();
         let opened = self.trace.as_ref().map(|_| Instant::now());
-        let tab = Self::new_tab(path, self.look, self.trace.clone(), opened, cx);
+        let tab = Self::new_tab(
+            path,
+            self.look,
+            self.trace.clone(),
+            opened,
+            self.icons.clone(),
+            cx,
+        );
         self.tabs.open(tab);
         self.focus_active(window, cx);
         cx.notify();

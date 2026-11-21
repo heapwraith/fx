@@ -28,12 +28,14 @@ use std::time::Instant;
 use fx_core::format::{date_time_utc, size_kb};
 use fx_core::{Direction, Entry, FileList, History, MoveMode, Selection, SortKey, Step};
 use fx_fs::Strategy;
+use fx_shell::icons::icon_key;
 use gpui::{
-    Context, FocusHandle, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    NavigationDirection, Pixels, ScrollStrategy, SharedString, UniformListScrollHandle, Window,
-    canvas, div, point, prelude::*, px, uniform_list,
+    Context, Entity, FocusHandle, Image, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, NavigationDirection, Pixels, ScrollStrategy, SharedString,
+    UniformListScrollHandle, Window, canvas, div, img, point, prelude::*, px, uniform_list,
 };
 
+use crate::icons::Icons;
 use crate::theme::{BODY_SIZE, CAPTION_SIZE, Density, Mode, RADIUS, Theme, rgba, space};
 use crate::trace::Trace;
 
@@ -43,6 +45,8 @@ const SCROLLBAR_WIDTH: f32 = 12.0;
 const THUMB_MIN: f32 = 24.0;
 /// Width of the accent bar on the selected row (Fluent list selection).
 const INDICATOR_WIDTH: f32 = 3.0;
+/// File icons are drawn at 16 px (small shell icons).
+const ICON_SIZE: f32 = 16.0;
 
 /// How the window is drawn: theme, density, font and whether Mica shows
 /// through the background.
@@ -124,6 +128,7 @@ pub struct FolderView {
     trace: Option<Rc<RefCell<Trace>>>,
     /// Set until the first frame with rows of a tab opened with Ctrl+T.
     opened: Option<Instant>,
+    icons: Entity<Icons>,
 }
 
 impl FolderView {
@@ -134,8 +139,11 @@ impl FolderView {
         look: Look,
         trace: Option<Rc<RefCell<Trace>>>,
         opened: Option<Instant>,
+        icons: Entity<Icons>,
         cx: &mut Context<Self>,
     ) -> Self {
+        // Redraw when icons arrive.
+        cx.observe(&icons, |_, _, cx| cx.notify()).detach();
         if let Some(t) = &trace {
             t.borrow_mut().mark("folder_requested");
         }
@@ -164,6 +172,7 @@ impl FolderView {
             look,
             trace,
             opened,
+            icons,
         };
         view.start_loading(cx);
         view
@@ -280,10 +289,33 @@ impl FolderView {
         }
         let t = self.look.theme;
         let row_h = self.look.density.row_height();
-        let order = self.rows();
-        range
-            .filter_map(|row| order.get(row).copied())
+        // Icons of the rows drawn; unknown ones are requested after this pass.
+        let icons = self.icons.read(cx);
+        let show_icons = icons.enabled();
+        let mut missing = Vec::new();
+        let rows: Vec<(u32, Option<Arc<Image>>)> = range
+            .filter_map(|row| self.rows().get(row).copied())
             .map(|i| {
+                if !show_icons {
+                    return (i, None);
+                }
+                let key = icon_key(
+                    &self.path,
+                    self.list.name(i),
+                    self.list.attributes(i).is_dir(),
+                );
+                let image = icons.get(&key);
+                if image.is_none() && icons.is_unknown(&key) {
+                    missing.push(key);
+                }
+                (i, image)
+            })
+            .collect();
+        if !missing.is_empty() {
+            self.icons.update(cx, |icons, _| icons.request(missing));
+        }
+        rows.into_iter()
+            .map(|(i, icon)| {
                 let is_dir = self.list.attributes(i).is_dir();
                 let selected = self.selection.is_selected(i);
                 let is_cursor = self.selection.cursor() == Some(i);
@@ -326,6 +358,17 @@ impl FolderView {
                                         .h(px(16.0))
                                         .rounded(px(INDICATOR_WIDTH / 2.0))
                                         .bg(rgba(t.accent)),
+                                )
+                            })
+                            // Fixed slot: the icon arriving later moves nothing.
+                            .when(show_icons, |d| {
+                                d.child(
+                                    div()
+                                        .flex_none()
+                                        .size(px(ICON_SIZE))
+                                        .when_some(icon, |d, image| {
+                                            d.child(img(image).size(px(ICON_SIZE)))
+                                        }),
                                 )
                             })
                             .child(

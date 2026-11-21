@@ -14,6 +14,7 @@
 #![windows_subsystem = "windows"]
 
 mod folder_view;
+mod icons;
 mod places;
 mod tabs_view;
 mod theme;
@@ -30,10 +31,18 @@ use gpui::{
 };
 
 use folder_view::{Look, window_title};
+use icons::Icons;
 use places::Places;
 use tabs_view::TabsView;
 use theme::{Density, Mode, Theme};
 use trace::Trace;
+
+/// App-wide state shared by every window.
+#[derive(Clone)]
+struct Shared {
+    places: Entity<Places>,
+    icons: Entity<Icons>,
+}
 
 /// Settings read once at startup and shared by every window.
 #[derive(Debug, Clone, Copy)]
@@ -91,19 +100,21 @@ fn main() {
         };
         let trace = trace.map(|t| Rc::new(RefCell::new(t)));
         let places = cx.new(|cx| Places::new(trace.clone(), cx));
-        if !open_folder_window(path, startup, trace, places.clone(), cx) {
+        let icons = cx.new(Icons::new);
+        let shared = Shared { places, icons };
+        if !open_folder_window(path, startup, trace, shared.clone(), cx) {
             cx.quit();
             return;
         }
         if let Some(rx) = incoming {
-            listen(rx, startup, places, cx);
+            listen(rx, startup, shared, cx);
         }
         cx.activate(true);
     });
 }
 
 /// Opens a window for every folder another fx process hands over.
-fn listen(rx: Receiver<PathBuf>, startup: Startup, places: Entity<Places>, cx: &mut App) {
+fn listen(rx: Receiver<PathBuf>, startup: Startup, shared: Shared, cx: &mut App) {
     cx.spawn(async move |cx| {
         let background = cx.background_executor().clone();
         let mut rx = rx;
@@ -118,7 +129,7 @@ fn listen(rx: Receiver<PathBuf>, startup: Startup, places: Entity<Places>, cx: &
             rx = back;
             let Ok(folder) = folder else { break };
             if cx
-                .update(|cx| open_folder_window(folder, startup, None, places.clone(), cx))
+                .update(|cx| open_folder_window(folder, startup, None, shared.clone(), cx))
                 .is_err()
             {
                 break;
@@ -133,7 +144,7 @@ fn open_folder_window(
     path: PathBuf,
     startup: Startup,
     trace: Option<Rc<RefCell<Trace>>>,
-    places: Entity<Places>,
+    shared: Shared,
     cx: &mut App,
 ) -> bool {
     let bounds = Bounds::centered(None, size(px(900.0), px(640.0)), cx);
@@ -177,7 +188,9 @@ fn open_folder_window(
                 mica_supported,
                 mica,
             };
-            let view = cx.new(|cx| TabsView::new(path, look, trace, places, window, cx));
+            let view = cx.new(|cx| {
+                TabsView::new(path, look, trace, shared.places, shared.icons, window, cx)
+            });
             // Follow the Windows light/dark setting live.
             let themed = view.clone();
             window

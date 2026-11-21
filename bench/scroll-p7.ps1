@@ -40,10 +40,11 @@ public static class P7 {
         int w = rc.R - rc.L, h = rc.B - rc.T;
 
         // 1) Drag the thumb from the top to the bottom and back. With the list at
-        //    the top, the 24 px thumb sits right below the path bar (40 px), the
-        //    divider (1 px) and the column header (32 px, standard density).
+        //    the top, the thumb (at least 24 px) starts below the tab strip
+        //    (40 px), the path bar (48 px), a divider (1 px), the column header
+        //    (32 px, standard density) and another divider: at 122 px.
         int x = origin.X + w - (int)(6 * s);
-        int yTop = origin.Y + (int)(85 * s);
+        int yTop = origin.Y + (int)(130 * s);
         int yBottom = origin.Y + h - (int)(12 * s);
         SetCursorPos(x, yTop);
         Thread.Sleep(100);
