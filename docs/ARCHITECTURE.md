@@ -41,6 +41,17 @@ Regra central: **a interface só desenha.** Tudo que pode demorar roda em worker
 
 `fx-core` **nunca** depende de `windows` nem de GPUI. Isso mantém a lógica testável em qualquer máquina.
 
+## Plataformas (D-012)
+
+**Windows primeiro, sem fechar a porta para Linux e macOS.** Só o Windows é suportado e medido até decidirmos um port numa fase futura. Mesmo assim, o código específico do Windows fica isolado desde já:
+
+- `fx-core` e `fx-ui` não usam `windows` nem `#[cfg(windows)]`. A UI fala com o sistema só pelas interfaces de `fx-fs`, `fx-shell`, `fx-index` e `fx-ops`.
+- Cada um desses crates expõe **tipos e traits neutros** na raiz (ex.: `DirEntry`, `trait DirReader`) e guarda a implementação em `src/windows/`, compilada com `#[cfg(windows)]`. Tipos do `windows-rs` (`HANDLE`, `PCWSTR`, `HRESULT`) nunca aparecem na API pública.
+- A dependência `windows` entra como `[target.'cfg(windows)'.dependencies]`.
+- Não existe implementação para outros sistemas, nem stub ou `todo!()`: em Linux e macOS esses crates simplesmente não oferecem a implementação. Escrever a segunda implementação é o trabalho do port.
+- Recursos sem equivalente fora do Windows (MFT, registrar como gerenciador padrão) ficam atrás de interfaces próprias e podem não existir em outras plataformas.
+- Não fazer abstração especulativa: a interface nasce do que a implementação Windows precisa, sem prever como outro sistema funcionaria.
+
 ## Modelo de threads
 
 - **Thread de UI (GPUI):** só desenha e recebe input. Lê o estado de `fx-core` e envia comandos.

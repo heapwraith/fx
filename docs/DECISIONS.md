@@ -55,3 +55,9 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Data:** 2026-11-21 · **Status:** aceita
 - **Decisão:** `tempfile = "=3.27.0"` em `[workspace.dependencies]`, usado só como dev-dependency (testes que tocam o disco, conforme o `CLAUDE.md`; previsto na T0.3). O gerador de fixtures (T0.2) não usa crates externos: PRNG SplitMix64 próprio (a sequência não pode mudar com a versão de um crate) e codificador PNG mínimo sem compressão (são só dados de teste).
 - **Consequência:** as imagens de `flat-10k-media` têm cerca de 12 KB cada (~124 MB no total), porque não são comprimidas. `clippy.toml` permite `unwrap()`/`expect()` em testes, como já dizia o `CLAUDE.md`.
+
+## D-012 — Plataformas: Windows primeiro, portável depois
+- **Data:** 2026-11-21 · **Status:** aceita
+- **Contexto:** o projeto nasceu só para Windows sem registro do motivo. Dois dos três objetivos são específicos do Windows: a busca lendo a MFT do NTFS e substituir o Explorador. Já o GPUI e o `fx-core` são portáveis.
+- **Decisão:** só o Windows é suportado, medido e empacotado até o fim da Fase 4. O código específico do Windows fica isolado atrás de tipos e traits neutros em `fx-fs`, `fx-shell`, `fx-index` e `fx-ops`, com a implementação em `src/windows/` sob `#[cfg(windows)]`, conforme as regras em `docs/ARCHITECTURE.md`, seção "Plataformas". Um port para Linux ou macOS, se for feito, vira uma fase própria com metas próprias. Fora do Windows, a busca exige outra técnica (índice próprio com inotify/fanotify ou FSEvents).
+- **Consequência:** custo pequeno agora (organizar os módulos e não vazar tipos do `windows-rs` na API pública) e nenhum port parcial ou stub para manter. Os objetivos e as metas de desempenho continuam valendo só para Windows.
