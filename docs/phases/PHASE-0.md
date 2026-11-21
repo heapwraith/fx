@@ -42,7 +42,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T0.3 — Enumeração de pastas mais rápida possível (fx-fs)
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: vencedora `FindFirstFileExW`: na `flat-100k`, 1º lote 2,8 ms (p95 3,7) e total 49 ms (p95 58) contra metas de 20/150 ms; `read_dir` 52 ms, `FileIdBothDirInfo` 89 ms (D-009).
 
 **Fazer**
 1. Implementar três estratégias atrás da mesma interface:

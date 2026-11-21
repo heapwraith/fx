@@ -3,3 +3,7 @@
 //! Rules (see docs/ARCHITECTURE.md): no Windows APIs, no I/O, no GPUI.
 //! Everything here must be unit-testable on any machine.
 #![forbid(unsafe_code)]
+
+mod entry;
+
+pub use entry::{Attributes, Entry};

@@ -1979,6 +1979,7 @@ name = "fx-fs"
 version = "0.0.1"
 dependencies = [
  "fx-core",
+ "tempfile",
  "windows 0.62.2",
 ]
 

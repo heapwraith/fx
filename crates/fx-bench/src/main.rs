@@ -3,12 +3,15 @@
 //! ```text
 //! fx-bench fixtures           create missing fixtures in %TEMP%\fx-fixtures
 //! fx-bench fixtures --clean   delete %TEMP%\fx-fixtures (and nothing else)
+//! fx-bench enum               folder enumeration strategies on flat-100k (T0.3)
 //! ```
-//! Benchmarks are added in tasks T0.3, T0.7 and T0.8.
+//! Run from the repository root: results go to `bench/results/`.
 
+mod enum_bench;
 mod fixtures;
 mod names;
 mod png;
+mod report;
 mod rng;
 
 use std::process::ExitCode;
@@ -16,7 +19,7 @@ use std::time::Instant;
 
 use fixtures::{Outcome, Spec};
 
-const USAGE: &str = "usage: fx-bench fixtures [--clean]";
+const USAGE: &str = "usage: fx-bench fixtures [--clean] | enum";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -24,6 +27,7 @@ fn main() -> ExitCode {
     let result = match args.as_slice() {
         ["fixtures"] => run_fixtures(),
         ["fixtures", "--clean"] => run_clean(),
+        ["enum"] => enum_bench::run(),
         _ => {
             eprintln!("{USAGE}");
             return ExitCode::from(2);

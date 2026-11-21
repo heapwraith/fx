@@ -43,7 +43,18 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Status:** pendente (definida na T0.9)
 
 ## D-009 — Estratégia de enumeração de pastas
-- **Status:** pendente (definida na T0.3, com números)
+- **Data:** 2026-11-21 · **Status:** aceita
+- **Contexto (T0.3):** três estratégias atrás da mesma interface (`fx_fs::enumerate`, lotes de 2.000 entradas ou 8 ms por canal). Medidas na `flat-100k` (100 mil arquivos), em release, cache quente (1 aquecimento descartado), 10 execuções por estratégia, 3 rodadas completas. Máquina: AMD Family 25 Model 33 (Zen 3), 16 núcleos lógicos, Windows 10.0.26200, SSD do `%TEMP%`. Medido do lado de quem recebe os lotes (a visão da UI).
+
+  | Estratégia | 1º lote, mediana / p95 | Total, mediana / p95 |
+  |---|---|---|
+  | `std::fs::read_dir` | 1,9–2,0 / 2,0–2,4 ms | 51–54 / 54–59 ms |
+  | `FindFirstFileExW` (Basic + LARGE_FETCH) | 2,8 / 3,1–3,7 ms | **49–51 / 53–58 ms** |
+  | `GetFileInformationByHandleEx(FileIdBothDirectoryInfo)`, buffer de 256 KB | 3,0–3,3 / 3,4–3,8 ms | 89–90 / 95–96 ms |
+
+  Metas da T0.3: 1º lote ≤ 20 ms e total ≤ 150 ms. As três passam. O `FileIdBothDirectoryInfo` é ~75% mais lento. O parser não é a causa: tirar a cópia dos nomes e usar buffer de 64 KB não melhorou (92 ms e 98 ms). O custo está na própria classe de informação (FileId e nome curto 8.3 por entrada).
+- **Decisão:** `Strategy::FindFirstFileEx` é a padrão: menor tempo total em todas as rodadas, e o total é o que pesa na P3. A diferença para `std::fs::read_dir` é pequena (~5%); o `std` tem o primeiro lote ~1 ms mais rápido, irrelevante perto da meta de 20 ms. As três implementações ficam no código para remedição (`fx-bench enum`).
+- **Consequência:** a enumeração consome ~50 ms dos 300 ms da P3 (lista completa e ordenada). Se precisar de mais, o próximo passo é medir `FileFullDirectoryInfo` (sem FileId e sem nome curto) ou `NtQueryDirectoryFile`, e paralelizar a montagem das entradas.
 
 ## D-010 — Ambiente de desenvolvimento: WSL com compilação cruzada para Windows
 - **Data:** 2026-11-21 · **Status:** aceita (substitui D-005)
