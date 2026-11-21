@@ -38,6 +38,9 @@ pub struct Trace {
     input_ms: Vec<(f64, &'static str)>,
     /// Ctrl+T -> first frame with rows of the new tab, in ms (P2 b, T1.4).
     tab_open_ms: Vec<f64>,
+    /// When the sidebar got a new drive list (Unix ms) and how many drives
+    /// it had (T1.5).
+    drives_seen: Vec<(u128, usize)>,
 }
 
 impl Trace {
@@ -63,6 +66,7 @@ impl Trace {
             pending_input: None,
             input_ms: Vec::new(),
             tab_open_ms: Vec::new(),
+            drives_seen: Vec::new(),
         })
     }
 
@@ -159,6 +163,13 @@ impl Trace {
         self.tab_open_ms.push(millis(opened.elapsed()));
     }
 
+    pub fn record_drives(&mut self, count: usize) {
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis());
+        self.drives_seen.push((now, count));
+    }
+
     pub fn write(&self) {
         if let Err(e) = self.try_write() {
             eprintln!("fx: could not write trace: {e}");
@@ -186,6 +197,9 @@ impl Trace {
         }
         for ms in &self.tab_open_ms {
             let _ = writeln!(out, "tab_open_ms {ms:.3}");
+        }
+        for (at, count) in &self.drives_seen {
+            let _ = writeln!(out, "drives_seen {at},{count}");
         }
         for session in self.sessions.iter().filter(|s| !s.is_empty()) {
             let _ = writeln!(out, "session {}", session.len());
@@ -225,6 +239,7 @@ mod tests {
             pending_input: None,
             input_ms: Vec::new(),
             tab_open_ms: Vec::new(),
+            drives_seen: Vec::new(),
         }
     }
 

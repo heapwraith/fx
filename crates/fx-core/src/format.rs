@@ -9,6 +9,24 @@ pub fn size_kb(bytes: u64) -> String {
     format!("{} KB", group_thousands(kb))
 }
 
+/// Short size for capacities: "931 GB", "1,8 TB", "512 MB" (binary units,
+/// Brazilian decimal comma; one decimal below 10).
+pub fn size_short(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    let text = if unit > 0 && value < 10.0 {
+        format!("{value:.1}").replace('.', ",")
+    } else {
+        format!("{value:.0}")
+    };
+    format!("{text} {}", UNITS[unit])
+}
+
 fn group_thousands(n: u64) -> String {
     let digits = n.to_string();
     let mut out = String::with_capacity(digits.len() + digits.len() / 3);
@@ -83,5 +101,15 @@ mod tests {
         assert_eq!(date_time_utc(t), "21/11/2026 13:07");
         assert_eq!(date_time_utc(SystemTime::UNIX_EPOCH), "01/01/1970 00:00");
         assert_eq!(millis(Duration::from_micros(1500)), 1.5);
+    }
+
+    #[test]
+    fn short_sizes() {
+        assert_eq!(size_short(0), "0 B");
+        assert_eq!(size_short(1023), "1023 B");
+        assert_eq!(size_short(1536), "1,5 KB");
+        assert_eq!(size_short(512 * 1024 * 1024), "512 MB");
+        assert_eq!(size_short(931 * 1024 * 1024 * 1024), "931 GB");
+        assert_eq!(size_short(1_979_120_929_996), "1,8 TB");
     }
 }

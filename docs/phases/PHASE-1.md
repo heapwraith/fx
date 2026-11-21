@@ -69,7 +69,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.5 — Lateral: Acesso rápido, unidades e pastas do usuário
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: `fx-shell` com pastas conhecidas (`SHGetKnownFolderPath`), unidades (rótulo, tipo, espaço) e vigia de unidades (D-017); `fx_core::Pinned` (sem duplicar, caminho sem caixa; testes); lateral com pasta pessoal, Acesso rápido (fixar/desafixar a pasta atual, × para desafixar) e Este computador (barra de uso e espaço livre), recolhível com ☰ ou Ctrl+B. Unidade nova com `subst` aparece em 23–60 ms (`fx-bench drives`, meta ≤ 1 s); no app em execução, `fx-shell` só roda em segundo plano (antes do loop: instância única, versão do Windows). Pendrive real não testado.
 
 **Fazer**
 - `fx-shell`: pastas conhecidas (`SHGetKnownFolderPath`), unidades com rótulo e espaço livre (`GetDiskFreeSpaceExW`), atualização quando um pendrive entra ou sai.

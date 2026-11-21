@@ -84,6 +84,21 @@ pub const ICON_UP: &str = "\u{E74A}";
 pub const ICON_CHEVRON: &str = "\u{E76C}";
 pub const ICON_ADD: &str = "\u{E710}";
 pub const ICON_CLOSE: &str = "\u{E711}";
+pub const ICON_MENU: &str = "\u{E700}";
+pub const ICON_PIN: &str = "\u{E718}";
+pub const ICON_UNPIN: &str = "\u{E77A}";
+pub const ICON_HOME: &str = "\u{E80F}";
+pub const ICON_DESKTOP: &str = "\u{E7F4}";
+pub const ICON_DOWNLOADS: &str = "\u{E896}";
+pub const ICON_DOCUMENTS: &str = "\u{E8A5}";
+pub const ICON_PICTURES: &str = "\u{EB9F}";
+pub const ICON_MUSIC: &str = "\u{E8D6}";
+pub const ICON_VIDEOS: &str = "\u{E714}";
+pub const ICON_FOLDER: &str = "\u{E8B7}";
+pub const ICON_DRIVE: &str = "\u{EDA2}";
+pub const ICON_USB: &str = "\u{E88E}";
+pub const ICON_NETWORK_DRIVE: &str = "\u{E8CE}";
+pub const ICON_DISC: &str = "\u{E958}";
 
 pub fn pick_icon_font(available: &[String]) -> &'static str {
     ICON_FAMILIES

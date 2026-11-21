@@ -5,6 +5,11 @@
 //! folder), Ctrl+W close, Ctrl+Tab / Ctrl+Shift+Tab switch, Ctrl+1/2/3 row
 //! density for every tab. Mouse: click activates, middle click or × closes,
 //! + opens, dragging a tab reorders. Closing the last tab closes the window.
+//!
+//! Sidebar (task T1.5, `sidebar.rs`): quick access and drives, left of the
+//! active tab; ☰ or Ctrl+B collapses it.
+
+mod sidebar;
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -18,8 +23,10 @@ use gpui::{
 };
 
 use crate::folder_view::{FolderView, Look, window_title};
+use crate::places::Places;
 use crate::theme::{
-    BODY_SIZE, CAPTION_SIZE, Density, ICON_ADD, ICON_CLOSE, Mode, RADIUS, Theme, rgba, space,
+    BODY_SIZE, CAPTION_SIZE, Density, ICON_ADD, ICON_CLOSE, ICON_MENU, Mode, RADIUS, Theme, rgba,
+    space,
 };
 use crate::trace::Trace;
 
@@ -31,6 +38,8 @@ pub struct TabsView {
     tabs: Tabs<Entity<FolderView>>,
     look: Look,
     trace: Option<Rc<RefCell<Trace>>>,
+    places: Entity<Places>,
+    sidebar_open: bool,
 }
 
 /// What is carried while a tab is dragged (also its drag preview).
@@ -66,16 +75,19 @@ impl TabsView {
     pub fn new(
         path: PathBuf,
         look: Look,
-        trace: Option<Trace>,
+        trace: Option<Rc<RefCell<Trace>>>,
+        places: Entity<Places>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let trace = trace.map(|t| Rc::new(RefCell::new(t)));
         let first = Self::new_tab(path, look, trace.clone(), None, cx);
+        cx.observe(&places, |_, _, cx| cx.notify()).detach();
         let view = Self {
             tabs: Tabs::new(first),
             look,
             trace,
+            places,
+            sidebar_open: true,
         };
         view.focus_active(window, cx);
         view
@@ -170,6 +182,7 @@ impl TabsView {
                 self.tabs.next();
                 self.focus_active(window, cx);
             }
+            ("b", false) => self.sidebar_open = !self.sidebar_open,
             ("tab", true) => {
                 self.tabs.previous();
                 self.focus_active(window, cx);
@@ -209,7 +222,27 @@ impl TabsView {
             .gap(px(space(1)))
             .px(px(space(2)))
             .min_w_0()
-            .overflow_hidden();
+            .overflow_hidden()
+            .child(
+                div()
+                    .id("toggle-sidebar")
+                    .flex_none()
+                    .mb(px(space(1)))
+                    .size(px(28.0))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(RADIUS))
+                    .font_family(icon_font)
+                    .text_size(px(CAPTION_SIZE))
+                    .text_color(rgba(t.text_secondary))
+                    .hover(|s| s.bg(rgba(t.hover)))
+                    .child(ICON_MENU)
+                    .on_click(cx.listener(|view, _: &ClickEvent, _, cx| {
+                        view.sidebar_open = !view.sidebar_open;
+                        cx.notify();
+                    })),
+            );
         for (k, tab) in self.tabs.iter().enumerate() {
             let path = tab.read(cx).path();
             let label: SharedString = path
@@ -321,6 +354,13 @@ impl Render for TabsView {
             .text_size(px(BODY_SIZE))
             .text_color(rgba(t.text))
             .child(self.render_strip(cx))
-            .child(div().flex_1().min_h_0().child(self.tabs.active().clone()))
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .when(self.sidebar_open, |d| d.child(self.render_sidebar(cx)))
+                    .child(div().flex_1().min_w_0().child(self.tabs.active().clone())),
+            )
     }
 }

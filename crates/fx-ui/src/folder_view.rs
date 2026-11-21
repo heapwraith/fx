@@ -453,6 +453,13 @@ impl FolderView {
         self.look.mica
     }
 
+    /// Opens `path` in this tab (sidebar), as a new history entry.
+    pub fn open(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+        if path != self.path {
+            self.go_to(path, None, window, cx);
+        }
+    }
+
     pub fn path(&self) -> &Path {
         &self.path
     }

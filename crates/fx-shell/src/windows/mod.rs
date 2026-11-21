@@ -1,8 +1,10 @@
 //! Windows implementation.
 
 mod instance;
+mod places;
 
 pub use instance::{Instance, claim_instance};
+pub use places::{drives, known_folder, known_folders, watch_drives};
 
 use std::time::{Duration, SystemTime};
 

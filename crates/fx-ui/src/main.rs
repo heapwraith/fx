@@ -14,19 +14,23 @@
 #![windows_subsystem = "windows"]
 
 mod folder_view;
+mod places;
 mod tabs_view;
 mod theme;
 mod trace;
 
+use std::cell::RefCell;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::mpsc::Receiver;
 
 use gpui::{
-    App, AppContext, Application, Bounds, TitlebarOptions, WindowBackgroundAppearance,
+    App, AppContext, Application, Bounds, Entity, TitlebarOptions, WindowBackgroundAppearance,
     WindowBounds, WindowOptions, px, size,
 };
 
 use folder_view::{Look, window_title};
+use places::Places;
 use tabs_view::TabsView;
 use theme::{Density, Mode, Theme};
 use trace::Trace;
@@ -65,6 +69,10 @@ fn main() {
         None
     };
 
+    // Before the event loop: RtlGetVersion only, no I/O.
+    let mica_supported =
+        fx_shell::supports_mica() && std::env::var_os("FX_MICA").is_none_or(|v| v != "0");
+
     let app = Application::new();
     if let Some(t) = &mut trace {
         t.mark("app_created");
@@ -75,26 +83,27 @@ fn main() {
         }
         let fonts = cx.text_system().all_font_names();
         let startup = Startup {
-            mica_supported: fx_shell::supports_mica()
-                && std::env::var_os("FX_MICA").is_none_or(|v| v != "0"),
+            mica_supported,
             font: theme::pick_font(&fonts),
             icon_font: theme::pick_icon_font(&fonts),
             forced: Mode::from_env(),
             density: Density::from_env().unwrap_or(Density::Standard),
         };
-        if !open_folder_window(path, startup, trace, cx) {
+        let trace = trace.map(|t| Rc::new(RefCell::new(t)));
+        let places = cx.new(|cx| Places::new(trace.clone(), cx));
+        if !open_folder_window(path, startup, trace, places.clone(), cx) {
             cx.quit();
             return;
         }
         if let Some(rx) = incoming {
-            listen(rx, startup, cx);
+            listen(rx, startup, places, cx);
         }
         cx.activate(true);
     });
 }
 
 /// Opens a window for every folder another fx process hands over.
-fn listen(rx: Receiver<PathBuf>, startup: Startup, cx: &mut App) {
+fn listen(rx: Receiver<PathBuf>, startup: Startup, places: Entity<Places>, cx: &mut App) {
     cx.spawn(async move |cx| {
         let background = cx.background_executor().clone();
         let mut rx = rx;
@@ -109,7 +118,7 @@ fn listen(rx: Receiver<PathBuf>, startup: Startup, cx: &mut App) {
             rx = back;
             let Ok(folder) = folder else { break };
             if cx
-                .update(|cx| open_folder_window(folder, startup, None, cx))
+                .update(|cx| open_folder_window(folder, startup, None, places.clone(), cx))
                 .is_err()
             {
                 break;
@@ -123,7 +132,8 @@ fn listen(rx: Receiver<PathBuf>, startup: Startup, cx: &mut App) {
 fn open_folder_window(
     path: PathBuf,
     startup: Startup,
-    mut trace: Option<Trace>,
+    trace: Option<Rc<RefCell<Trace>>>,
+    places: Entity<Places>,
     cx: &mut App,
 ) -> bool {
     let bounds = Bounds::centered(None, size(px(900.0), px(640.0)), cx);
@@ -149,8 +159,8 @@ fn open_folder_window(
             ..Default::default()
         },
         move |window, cx| {
-            if let Some(t) = &mut trace {
-                t.mark("window_created");
+            if let Some(t) = &trace {
+                t.borrow_mut().mark("window_created");
             }
             let system = Mode::from_appearance(window.appearance());
             let mode = forced.unwrap_or(system);
@@ -167,7 +177,7 @@ fn open_folder_window(
                 mica_supported,
                 mica,
             };
-            let view = cx.new(|cx| TabsView::new(path, look, trace, window, cx));
+            let view = cx.new(|cx| TabsView::new(path, look, trace, places, window, cx));
             // Follow the Windows light/dark setting live.
             let themed = view.clone();
             window

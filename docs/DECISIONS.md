@@ -107,3 +107,9 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Ainda não feito:** fechar a última janela ainda encerra o processo (comportamento do GPUI). Ficar residente sem janela exige um jeito visível de sair (ícone na bandeja ou opção nas configurações), que entra com a persistência de configurações (T1.17) ou numa tarefa própria.
 - **Seleção:** `fx_core::Selection` guarda entradas (índices da lista), não posições na tela, num bitset com cursor e âncora. Por isso sobrevive a reordenação e filtro. Entradas escondidas pelo filtro continuam selecionadas; operações futuras devem usar `selected_in(rows)`, que devolve só as visíveis.
 - **Features novas do `windows`** (sem crate novo): `Win32_System_Pipes` e `Win32_System_RemoteDesktop` (`ProcessIdToSessionId`, para o nome do pipe por sessão).
+
+## D-017 — Lateral: unidades por consulta periódica (T1.5)
+- **Data:** 2026-11-21 · **Status:** aceita
+- **Decisão:** o `fx-shell` descobre unidades novas consultando `GetLogicalDrives` a cada 250 ms numa thread própria (`watch_drives`), em vez de `WM_DEVICECHANGE`. A chamada custa microssegundos; o procedimento de janela pertence ao GPUI e o fx não teria onde receber a mensagem sem outro patch. Quando a máscara de letras muda, a thread relê rótulo, tipo e espaço de cada unidade (chamadas que podem demorar em unidade de rede) e manda a lista; o espaço livre é relido a cada 30 s.
+- **Medido:** unidade criada ou removida com `subst` aparece na lateral em 23–60 ms (`fx-bench drives`; meta ≤ 1 s). Um pendrive real cria a letra da mesma forma, mas não foi testado com hardware.
+- **Acesso rápido:** começa com Área de Trabalho, Downloads, Documentos, Imagens, Músicas e Vídeos (como o Explorador). Fixar e desafixar fica em memória até a T1.17.

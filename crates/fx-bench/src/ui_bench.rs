@@ -52,6 +52,15 @@ impl TraceFile {
             .collect()
     }
 
+    /// Raw values of a repeated key, in file order.
+    pub fn values(&self, key: &str) -> Vec<&str> {
+        self.lines
+            .iter()
+            .filter(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
+            .collect()
+    }
+
     /// Frame intervals grouped by scrolling session.
     pub fn sessions(&self) -> Vec<Vec<f64>> {
         let mut sessions: Vec<Vec<f64>> = Vec::new();
@@ -655,6 +664,114 @@ pub fn tab_keys() -> std::io::Result<()> {
         date = json_string(&date),
     );
     std::fs::write(results_dir()?.join(format!("{date}-T1.4-P2.json")), json)?;
+    Ok(())
+}
+
+/// T1.5: a new drive must show in the sidebar within this long.
+const TARGET_DRIVE_MS: u128 = 1_000;
+const DRIVE_CYCLES: usize = 3;
+
+fn unix_ms() -> u128 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis())
+}
+
+/// T1.5: drive letter -> sidebar. Maps a free letter to the fixtures folder
+/// with `subst` (a drive letter like a USB stick's, without hardware), removes
+/// it, three times, and reads from fx's trace when each new drive list
+/// reached the UI.
+pub fn drive_latency() -> std::io::Result<()> {
+    let root = fixtures_root()?;
+    let letter = ('D'..='Z')
+        .rev()
+        .find(|c| !Path::new(&format!("{c}:\\")).exists())
+        .ok_or_else(|| std::io::Error::other("no free drive letter"))?;
+    let drive = format!("{letter}:");
+    let mut child = spawn_fx(&root, false)?;
+    std::thread::sleep(Duration::from_secs(2));
+    let mut events = Vec::new(); // (unix ms, added?)
+    for _ in 0..DRIVE_CYCLES {
+        events.push((unix_ms(), true));
+        Command::new("subst").arg(&drive).arg(&root).status()?;
+        std::thread::sleep(Duration::from_millis(1500));
+        events.push((unix_ms(), false));
+        Command::new("subst")
+            .args([drive.as_str(), "/D"])
+            .status()?;
+        std::thread::sleep(Duration::from_millis(1500));
+    }
+    Command::new("powershell")
+        .args(["-NoProfile", "-Command"])
+        .arg(format!(
+            "(Get-Process -Id {}).CloseMainWindow() | Out-Null",
+            child.id()
+        ))
+        .status()?;
+    wait_with_timeout(&mut child, Duration::from_secs(10))?;
+    let trace = read_trace(child.id())?;
+    let seen: Vec<(u128, usize)> = trace
+        .values("drives_seen")
+        .iter()
+        .filter_map(|v| {
+            let (at, n) = v.split_once(',')?;
+            Some((at.parse().ok()?, n.parse().ok()?))
+        })
+        .collect();
+    let mut latencies = Vec::new();
+    for &(at, added) in &events {
+        let before = seen
+            .iter()
+            .rev()
+            .find(|(t, _)| *t <= at)
+            .map(|&(_, n)| n)
+            .ok_or_else(|| std::io::Error::other("no drive list before the change"))?;
+        let want = if added { before + 1 } else { before - 1 };
+        let reached = seen
+            .iter()
+            .find(|&&(t, n)| t > at && n == want)
+            .map(|&(t, _)| t - at)
+            .ok_or_else(|| std::io::Error::other("the sidebar never showed the change"))?;
+        latencies.push((added, reached));
+    }
+    let max = latencies.iter().map(|&(_, ms)| ms).max().unwrap_or(0);
+    let pass = max <= TARGET_DRIVE_MS;
+    println!("T1.5: drive letter appears/disappears -> sidebar list updated (release)");
+    for (added, ms) in &latencies {
+        println!(
+            "  {} {drive} {ms} ms",
+            if *added { "subst   " } else { "subst /D" }
+        );
+    }
+    println!(
+        "  max {max} ms   target ≤ {TARGET_DRIVE_MS} ms  {}",
+        if pass { "pass" } else { "FAIL" }
+    );
+    let list = latencies
+        .iter()
+        .map(|(a, ms)| format!("{{ \"added\": {a}, \"ms\": {ms} }}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let date = utc_date(SystemTime::now());
+    let json = format!(
+        concat!(
+            "{{\n  \"id\": \"drive-appears\",\n  \"task\": \"T1.5\",\n",
+            "  \"input\": \"subst <letter>: on the fixtures folder, then subst /D, 3 times\",\n",
+            "  \"events\": [{list}],\n  \"max_ms\": {max},\n  \"target_ms\": {t},\n",
+            "  \"pass\": {pass},\n  \"machine\": {machine},\n  \"commit\": {commit},\n  \"date\": {date}\n}}\n"
+        ),
+        list = list,
+        max = max,
+        t = TARGET_DRIVE_MS,
+        pass = pass,
+        machine = json_string(&machine()),
+        commit = json_string(commit()),
+        date = json_string(&date),
+    );
+    std::fs::write(
+        results_dir()?.join(format!("{date}-T1.5-drives.json")),
+        json,
+    )?;
     Ok(())
 }
 
