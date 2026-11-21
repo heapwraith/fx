@@ -60,7 +60,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T0.4 — Armazenamento da lista, ordenação natural e filtro (fx-core)
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: `FileList` em colunas com ordenação natural (sem acento/maiúscula, pastas primeiro) e filtro; 100k: ordenar por nome 35,6 ms (p95 35,8; meta 50), filtrar por tecla 0,95 ms (p95 1,2; meta 5).
 
 **Fazer**
 - Estrutura em colunas (ver ARCHITECTURE.md, "Desenho da lista"): buffer único de nomes + vetores de tamanho/data + vetor de índices para ordenação.

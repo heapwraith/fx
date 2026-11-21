@@ -5,5 +5,8 @@
 #![forbid(unsafe_code)]
 
 mod entry;
+mod list;
+pub mod natural;
 
 pub use entry::{Attributes, Entry};
+pub use list::{Direction, FileList, SortKey};

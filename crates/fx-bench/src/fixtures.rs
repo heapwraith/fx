@@ -189,7 +189,7 @@ fn par_for(n: usize, job: impl Fn(usize) -> io::Result<()> + Sync) -> io::Result
 }
 
 /// Per-fixture, per-item RNG.
-fn item_rng(fixture: u64, index: usize) -> Rng {
+pub(crate) fn item_rng(fixture: u64, index: usize) -> Rng {
     Rng::derive(
         FIXTURE_SEED ^ fixture.wrapping_mul(0xA24B_AED4_963E_E407),
         index as u64,
