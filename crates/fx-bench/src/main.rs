@@ -9,11 +9,14 @@
 //! fx-bench scroll             P7: frame times while scrolling (moves the mouse!) (T0.5)
 //! fx-bench responsive <dir>   window responsiveness while <dir> loads (T0.5)
 //! fx-bench type               P4: key -> frame latency typing to filter (sends keys!) (T0.6)
+//! fx-bench index --volume C:  P6/P9: index the real MFT (needs Administrator) (T0.7)
+//! fx-bench index --synthetic N  index N generated files in memory (T0.7)
 //! ```
 //! Run from the repository root: results go to `bench/results/`.
 
 mod enum_bench;
 mod fixtures;
+mod index_bench;
 mod list_bench;
 mod names;
 mod png;
@@ -26,8 +29,7 @@ use std::time::Instant;
 
 use fixtures::{Outcome, Spec};
 
-const USAGE: &str =
-    "usage: fx-bench fixtures [--clean] | enum | list | open | scroll | responsive <folder> | type";
+const USAGE: &str = "usage: fx-bench fixtures [--clean] | enum | list | open | scroll | responsive <folder> | type | index (--volume C: | --synthetic N)";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -40,6 +42,14 @@ fn main() -> ExitCode {
         ["open"] => ui_bench::open(),
         ["scroll"] => ui_bench::scroll(),
         ["type"] => ui_bench::type_keys(),
+        ["index", "--volume", volume] => index_bench::volume(volume),
+        ["index", "--synthetic", n] => match n.parse() {
+            Ok(n) => index_bench::synthetic(n),
+            Err(_) => {
+                eprintln!("{USAGE}");
+                return ExitCode::from(2);
+            }
+        },
         ["responsive", folder] => ui_bench::responsive(std::path::Path::new(folder), 10),
         _ => {
             eprintln!("{USAGE}");

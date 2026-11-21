@@ -103,6 +103,9 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 
 ## T0.7 — Leitura da MFT e índice em memória (fx-index)
 - [ ] Concluída em: ____ · Resumo: ____
+- **Status 2026-11-21:** implementada, mas **falta a medição elevada**. Índice em colunas (`fx_index::Index`), leitura paralela da MFT (`read_volume`) e diário USN (`JournalWatcher`). Sem admin, o comando falha com "execute como Administrador" (testado). No sintético de 2 milhões de arquivos: montagem em 0,31 s e **71 MB por milhão** (P9 ≤ 150). Falta rodar num PowerShell **como Administrador**, na pasta do repositório (`\\wsl.localhost\Ubuntu\home\<usuario>\projetos\fx`):
+  1. `.\target\x86_64-pc-windows-msvc\release\fx-bench.exe index --volume C:` (P6 e P9 reais);
+  2. o teste USN (criar, renomear e apagar um arquivo em `%TEMP%`): depois de `cargo xwin test --target x86_64-pc-windows-msvc -p fx-index --no-run`, rodar `& (Get-Item .\target\x86_64-pc-windows-msvc\debug\deps\fx_index-*.exe | Select-Object -First 1) --ignored`.
 
 **Fazer**
 - Com `ntfs-reader`, ler a MFT do volume C: e montar um índice em memória: nome compactado, id do registro, id do pai, flag de pasta, tamanho, data.

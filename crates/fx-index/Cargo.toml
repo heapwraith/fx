@@ -17,3 +17,6 @@ fx-core.workspace = true
 [target.'cfg(windows)'.dependencies]
 windows.workspace = true
 ntfs-reader.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

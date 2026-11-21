@@ -1989,6 +1989,7 @@ version = "0.0.1"
 dependencies = [
  "fx-core",
  "ntfs-reader",
+ "tempfile",
  "windows 0.62.2",
 ]
 
