@@ -41,7 +41,14 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Consequência:** manter o patch a cada atualização do gpui. **Atualizado em 2026-11-21 (T0.5):** compilar os shaders em runtime custava ~250 ms na abertura, então agora eles são pré-compilados com o `d3dcompiler_47.dll` do Windows (`compile-shaders.ps1`) e embutidos no binário. O patch também passou a reaproveitar o dispositivo D3D11 do teste de adaptador (−200 ms). Detalhes em `third_party/gpui/FX-PATCH.md`.
 
 ## D-008 — Acessibilidade (UI Automation) com GPUI
-- **Status:** pendente (definida na T0.9)
+- **Data:** 2026-11-21 · **Status:** aceita (resultado: **não funciona**; caminho proposto abaixo)
+- **Verificação (T0.9):**
+  - **Código do gpui 0.2.2:** nada de UI Automation no Windows. Não responde ao `WM_GETOBJECT`, não implementa provedores UIA (`IRawElementProvider*`) e não usa o AccessKit.
+  - **Na prática:** abri o fx na `flat-100k` e percorri a árvore de UI Automation da janela (`System.Windows.Automation`, a mesma árvore que o Narrador lê). Ela tem **um único elemento**, a janela (`Zed::Window`), **sem filhos**: o Narrador não enxerga a lista, os itens, o item selecionado nem o cabeçalho. Antes desta tarefa a janela nem tinha nome; agora tem título (`<pasta> — fx`), então o Narrador ao menos anuncia a janela.
+  - **Narrador ao vivo:** a verificação foi feita pela árvore UIA, não ouvindo o Narrador. Para confirmar, abra o fx e pressione Ctrl+Win+Enter.
+- **Caminho proposto:** camada própria de UI Automation com o **AccessKit** (`accesskit` + `accesskit_windows` 0.35.2, MIT OR Apache-2.0, usa `windows` 0.62 como o nosso workspace). O `accesskit_windows::SubclassingAdapter` trata o `WM_GETOBJECT` subclassificando um HWND que já existe, sem precisar de patch no gpui. A única exigência é ser instalado **antes** de a janela aparecer, e o gpui permite isso: abrir com `WindowOptions { show: false }`, pegar o HWND por `HasWindowHandle`, instalar o adaptador e só então chamar `window.activate_window()`. A árvore (janela → cabeçalho → lista com N itens → só as linhas visíveis, como na virtualização) é montada a partir do estado da `FolderView`, com foco e seleção atualizados por `update_if_active`.
+  - Alternativas: contribuir com o upstream do GPUI (a Zed não tem isso pronto no Windows, prazo incerto) ou o plano B (D-002), que teria que implementar UIA de qualquer jeito.
+- **Consequência:** a acessibilidade tem caminho viável sem trocar de stack (critério 3 do portão). Implementação na Fase 1, com duas dependências novas (`accesskit`, `accesskit_windows`), a confirmar quando a tarefa for detalhada. Risco: o AccessKit ainda não cobre listas virtualizadas enormes de forma nativa; precisaremos expor só a janela visível e o total de itens.
 
 ## D-009 — Estratégia de enumeração de pastas
 - **Data:** 2026-11-21 · **Status:** aceita

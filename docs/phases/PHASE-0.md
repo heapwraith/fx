@@ -135,7 +135,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T0.9 — Acessibilidade no protótipo
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: **não funciona**: o gpui 0.2.2 não tem UI Automation, e a árvore UIA do fx tem só a janela, sem filhos. A janela ganhou título. Caminho viável: camada própria com `accesskit_windows::SubclassingAdapter`, com a janela aberta escondida (D-008).
 
 **Fazer**
 - Verificar no código do GPUI fixado se há suporte a UI Automation (o que o Narrador usa) no Windows.

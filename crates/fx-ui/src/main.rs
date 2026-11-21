@@ -11,7 +11,9 @@ mod trace;
 
 use std::path::PathBuf;
 
-use gpui::{App, AppContext, Application, Bounds, WindowBounds, WindowOptions, px, size};
+use gpui::{
+    App, AppContext, Application, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size,
+};
 
 use folder_view::FolderView;
 use trace::Trace;
@@ -22,6 +24,12 @@ fn main() {
         .map(PathBuf::from)
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_else(|| PathBuf::from("."));
+    // Window title: folder name, then "fx" (read by the taskbar and the Narrator).
+    let title = path.file_name().map_or_else(
+        || path.display().to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    let title = format!("{title} — fx");
     let mut trace = Trace::from_env(&path.display().to_string());
     if let Some(t) = &mut trace {
         t.mark("main");
@@ -39,6 +47,10 @@ fn main() {
         let opened = cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
+                titlebar: Some(TitlebarOptions {
+                    title: Some(title.into()),
+                    ..Default::default()
+                }),
                 ..Default::default()
             },
             move |window, cx| {
