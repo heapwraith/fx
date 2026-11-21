@@ -49,7 +49,7 @@ impl FolderView {
             .map(|&i| self.path.join(self.list.os_name(i)))
             .collect();
         self.thumbs
-            .update(cx, |thumbs, _| thumbs.want(paths.clone()));
+            .update(cx, |thumbs, cx| thumbs.want(paths.clone(), cx));
         let thumbs = self.thumbs.read(cx);
         let icons = self.icons.read(cx);
         let mut missing_icons = Vec::new();

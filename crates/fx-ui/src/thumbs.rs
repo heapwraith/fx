@@ -25,7 +25,9 @@ enum Slot {
 }
 
 pub struct Thumbs {
+    /// Started on the first request (the list view never needs it).
     service: Option<ThumbService>,
+    started: bool,
     cache: HashMap<PathBuf, Slot>,
     /// Arrival order of the cached items, oldest first.
     order: VecDeque<PathBuf>,
@@ -34,9 +36,10 @@ pub struct Thumbs {
 }
 
 impl Thumbs {
-    pub fn new(cx: &mut Context<Self>) -> Self {
+    pub fn new(_: &mut Context<Self>) -> Self {
         Self {
-            service: Self::start(cx),
+            service: None,
+            started: false,
             cache: HashMap::new(),
             order: VecDeque::new(),
             wanted: Vec::new(),
@@ -108,7 +111,11 @@ impl Thumbs {
 
     /// The items on screen, in order; those without a thumbnail yet are
     /// queued and everything else pending is cancelled.
-    pub fn want(&mut self, paths: Vec<PathBuf>) {
+    pub fn want(&mut self, paths: Vec<PathBuf>, cx: &mut Context<Self>) {
+        if !self.started {
+            self.started = true;
+            self.service = Self::start(cx);
+        }
         let Some(service) = &self.service else { return };
         let missing: Vec<PathBuf> = paths
             .into_iter()

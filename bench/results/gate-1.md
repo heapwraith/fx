@@ -46,7 +46,7 @@ Mesma da Fase 0: AMD Ryzen 7 5700X, 32 GB, RTX 5070, monitor 1920×1080 a 239 Hz
 | Meta | Resultado | |
 |---|---|---|
 | P5 busca por tecla (≤ 50 ms) | índice sintético de 2M: p95 8,75 ms (real do C: na Fase 0: 4,1 ms) | ✅ |
-| P8 memória parado, 1 janela (≤ 80 MB) | **95,7 MB** privados na `flat-100k` em lista; 87 MB em grade na `flat-10k-media` (Fase 0: 72,4) | ❌ |
+| P8 memória parado, 1 janela, **pasta pequena** (≤ 80 MB) | **83,9–84,6 MB** privados (a versão da Fase 0, medida hoje do mesmo jeito: 72,1). Com a `flat-100k` aberta: 97 MB (a lista de 100 mil custa ~13 MB, igual na Fase 0) | ❌ por ~4 MB |
 | P9 índice por milhão (≤ 150 MB) | 71,4 MB/milhão (sintético) | ✅ |
 | Menu de contexto (T1.16, p95 ≤ 150 ms) | mediana 64 ms, **p95 259 ms** (extensões do shell na 1ª abertura de cada tipo; repetidos 41–69 ms) | ❌ neste PC |
 | Unidade nova na lateral (≤ 1 s) | 23–60 ms | ✅ |
@@ -64,7 +64,7 @@ Método igual ao da Fase 0: fx pelo `FX_TRACE`, Explorador por UI Automation (`b
 
 ## Riscos encontrados
 
-1. **Memória (P8):** 95,7 MB parado contra 80 MB de meta, e subiu ~23 MB desde a Fase 0 com lateral, ícones, miniaturas, AccessKit, menu, fila e SQLite. Candidatos a investigar: as threads de serviço (STA de ícones, miniaturas e menu, vigia de unidades, fila), o cache de ícones e o atlas de glifos e imagens do GPUI (a textura de miniaturas não é liberada, D-019). Precisa de uma medição por componente antes de decidir.
+1. **Memória (P8):** 83,9 MB parado numa pasta pequena (a definição da P8), ~4 MB acima da meta. Medição por versão, nas mesmas condições: Fase 0 72,1 → lateral +3,3 → ícones +6,5 → AccessKit +1,5 → resto +0,6 MB. Threads e COM não são o custo (iniciar as miniaturas só na grade tirou 4 threads e nada de memória). Os 95,7 MB citados numa primeira versão deste relatório eram da pasta de 100 mil arquivos, que a P8 não usa. Próximo passo: perfilar heap, imagens de DLL e alocações do driver (VMMap ou ETW) nas partes de ícones e lateral.
 2. **Menu de contexto:** o p95 depende das extensões instaladas, e neste PC passa da meta. O fx já não espera o menu na thread de UI e tem tempo limite contra extensões travadas; o que sobra é custo do shell, igual no Explorador.
 3. **Processo novo mais lento:** do pedido da pasta ao primeiro quadro, 24 → 61–72 ms, porque o primeiro quadro de um processo novo tem mais o que desenhar. Não afeta a P2 (b) do fx residente (10 ms), mas a P1 também subiu (~40 ms).
 4. **Residente sem janela (D-013):** fechar a última janela ainda encerra o processo. Para valer o "primeira abertura do dia", falta um jeito de o fx ficar carregado (bandeja ou serviço), com opção de sair.
@@ -77,6 +77,6 @@ Método igual ao da Fase 0: fx pelo `FX_TRACE`, Explorador por UI Automation (`b
 
 1. Usar o fx como gerenciador principal e anotar cada volta ao Explorador (com o motivo); cada uma vira tarefa.
 2. Fazer os testes manuais da lista acima nos primeiros dias.
-3. Em paralelo, investigar e reduzir a memória (P8), que hoje é a meta mais longe do alvo.
+3. Em paralelo, perfilar e reduzir a memória (P8), ~4 MB acima da meta.
 
 A decisão de passar o portão é do usuário.
