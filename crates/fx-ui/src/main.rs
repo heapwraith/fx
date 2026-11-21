@@ -64,6 +64,7 @@ struct Startup {
     forced: Option<Mode>,
     density: Density,
     sidebar: bool,
+    show_hidden: bool,
 }
 
 /// A window app has no console: write panics to `%TEMP%\fx-crash-<pid>.log`
@@ -141,6 +142,7 @@ fn main() {
                 _ => Density::Standard,
             }),
             sidebar: settings.barra_lateral,
+            show_hidden: settings.mostrar_ocultos,
         };
         let trace = trace.map(|t| Rc::new(RefCell::new(t)));
         let pinned = session.as_ref().and_then(|s| s.pinned.clone());
@@ -265,6 +267,7 @@ fn open_folder_window(
         forced,
         density,
         sidebar,
+        show_hidden,
     } = startup;
     let persist = shared.persist.clone();
     let close_persist = persist.clone();
@@ -303,6 +306,7 @@ fn open_folder_window(
                 icon_font,
                 grid: std::env::var_os("FX_VIEW").is_some_and(|v| v == "grid"),
                 sidebar,
+                show_hidden,
                 mica_supported,
                 mica,
             };

@@ -9,7 +9,8 @@ use std::sync::mpsc::Receiver;
 
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
 use windows::Win32::UI::Shell::{
-    SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW, ShellExecuteExW,
+    SEE_MASK_FLAG_NO_UI, SEE_MASK_INVOKEIDLIST, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW,
+    SHMultiFileProperties, ShellExecuteExW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{ASFW_ANY, AllowSetForegroundWindow, SW_SHOWNORMAL};
 use windows::core::PCWSTR;
@@ -35,8 +36,33 @@ pub fn launch(what: Launch) -> Receiver<io::Result<()>> {
                 shell_execute(Some("openas"), path.as_os_str(), None, None, 0)
             }
             Launch::Terminal(dir) => terminal(&dir),
+            Launch::Properties(items) => properties(&items),
         }
     })
+}
+
+/// The shell's Properties sheet: the "properties" verb for one item, the
+/// multi-item sheet for several (it sums sizes, like Explorer's).
+fn properties(items: &[std::path::PathBuf]) -> io::Result<()> {
+    match items {
+        [] => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "nada selecionado",
+        )),
+        [one] => shell_execute(
+            Some("properties"),
+            one.as_os_str(),
+            None,
+            None,
+            SEE_MASK_INVOKEIDLIST,
+        ),
+        many => {
+            let data = super::dragdrop::data_object(many)?;
+            // SAFETY: `data` is the shell's own data object for `many`; the
+            // sheet keeps its own reference.
+            unsafe { SHMultiFileProperties(&data, 0) }.map_err(to_io)
+        }
+    }
 }
 
 /// Windows Terminal in `dir`, or PowerShell there if Terminal is missing.

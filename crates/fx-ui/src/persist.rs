@@ -13,7 +13,7 @@ use std::time::Duration;
 use gpui::{App, Context, Entity, WindowHandle, WindowId};
 
 use crate::places::Places;
-use crate::store::{self, Session, Settings, WindowState};
+use crate::store::{self, Session, Settings, UiSettings, WindowState};
 use crate::tabs_view::TabsView;
 
 const EVERY: Duration = Duration::from_secs(2);
@@ -71,7 +71,7 @@ impl Persist {
         &mut self,
         id: WindowId,
         state: WindowState,
-        settings: (String, bool),
+        settings: UiSettings,
         cx: &mut App,
     ) {
         if self.writer.is_none() {
@@ -92,7 +92,7 @@ impl Persist {
         }
     }
 
-    fn collect(&mut self, closing: Option<(WindowState, (String, bool))>, cx: &mut App) -> Session {
+    fn collect(&mut self, closing: Option<(WindowState, UiSettings)>, cx: &mut App) -> Session {
         let mut windows = Vec::new();
         let mut ui = closing.as_ref().map(|(_, s)| s.clone());
         for handle in &self.windows {
@@ -107,9 +107,10 @@ impl Persist {
             windows = vec![state];
         }
         let mut settings = self.settings.clone();
-        if let Some((density, sidebar)) = ui {
-            settings.densidade = density;
-            settings.barra_lateral = sidebar;
+        if let Some(ui) = ui {
+            settings.densidade = ui.density;
+            settings.barra_lateral = ui.sidebar;
+            settings.mostrar_ocultos = ui.show_hidden;
         }
         let places = self.places.read(cx);
         let pinned = places
@@ -122,7 +123,7 @@ impl Persist {
         }
     }
 
-    fn save(&mut self, closing: Option<(WindowState, (String, bool))>, cx: &mut App) {
+    fn save(&mut self, closing: Option<(WindowState, UiSettings)>, cx: &mut App) {
         let Some(writer) = self.writer.clone() else {
             return;
         };

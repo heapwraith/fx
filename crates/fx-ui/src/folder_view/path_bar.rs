@@ -20,8 +20,8 @@ use gpui::{
 
 use super::{FolderView, Restore};
 use crate::theme::{
-    CAPTION_SIZE, ICON_BACK, ICON_CHEVRON, ICON_FORWARD, ICON_GRID, ICON_LIST, ICON_UP, RADIUS,
-    rgba, space,
+    CAPTION_SIZE, ICON_BACK, ICON_CHEVRON, ICON_FORWARD, ICON_GRID, ICON_LIST, ICON_SEARCH,
+    ICON_UP, ICON_VIEW, RADIUS, rgba, space,
 };
 
 /// Suggestions shown under the field.
@@ -357,6 +357,13 @@ impl FolderView {
                     }),
                 ),
             )
+            .child(
+                button("view-menu", ICON_VIEW, true)
+                    .when(self.view_menu, |d| d.bg(rgba(t.selected)))
+                    .on_click(cx.listener(|view, _: &ClickEvent, _, cx| {
+                        view.toggle_view_menu(cx);
+                    })),
+            )
             // Status shrinks first (with an ellipsis); the bar keeps room.
             .child(
                 div()
@@ -365,9 +372,21 @@ impl FolderView {
                     .max_w(px(STATUS_MAX_WIDTH))
                     .pl(px(space(2)))
                     .pr(px(space(2)))
-                    .truncate()
+                    .flex()
+                    .items_center()
+                    .gap(px(space(1)))
                     .text_color(rgba(t.text_secondary))
-                    .child(self.status_text(cx)),
+                    // While typing to filter, a magnifier says what the text is.
+                    .when(!self.filter_text.is_empty(), |d| {
+                        d.child(
+                            div()
+                                .flex_none()
+                                .font_family(icon_font)
+                                .text_size(px(CAPTION_SIZE))
+                                .child(ICON_SEARCH),
+                        )
+                    })
+                    .child(div().min_w_0().truncate().child(self.status_text(cx))),
             )
     }
 

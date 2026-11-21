@@ -98,6 +98,10 @@ impl FolderView {
             return Vec::new();
         };
         let rows = super::rows_of(&self.filtered, &self.list);
+        // Never act on an entry that is not shown (hidden file, filtered out).
+        if !rows.contains(&c) {
+            return Vec::new();
+        }
         let entries: Vec<u32> = if self.selection.is_selected(c) {
             self.selection.selected_in(rows).collect()
         } else {
@@ -365,6 +369,14 @@ impl FolderView {
                 "copy" => self.put_on_clipboard(false, cx),
                 "cut" => self.put_on_clipboard(true, cx),
                 "paste" => self.paste(window, cx),
+                "properties" => {
+                    let items = if items.is_empty() {
+                        vec![self.path.clone()]
+                    } else {
+                        items
+                    };
+                    self.launch(fx_shell::launch::Launch::Properties(items), cx);
+                }
                 _ => {}
             },
             MenuOutcome::Unavailable(why) => self.notice = Some(why),

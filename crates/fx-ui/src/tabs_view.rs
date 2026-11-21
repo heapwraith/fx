@@ -27,7 +27,7 @@ use gpui::{
 };
 
 use crate::a11y::{A11yHandle, row_entry};
-use crate::folder_view::{FolderView, Look, window_title};
+use crate::folder_view::{FolderView, Look, ViewEvent, window_title};
 use crate::icons::Media;
 use crate::places::Places;
 use crate::theme::{
@@ -160,6 +160,12 @@ impl TabsView {
         let tab = cx.new(|cx| FolderView::new(path, look, trace, opened, media, a11y, cx));
         // Re-render the strip when the tab's folder (its label) changes.
         cx.observe(&tab, |_, _, cx| cx.notify()).detach();
+        // The tab's View menu changes window-wide settings.
+        cx.subscribe(&tab, |view, _, event: &ViewEvent, cx| match *event {
+            ViewEvent::Density(d) => view.set_density(d, cx),
+            ViewEvent::ToggleHidden => view.toggle_hidden(cx),
+        })
+        .detach();
         tab
     }
 
@@ -179,13 +185,17 @@ impl TabsView {
     }
 
     /// Row density and sidebar, for the saved settings.
-    pub fn settings_part(&self) -> (String, bool) {
+    pub fn settings_part(&self) -> crate::store::UiSettings {
         let density = match self.look.density {
             Density::Compact => "compacta",
             Density::Standard => "padrão",
             Density::Comfortable => "confortável",
         };
-        (density.to_owned(), self.sidebar_open)
+        crate::store::UiSettings {
+            density: density.to_owned(),
+            sidebar: self.sidebar_open,
+            show_hidden: self.look.show_hidden,
+        }
     }
 
     /// Reopens a saved window's tabs (the first tab already shows the first
@@ -318,6 +328,32 @@ impl TabsView {
         self.look.mica
     }
 
+    /// Row density for every tab of the window (Ctrl+1/2/3, View menu).
+    fn set_density(&mut self, density: Density, cx: &mut Context<Self>) {
+        self.look.density = density;
+        for tab in self.tabs.iter() {
+            tab.update(cx, |view, cx| {
+                view.set_density(density);
+                cx.notify();
+            });
+        }
+        cx.notify();
+    }
+
+    /// Hidden and system files on or off for every tab (Ctrl+H, View menu);
+    /// saved with the settings.
+    fn toggle_hidden(&mut self, cx: &mut Context<Self>) {
+        let show = !self.look.show_hidden;
+        self.look.show_hidden = show;
+        for tab in self.tabs.iter() {
+            tab.update(cx, |view, cx| {
+                view.set_show_hidden(show);
+                cx.notify();
+            });
+        }
+        cx.notify();
+    }
+
     pub fn write_trace(&self) {
         if let Some(trace) = &self.trace {
             trace.borrow().write();
@@ -356,14 +392,9 @@ impl TabsView {
                     "2" => Density::Standard,
                     _ => Density::Comfortable,
                 };
-                self.look.density = density;
-                for tab in self.tabs.iter() {
-                    tab.update(cx, |view, cx| {
-                        view.set_density(density);
-                        cx.notify();
-                    });
-                }
+                self.set_density(density, cx);
             }
+            ("h", false) => self.toggle_hidden(cx),
             _ => return,
         }
         if let Some(trace) = &self.trace {

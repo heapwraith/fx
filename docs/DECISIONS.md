@@ -204,3 +204,10 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Coluna Tipo:** "Pasta de arquivos", "Arquivo JPG" ou "Arquivo". Os nomes amigáveis do registro ("Documento de Texto") pedem o shell por extensão; ficam para depois, com cache.
 - **Larguras:** arrastar a borda esquerda de Tipo, Tamanho ou Data ajusta a coluna (56 a 480 px); o nome ocupa o resto. Em lista estreita somem nesta ordem: tipo, data, tamanho.
 - **Por aba, persistido:** ordenação e larguras vão numa tabela nova do `state.db` (`tab_view`), para bancos antigos abrirem sem migração.
+
+## D-030 — Ocultos, Propriedades e menu Exibir (T1.21)
+- **Data:** 2026-11-21 · **Status:** aceita
+- **Ocultos:** itens com atributo oculto ou de sistema ficam fora da lista por padrão (`FileList::visible`, combinado com o filtro por nome, sem cópia quando não há nada a esconder). Ctrl+H ou o menu Exibir alternam para a janela inteira; a escolha vai para `settings.toml` (`mostrar_ocultos`). Quando visíveis, aparecem esmaecidos (55%). O status conta os escondidos ("1.001 itens · 12 ocultos"); uma pasta só com ocultos avisa no meio da lista.
+- **Segurança:** esconder tira os ocultos da seleção e do cursor; a seleção restaurada da sessão passa pela mesma limpeza; e `targets()` não devolve nada se o cursor não está numa linha visível. Nenhuma operação age num item que não se vê.
+- **Propriedades:** Alt+Enter e o item "Propriedades" do menu do shell (o verbo `properties` agora volta para o fx, como excluir e renomear) abrem a janela de Propriedades do Windows numa thread de lançamento: um item pelo verbo `properties` (`SEE_MASK_INVOKEIDLIST`), vários pelo `SHMultiFileProperties` com o data object do shell (o mesmo do arrastar, agora uma função comum). Sem seleção, as Propriedades da pasta atual.
+- **Menu Exibir:** botão ao lado do de grade com "Mostrar itens ocultos", "Ordenar por" (com crescente/decrescente) e "Densidade", com os atalhos ao lado: nada fica só no teclado. Densidade e ocultos valem para a janela (a aba emite um `ViewEvent` que a `TabsView` aplica a todas). Com filtro digitado, uma lupa aparece antes do texto do status.

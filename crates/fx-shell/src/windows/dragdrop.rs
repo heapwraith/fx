@@ -66,22 +66,7 @@ impl Drop for Pidls {
 /// (modal: runs its own message loop). Must be called on the window's thread
 /// while no app state is borrowed.
 pub fn drag_files(window: isize, paths: &[PathBuf]) -> io::Result<DragResult> {
-    let mut pidls = Pidls(Vec::with_capacity(paths.len()));
-    for p in paths {
-        let wide: Vec<u16> = p.as_os_str().encode_wide().chain([0]).collect();
-        let mut pidl: *mut ITEMIDLIST = std::ptr::null_mut();
-        // SAFETY: `wide` is NUL-terminated; `pidl` receives a new id we own.
-        unsafe { SHParseDisplayName(PCWSTR(wide.as_ptr()), None, &mut pidl, 0, None) }
-            .map_err(to_io)?;
-        pidls.0.push(pidl);
-    }
-    let ids: Vec<*const ITEMIDLIST> = pidls.0.iter().map(|p| p.cast_const()).collect();
-    // SAFETY: `ids` are valid absolute item ids, alive until `pidls` drops.
-    let items: IShellItemArray =
-        unsafe { SHCreateShellItemArrayFromIDLists(&ids) }.map_err(to_io)?;
-    // SAFETY: valid array; asks the shell for its standard data object.
-    let data: IDataObject =
-        unsafe { items.BindToHandler(None, &BHID_DataObject) }.map_err(to_io)?;
+    let data = data_object(paths)?;
     let allowed = DROPEFFECT(DROPEFFECT_COPY.0 | DROPEFFECT_MOVE.0 | DROPEFFECT_LINK.0);
     // SAFETY: `window` is our live window on this thread; no custom drop
     // source (the shell's default one follows the mouse and Esc).
@@ -103,4 +88,24 @@ pub fn drag_files(window: isize, paths: &[PathBuf]) -> io::Result<DragResult> {
     } else {
         DragResult::None
     })
+}
+
+/// The shell's standard data object for `paths` (drag out, multi-item
+/// Properties). Needs COM on the calling thread.
+pub(super) fn data_object(paths: &[PathBuf]) -> io::Result<IDataObject> {
+    let mut pidls = Pidls(Vec::with_capacity(paths.len()));
+    for p in paths {
+        let wide: Vec<u16> = p.as_os_str().encode_wide().chain([0]).collect();
+        let mut pidl: *mut ITEMIDLIST = std::ptr::null_mut();
+        // SAFETY: `wide` is NUL-terminated; `pidl` receives a new id we own.
+        unsafe { SHParseDisplayName(PCWSTR(wide.as_ptr()), None, &mut pidl, 0, None) }
+            .map_err(to_io)?;
+        pidls.0.push(pidl);
+    }
+    let ids: Vec<*const ITEMIDLIST> = pidls.0.iter().map(|p| p.cast_const()).collect();
+    // SAFETY: `ids` are valid absolute item ids, alive until `pidls` drops.
+    let items: IShellItemArray =
+        unsafe { SHCreateShellItemArrayFromIDLists(&ids) }.map_err(to_io)?;
+    // SAFETY: valid array; asks the shell for its standard data object.
+    unsafe { items.BindToHandler(None, &BHID_DataObject) }.map_err(to_io)
 }

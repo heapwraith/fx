@@ -15,6 +15,9 @@ pub enum Launch {
     OpenWith(PathBuf),
     /// A terminal whose current folder is this one.
     Terminal(PathBuf),
+    /// The Windows "Properties" sheet of these items (T1.21). Like the other
+    /// launches it runs off the UI thread; the sheet itself is the shell's.
+    Properties(Vec<PathBuf>),
 }
 
 /// Runs `job` on a new thread; the result arrives on the returned channel.
@@ -52,6 +55,20 @@ mod tests {
         assert!(started.elapsed() < Duration::from_millis(50));
         assert!(rx.try_recv().is_err(), "not finished yet");
         assert!(rx.recv_timeout(Duration::from_secs(5)).unwrap().is_ok());
+    }
+
+    /// Properties with nothing selected: an error at once, no sheet.
+    #[cfg(windows)]
+    #[test]
+    fn properties_of_nothing_is_an_error() {
+        let started = Instant::now();
+        let rx = crate::launch(Launch::Properties(Vec::new()));
+        assert!(started.elapsed() < Duration::from_millis(50), "never waits");
+        let e = rx
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(e.kind(), std::io::ErrorKind::InvalidInput);
     }
 
     #[test]

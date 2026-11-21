@@ -317,6 +317,40 @@ impl FileList {
         true
     }
 
+    /// Hidden or system entry (shown only when the user asks, T1.21).
+    pub fn is_hidden(&self, i: u32) -> bool {
+        let a = self.attributes(i);
+        a.contains(Attributes::HIDDEN) || a.contains(Attributes::SYSTEM)
+    }
+
+    /// The rows to show: `filtered` (a name filter's result, `None` for all
+    /// entries in display order), without hidden and system entries unless
+    /// `show_hidden`. `None` means "every entry, in display order" (nothing
+    /// to leave out), so the common case costs no copy.
+    pub fn visible(&self, filtered: Option<Vec<u32>>, show_hidden: bool) -> Option<Vec<u32>> {
+        if show_hidden {
+            return filtered;
+        }
+        match filtered {
+            Some(mut rows) => {
+                rows.retain(|&i| !self.is_hidden(i));
+                Some(rows)
+            }
+            None => {
+                if !self.order.iter().any(|&i| self.is_hidden(i)) {
+                    return None;
+                }
+                Some(
+                    self.order
+                        .iter()
+                        .copied()
+                        .filter(|&i| !self.is_hidden(i))
+                        .collect(),
+                )
+            }
+        }
+    }
+
     /// Entries whose name contains `needle` (case/accent-insensitive), in the
     /// current display order. An empty needle returns everything.
     pub fn filter(&self, needle: &str) -> Vec<u32> {
@@ -493,6 +527,39 @@ mod tests {
         list.extend(entries);
         list.sort(key, dir);
         names(&list, list.order())
+    }
+
+    #[test]
+    fn hidden_and_system_entries_are_left_out() {
+        let mut list = FileList::new();
+        let mut hidden = file("desktop.ini", 1, 0);
+        hidden.attributes = Attributes::HIDDEN.with(Attributes::SYSTEM);
+        let mut sys = file("pagefile.sys", 1, 0);
+        sys.attributes = Attributes::SYSTEM;
+        let mut hidden_dir = dir(".git");
+        hidden_dir.attributes = Attributes::DIRECTORY.with(Attributes::HIDDEN);
+        list.extend(vec![
+            file("b.txt", 1, 0),
+            hidden,
+            sys,
+            hidden_dir,
+            file("a.txt", 1, 0),
+        ]);
+        list.sort(SortKey::Name, Direction::Ascending);
+        let shown = |v: Option<Vec<u32>>| names(&list, v.as_deref().unwrap_or(list.order()));
+        assert_eq!(shown(list.visible(None, false)), ["a.txt", "b.txt"]);
+        assert_eq!(shown(list.visible(None, true)).len(), 5);
+        // Combined with a name filter.
+        let txt = list.filter("t");
+        assert_eq!(
+            shown(list.visible(Some(txt.clone()), false)),
+            ["a.txt", "b.txt"]
+        );
+        assert_eq!(list.visible(Some(txt.clone()), true), Some(txt));
+        // Nothing hidden: no copy.
+        let mut plain = FileList::new();
+        plain.extend(vec![file("x", 1, 0)]);
+        assert_eq!(plain.visible(None, false), None);
     }
 
     #[test]

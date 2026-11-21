@@ -254,7 +254,7 @@ O usuário pediu que o fx tivesse o básico completo, sem bugs visuais, e três 
 - Reordenar 100 mil itens não trava a UI (P4 medida durante a reordenação); seleção mantida (testes).
 
 ## T1.21 — Arquivos ocultos e Propriedades
-- [ ] Concluída em: ____ · Resumo: ____
+- [ ] Concluída em: ____ · Resumo: implementada em 2026-11-21 (D-030): ocultos e de sistema escondidos por padrão, Ctrl+H e menu Exibir (com ordenar e densidade), salvo em `settings.toml`, esmaecidos quando visíveis; Alt+Enter e menu abrem Propriedades numa thread de lançamento (1 ou vários itens). Testes do filtro, da configuração e de que Propriedades não espera. **Falta:** ver na janela o menu Exibir e a janela de Propriedades abrindo de fato (adiado: o usuário pausou os testes que usam a janela).
 
 **Fazer**
 - Mostrar/esconder ocultos e de sistema (Ctrl+H e botão), salvo nas configurações; Alt+Enter e item no menu abrem as Propriedades do Windows.

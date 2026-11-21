@@ -20,6 +20,9 @@ mod dnd;
 mod edit_ops;
 mod grid;
 mod path_bar;
+mod view_menu;
+
+pub use view_menu::ViewEvent;
 
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -61,6 +64,8 @@ const COL_MAX: f32 = 480.0;
 /// Width of the grab area on a header border.
 const RESIZE_HANDLE: f32 = 8.0;
 const ICON_SORT_UP: &str = "\u{E70E}";
+/// Hidden and system items, when shown, are drawn faded (like Explorer).
+const HIDDEN_OPACITY: f32 = 0.55;
 const ICON_SORT_DOWN: &str = "\u{E70D}";
 const SCROLLBAR_WIDTH: f32 = 12.0;
 const THUMB_MIN: f32 = 24.0;
@@ -85,6 +90,8 @@ pub struct Look {
     pub grid: bool,
     /// The sidebar starts open (saved setting).
     pub sidebar: bool,
+    /// Hidden and system files are shown (Ctrl+H, saved setting, T1.21).
+    pub show_hidden: bool,
     /// Mica is available (Windows 11 22H2+ and not disabled by `FX_MICA=0`).
     pub mica_supported: bool,
     /// Mica shows through right now (see `FolderView::set_system_mode`).
@@ -191,6 +198,8 @@ pub struct FolderView {
     sort_ticket: u64,
     widths: Widths,
     resizing: Option<Resize>,
+    /// The "Exibir" menu is open (T1.21).
+    view_menu: bool,
 }
 
 /// Which optional columns fit (T1.19): in a narrow list the type goes
@@ -354,6 +363,7 @@ impl FolderView {
             sort_ticket: 0,
             widths: Widths::default(),
             resizing: None,
+            view_menu: false,
         };
         view.start_loading(cx);
         view
@@ -471,9 +481,7 @@ impl FolderView {
         for &(old, new) in &done.renamed {
             self.selection.moved(old, new);
         }
-        if !self.filter_text.is_empty() {
-            self.filtered = Some(self.list.filter(&self.filter_text));
-        }
+        self.refilter();
         let rows = rows_of(&self.filtered, &self.list);
         if let Some((entry, before)) = anchor
             && let Some(after) = rows.iter().position(|&i| i == entry)
@@ -582,6 +590,7 @@ impl FolderView {
                 }
                 view.refilter();
                 view.apply_restore();
+                view.forget_unseen_hidden();
                 view.status = match failure {
                     Some(e) => Status::Failed(e),
                     None => Status::Ready,
@@ -644,6 +653,7 @@ impl FolderView {
                 let is_dir = self.list.attributes(i).is_dir();
                 let selected = self.selection.is_selected(i);
                 let is_cursor = self.selection.cursor() == Some(i);
+                let dim = self.look.show_hidden && self.list.is_hidden(i);
                 let size: SharedString = if is_dir {
                     SharedString::default()
                 } else {
@@ -690,6 +700,7 @@ impl FolderView {
                                 d.child(
                                     div()
                                         .flex_none()
+                                        .when(dim, |d| d.opacity(HIDDEN_OPACITY))
                                         .size(px(ICON_SIZE))
                                         .when_some(icon, |d, image| {
                                             d.child(img(image).size(px(ICON_SIZE)))
@@ -702,6 +713,7 @@ impl FolderView {
                                     .flex_1()
                                     .min_w_0()
                                     .truncate()
+                                    .when(dim, |d| d.opacity(HIDDEN_OPACITY))
                                     .text_color(rgba(t.text))
                                     .child(SharedString::from(self.list.name(i).to_owned()))
                                     .into_any_element(),
@@ -1218,6 +1230,7 @@ impl FolderView {
                     |n| n.to_string_lossy().into_owned(),
                 )
             }
+            Launch::Properties(_) => "as Propriedades".to_owned(),
         };
         let rx = fx_shell::launch(what);
         cx.spawn(async move |this, cx| {
@@ -1378,25 +1391,49 @@ impl FolderView {
     }
 
     /// Recomputes the filter from scratch (after the list itself changed).
+    /// Recomputes the shown rows: the name filter, minus hidden and system
+    /// entries unless they are shown (T1.21).
     fn refilter(&mut self) {
-        if !self.filter_text.is_empty() {
-            self.filtered = Some(self.list.filter(&self.filter_text));
+        let text = (!self.filter_text.is_empty()).then(|| self.list.filter(&self.filter_text));
+        self.filtered = self.list.visible(text, self.look.show_hidden);
+    }
+
+    /// Ctrl+H or the View menu (for the whole window, through `TabsView`).
+    /// Hiding drops hidden entries from the selection and moves the cursor
+    /// off them: an operation never acts on an item that cannot be seen.
+    pub fn set_show_hidden(&mut self, show: bool) {
+        self.look.show_hidden = show;
+        self.refilter();
+        self.forget_unseen_hidden();
+    }
+
+    /// While hidden entries are not shown, none of them stays selected or
+    /// under the cursor (after Ctrl+H, or a selection restored by name).
+    fn forget_unseen_hidden(&mut self) {
+        if self.look.show_hidden {
+            return;
+        }
+        let had_cursor = self.selection.cursor().is_some();
+        {
+            let hidden: Vec<u32> = self
+                .list
+                .order()
+                .iter()
+                .copied()
+                .filter(|&i| self.list.is_hidden(i))
+                .collect();
+            for i in hidden {
+                self.selection.forget(i);
+            }
+        }
+        // The cursor was on a hidden entry: put it on a shown row.
+        if had_cursor && self.selection.cursor().is_none() {
+            self.keep_cursor_visible();
         }
     }
 
-    /// Applies a new filter text. Extending the text refines the previous result
-    /// instead of scanning all entries again.
-    fn set_filter(&mut self, text: String) {
-        let refine = !self.filter_text.is_empty() && text.starts_with(self.filter_text.as_str());
-        self.filtered = match (&self.filtered, text.is_empty()) {
-            (_, true) => None,
-            (Some(previous), false) if refine => Some(self.list.filter_within(&text, previous)),
-            _ => Some(self.list.filter(&text)),
-        };
-        self.filter_text = text;
-        self.scroll.scroll_to_item(0, ScrollStrategy::Top);
-        // Keep the cursor on a visible row so Enter opens the first match. The
-        // selection itself is kept (fx-core `Selection`).
+    /// The cursor on a shown row (the first one when its entry is not shown).
+    fn keep_cursor_visible(&mut self) {
         let rows = rows_of(&self.filtered, &self.list);
         let visible = self
             .selection
@@ -1406,6 +1443,24 @@ impl FolderView {
             self.selection
                 .move_cursor(rows, Step::First, MoveMode::CursorOnly);
         }
+    }
+
+    /// Applies a new filter text. Extending the text refines the previous result
+    /// instead of scanning all entries again.
+    fn set_filter(&mut self, text: String) {
+        let refine = !self.filter_text.is_empty() && text.starts_with(self.filter_text.as_str());
+        let by_name = match (&self.filtered, text.is_empty()) {
+            (_, true) => None,
+            // The previous result already left hidden entries out.
+            (Some(previous), false) if refine => Some(self.list.filter_within(&text, previous)),
+            _ => Some(self.list.filter(&text)),
+        };
+        self.filtered = self.list.visible(by_name, self.look.show_hidden);
+        self.filter_text = text;
+        self.scroll.scroll_to_item(0, ScrollStrategy::Top);
+        // Keep the cursor on a visible row so Enter opens the first match. The
+        // selection itself is kept (fx-core `Selection`).
+        self.keep_cursor_visible();
     }
 
     /// Keyboard: navigation keys move the cursor (see the module comment);
@@ -1420,6 +1475,11 @@ impl FolderView {
         let only_alt = m.alt && !m.control && !m.shift;
         if self.notice.take().is_some() {
             cx.notify();
+        }
+        if self.view_menu && ks.key == "escape" {
+            self.view_menu = false;
+            cx.notify();
+            return;
         }
         if self.rename_key(ks, window, cx) {
             if let Some(trace) = &self.trace {
@@ -1496,6 +1556,10 @@ impl FolderView {
                 Some("move")
             }
             "enter" if plain => self.open_cursor(window, cx).then_some("open"),
+            "enter" if only_alt => {
+                self.show_properties(cx);
+                Some("open")
+            }
             "enter" if m.shift && !m.control && !m.alt => {
                 let file = self
                     .selection
@@ -1580,7 +1644,11 @@ impl FolderView {
 
     fn load_text(&self) -> String {
         let n = self.list.len();
-        if let Some(filtered) = &self.filtered {
+        if let Some(filtered) = self
+            .filtered
+            .as_ref()
+            .filter(|_| !self.filter_text.is_empty())
+        {
             return format!(
                 "filtro \"{}\": {} de {}",
                 self.filter_text,
@@ -1588,15 +1656,22 @@ impl FolderView {
                 fx_core::format::count(n)
             );
         }
+        // Without a name filter, `filtered` only leaves hidden entries out.
+        let shown = rows_of(&self.filtered, &self.list).len();
+        let hidden = match n - shown {
+            0 => String::new(),
+            1 => " · 1 oculto".to_owned(),
+            k => format!(" · {} ocultos", fx_core::format::count(k)),
+        };
         match &self.status {
-            Status::Loading => format!("{} — carregando…", items(n)),
-            Status::Sorting => format!("{} — ordenando…", items(n)),
+            Status::Loading => format!("{} — carregando…", items(shown)),
+            Status::Sorting => format!("{} — ordenando…", items(shown)),
             Status::Ready => match self.loaded_in {
-                Some(d) => format!("{} · lida em {}", items(n), elapsed_text(d)),
-                None => items(n),
+                Some(d) => format!("{}{hidden} · lida em {}", items(shown), elapsed_text(d)),
+                None => format!("{}{hidden}", items(shown)),
             },
             // The message itself is shown in the list area.
-            Status::Failed(_) => format!("{} · erro", items(n)),
+            Status::Failed(_) => format!("{} · erro", items(shown)),
         }
     }
 
@@ -1609,6 +1684,10 @@ impl FolderView {
         if let Some(filtered) = &self.filtered
             && filtered.is_empty()
         {
+            if self.filter_text.is_empty() {
+                return (!self.list.is_empty() && matches!(self.status, Status::Ready))
+                    .then(|| "Só há itens ocultos aqui. Ctrl+H mostra.".to_owned());
+            }
             return Some(format!("Nada corresponde a \"{}\".", self.filter_text));
         }
         (matches!(self.status, Status::Ready) && self.list.is_empty())
@@ -1849,6 +1928,8 @@ impl Render for FolderView {
         div()
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key_down))
+            // Anchor for the View menu.
+            .relative()
             .size_full()
             .flex()
             .flex_col()
@@ -1986,6 +2067,7 @@ impl Render for FolderView {
                             }),
                     ),
             )
+            .children(self.render_view_menu(cx))
     }
 }
 

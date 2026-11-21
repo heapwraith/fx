@@ -39,7 +39,7 @@ const SHELL_LAST: u32 = 0x7FFF;
 /// `CMIC_MASK_UNICODE` (not in this windows-rs version).
 const CMIC_MASK_UNICODE: u32 = 0x4000;
 /// Shell verbs fx performs itself.
-const OWN_VERBS: [&str; 5] = ["delete", "rename", "copy", "cut", "paste"];
+const OWN_VERBS: [&str; 6] = ["delete", "rename", "copy", "cut", "paste", "properties"];
 
 thread_local! {
     /// The menu being shown, for the messages its owner-drawn parts need.

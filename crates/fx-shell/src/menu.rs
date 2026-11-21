@@ -38,7 +38,8 @@ pub enum MenuOutcome {
     /// One of fx's own items (index into `fx_items`).
     Fx(usize),
     /// A shell command fx performs itself, so it goes through its queue and
-    /// undo: "delete", "rename", "copy", "cut", "paste".
+    /// undo: "delete", "rename", "copy", "cut", "paste"; and "properties"
+    /// (the same path as Alt+Enter, T1.21).
     Verb(String),
     /// A command the shell ran (open, properties, send to, extensions...).
     Shell,

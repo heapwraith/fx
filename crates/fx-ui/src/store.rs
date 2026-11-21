@@ -29,6 +29,16 @@ pub struct Settings {
     pub barra_lateral: bool,
     /// Reopen the last windows and tabs when fx starts without a folder.
     pub restaurar_sessao: bool,
+    /// Show hidden and system files (Ctrl+H, T1.21).
+    pub mostrar_ocultos: bool,
+}
+
+/// The part of the settings a window changes (density, sidebar, hidden files).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UiSettings {
+    pub density: String,
+    pub sidebar: bool,
+    pub show_hidden: bool,
 }
 
 impl Default for Settings {
@@ -37,6 +47,7 @@ impl Default for Settings {
             densidade: "padrão".into(),
             barra_lateral: true,
             restaurar_sessao: true,
+            mostrar_ocultos: false,
         }
     }
 }
@@ -423,6 +434,7 @@ mod tests {
             densidade: "compacta".into(),
             barra_lateral: false,
             restaurar_sessao: true,
+            mostrar_ocultos: true,
         };
         save_settings(&path, &s).unwrap();
         assert_eq!(load_settings(&path), s);
