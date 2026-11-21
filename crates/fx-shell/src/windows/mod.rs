@@ -2,11 +2,13 @@
 
 mod icons;
 mod instance;
+mod launch;
 mod places;
 mod thumbs;
 
 pub use icons::start_icon_service;
 pub use instance::{Instance, claim_instance};
+pub use launch::launch;
 pub use places::{drives, known_folder, known_folders, watch_drives};
 pub use thumbs::start_thumb_service;
 

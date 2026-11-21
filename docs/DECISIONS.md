@@ -129,3 +129,9 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Memória:** a UI guarda no máximo 400 miniaturas e, ao descartar, libera a cópia decodificada no GPUI (`ImageSource::remove_asset`). A textura na GPU não tem API pública para ser liberada (ficaria para um patch no GPUI). Medido: 85,6 MB privados com a grade aberta na `flat-10k-media`, 102,9 MB depois de rolar as 10 mil miniaturas. **Risco para o portão:** a P8 (≤ 80 MB parado) precisa ser remedida na T1.18.
 - **Medido (`fx-bench grid`, `flat-10k-media`):** grade numa aba nova, P2 (b): mediana 9,3 ms, p95 11,0 ms. Rolagem com miniaturas chegando: 0 quadros perdidos em 3.999.
 - **Teclas:** Ctrl+Shift+2 grade, Ctrl+Shift+6 detalhes (como no Explorador), mais o botão ao lado da barra de caminho; na grade, ←/→ andam um bloco e ↑/↓ uma linha. `FX_VIEW=grid` abre em grade (benchmarks).
+
+## D-020 — Abrir arquivos (T1.9)
+- **Data:** 2026-11-21 · **Status:** aceita
+- **Decisão:** cada ação de abrir roda numa thread própria, com COM STA, e chama `ShellExecuteExW` (`SEE_MASK_NOASYNC`, porque a thread termina logo depois). O resultado volta por canal; um erro aparece na barra de status. Assim nem um app lento para iniciar nem um handler do shell travado seguram a UI (teste com um iniciador que demora 2 s).
+- **Teclas:** Enter e duplo clique abrem o arquivo (ou os selecionados, até 32 de uma vez; pasta continua navegando), Shift+Enter abre "Abrir com…" (verbo `openas`), Ctrl+` abre o Windows Terminal na pasta (`wt -d`), ou o PowerShell se o Terminal não existir. Em teclados ABNT2, Ctrl+' também abre o terminal.
+- **Feature nova do `windows`** (sem crate novo): `Win32_System_Registry`, exigida pela struct `SHELLEXECUTEINFOW` (campo `hkeyClass`). Nenhuma chamada ao registro é feita.

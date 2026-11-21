@@ -116,7 +116,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.9 — Abrir arquivos
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: Enter/duplo clique abrem com o app padrão (selecionados, até 32), Shift+Enter "Abrir com…", Ctrl+` (ou Ctrl+' no ABNT2) abre o Windows Terminal na pasta (PowerShell se faltar); cada abertura roda em thread própria com `ShellExecuteExW` e o erro volta para a barra de status (D-020). Teste: um iniciador que demora 2 s não segura quem chama; erro real do `ShellExecuteExW` sem diálogo. Não exercitado abrindo apps reais pela janela (abriria programas na tela do usuário).
 
 **Fazer**
 - Enter / duplo clique abre com o app padrão (`ShellExecuteExW` fora da UI), "Abrir com…" e "Abrir no Terminal" (Ctrl+`).

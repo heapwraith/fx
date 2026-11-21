@@ -9,6 +9,9 @@
 //! extends, Ctrl moves only the cursor), Ctrl+A, Ctrl+Space, Ctrl/Shift+click;
 //! Enter or double click enters a folder; Alt+Up and Backspace go up.
 //!
+//! Opening (task T1.9): Enter / double click open files with their default
+//! app off the UI thread, Shift+Enter "Open with…", Ctrl+` a terminal here.
+//!
 //! History (task T1.3): Alt+Left/Right and mouse buttons 4/5 go back and
 //! forward, restoring each folder's scroll position and selection. The path
 //! bar is in `path_bar.rs`.
@@ -30,6 +33,7 @@ use fx_core::format::{date_time_utc, size_kb};
 use fx_core::{Change, Direction, Entry, FileList, History, MoveMode, Selection, SortKey, Step};
 use fx_fs::Strategy;
 use fx_shell::icons::icon_key;
+use fx_shell::launch::Launch;
 use gpui::{
     Context, Entity, FocusHandle, Image, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
     MouseUpEvent, NavigationDirection, Pixels, ScrollStrategy, SharedString,
@@ -49,6 +53,8 @@ const THUMB_MIN: f32 = 24.0;
 const INDICATOR_WIDTH: f32 = 3.0;
 /// File icons are drawn at 16 px (small shell icons).
 const ICON_SIZE: f32 = 16.0;
+/// Enter opens at most this many selected files at once.
+const MAX_OPEN: usize = 32;
 
 /// How the window is drawn: theme, density, font and whether Mica shows
 /// through the background.
@@ -142,6 +148,9 @@ pub struct FolderView {
     watcher: Option<fx_fs::Watcher>,
     /// Changes that arrived before the list was sorted.
     pending_changes: Vec<Change>,
+    /// A message for the status bar (e.g. a file that could not be opened),
+    /// cleared by the next key.
+    notice: Option<String>,
 }
 
 impl FolderView {
@@ -198,6 +207,7 @@ impl FolderView {
             grid_cols: 1,
             watcher: None,
             pending_changes: Vec::new(),
+            notice: None,
         };
         view.start_loading(cx);
         view
@@ -738,18 +748,58 @@ impl FolderView {
         }
     }
 
-    /// Enter: opens the cursor entry. Folders open in place; files open in
-    /// task T1.9. Returns whether something happened.
+    /// Enter / double click: a folder opens in place; files open with their
+    /// default app (the selected ones when the cursor is among them, at most
+    /// `MAX_OPEN`). Returns whether something happened.
     fn open_cursor(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let Some(i) = self.selection.cursor() else {
             return false;
         };
-        if !self.list.attributes(i).is_dir() {
-            return false;
+        if self.list.attributes(i).is_dir() {
+            let path = self.path.join(self.list.os_name(i));
+            self.go_to(path, None, window, cx);
+            return true;
         }
-        let path = self.path.join(self.list.os_name(i));
-        self.go_to(path, None, window, cx);
+        let rows = rows_of(&self.filtered, &self.list);
+        let files: Vec<u32> = if self.selection.is_selected(i) {
+            self.selection
+                .selected_in(rows)
+                .filter(|&j| !self.list.attributes(j).is_dir())
+                .take(MAX_OPEN)
+                .collect()
+        } else {
+            vec![i]
+        };
+        for j in files {
+            let path = self.path.join(self.list.os_name(j));
+            self.launch(Launch::Open(path), cx);
+        }
         true
+    }
+
+    /// Starts a launch off the UI thread; a failure shows in the status bar.
+    fn launch(&mut self, what: Launch, cx: &mut Context<Self>) {
+        let label = match &what {
+            Launch::Open(p) | Launch::OpenWith(p) | Launch::Terminal(p) => {
+                p.file_name().map_or_else(
+                    || p.display().to_string(),
+                    |n| n.to_string_lossy().into_owned(),
+                )
+            }
+        };
+        let rx = fx_shell::launch(what);
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_spawn(async move { rx.recv().unwrap_or(Ok(())) })
+                .await;
+            if let Err(e) = result {
+                let _ = this.update(cx, |view, cx| {
+                    view.notice = Some(format!("não foi possível abrir {label}: {e}"));
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
     }
 
     /// Alt+Up / Backspace: opens the parent folder and selects the one we left.
@@ -936,6 +986,9 @@ impl FolderView {
         let m = ks.modifiers;
         let only_ctrl = m.control && !m.alt && !m.shift;
         let only_alt = m.alt && !m.control && !m.shift;
+        if self.notice.take().is_some() {
+            cx.notify();
+        }
         if self.edit_key(ks, window, cx) {
             if let Some(trace) = &self.trace {
                 trace.borrow_mut().input_started(started, "path");
@@ -1000,6 +1053,21 @@ impl FolderView {
                 Some("move")
             }
             "enter" if plain => self.open_cursor(window, cx).then_some("open"),
+            "enter" if m.shift && !m.control && !m.alt => {
+                let file = self
+                    .selection
+                    .cursor()
+                    .filter(|&i| !self.list.attributes(i).is_dir())
+                    .map(|i| self.path.join(self.list.os_name(i)));
+                file.map(|p| {
+                    self.launch(Launch::OpenWith(p), cx);
+                    "open"
+                })
+            }
+            "`" | "'" if only_ctrl => {
+                self.launch(Launch::Terminal(self.path.clone()), cx);
+                Some("open")
+            }
             "backspace" if plain && self.filter_text.is_empty() => {
                 self.go_up(window, cx).then_some("open")
             }
@@ -1053,6 +1121,9 @@ impl FolderView {
     }
 
     fn status_text(&self) -> String {
+        if let Some(notice) = &self.notice {
+            return notice.clone();
+        }
         let text = self.load_text();
         match self.selection.len() {
             0 => text,
