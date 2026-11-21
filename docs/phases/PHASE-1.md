@@ -140,7 +140,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.11 — Motor de operações: cópia e movimentação seguras (`fx-ops`)
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: `fx-ops::Engine` com um worker por unidade de destino (mesmo disco em ordem, discos diferentes em paralelo); cópia com `CopyFile2` (progresso, cancelamento) para temporário no destino, verificação de tamanho e renomeação final com `MoveFileExW` sem substituir; mover na mesma unidade = renomear, entre unidades = copiar, verificar e só então apagar a origem; conflito vira evento e o padrão é "manter os dois" (`a (2).txt`), substituir só por escolha explícita (troca atômica); links para pastas não são seguidos. 12 testes com `tempfile` (3 rodadas): cancelar no meio de 64 MB não deixa temporário nem destino parcial e a origem fica idêntica; conflito nunca sobrescreve; Unicode, 0 bytes, caminho > 260; mover cancelado mantém a origem; pasta para dentro de si recusada; fila em ordem. Sem UI ainda (T1.13–T1.15).
 
 **Fazer**
 - Fila de operações em thread própria, com controle de concorrência por unidade; cópia com `CopyFile2` (progresso e cancelamento), escrita em arquivo temporário no destino e renomeação no fim; verificação de tamanho; mover entre unidades = copiar, verificar e só então apagar a origem (SAFETY.md §2).
