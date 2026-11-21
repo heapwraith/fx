@@ -316,6 +316,8 @@ struct TextLayoutInner {
     lines: SmallVec<[WrappedLine; 1]>,
     line_height: Pixels,
     wrap_width: Option<Pixels>,
+    // fx patch: the width the text was truncated to, part of the cache key.
+    truncate_width: Option<Pixels>,
     size: Option<Size<Pixels>>,
     bounds: Option<Bounds<Pixels>>,
 }
@@ -370,9 +372,13 @@ impl TextLayout {
                         (None, "".into())
                     };
 
+                // fx patch: a layout measured for another truncation width is
+                // not reusable (the first, unconstrained measure of a flex item
+                // would otherwise stay cached and the ellipsis never appear).
                 if let Some(text_layout) = element_state.0.borrow().as_ref()
                     && text_layout.size.is_some()
                     && (wrap_width.is_none() || wrap_width == text_layout.wrap_width)
+                    && text_layout.truncate_width == truncate_width
                 {
                     return text_layout.size.unwrap();
                 }
@@ -406,6 +412,7 @@ impl TextLayout {
                         len: 0,
                         line_height,
                         wrap_width,
+                        truncate_width,
                         size: Some(Size::default()),
                         bounds: None,
                     });
@@ -424,6 +431,7 @@ impl TextLayout {
                     len,
                     line_height,
                     wrap_width,
+                    truncate_width,
                     size: Some(size),
                     bounds: None,
                 });

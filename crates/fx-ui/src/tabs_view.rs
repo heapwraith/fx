@@ -38,6 +38,8 @@ use crate::trace::Trace;
 const TAB_HEIGHT: f32 = 32.0;
 const TAB_MAX_WIDTH: f32 = 220.0;
 const CLOSE_SIZE: f32 = 20.0;
+/// Below this window width the sidebar hides itself.
+const SIDEBAR_MIN_WINDOW: f32 = 720.0;
 
 /// What a window gets from the app: shared places and media caches, and its
 /// own accessibility adapter (with the screen reader's action requests).
@@ -483,8 +485,9 @@ impl TabsView {
 }
 
 impl Render for TabsView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = self.look.theme;
+        let wide = f32::from(window.viewport_size().width) >= SIDEBAR_MIN_WINDOW;
         div()
             .capture_key_down(cx.listener(Self::on_key_down))
             .size_full()
@@ -501,7 +504,10 @@ impl Render for TabsView {
                     .flex_1()
                     .min_h_0()
                     .flex()
-                    .when(self.sidebar_open, |d| d.child(self.render_sidebar(cx)))
+                    // A narrow window hides the sidebar (the preference stays).
+                    .when(self.sidebar_open && wide, |d| {
+                        d.child(self.render_sidebar(cx))
+                    })
                     .child(div().flex_1().min_w_0().child(self.tabs.active().clone())),
             )
             .children(self.render_queue(cx))

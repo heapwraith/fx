@@ -28,6 +28,9 @@ use crate::theme::{
 const MAX_SUGGESTIONS: usize = 8;
 const BAR_HEIGHT: f32 = 32.0;
 const BUTTON_SIZE: f32 = 32.0;
+/// The path bar never gets narrower than this (the status text gives way).
+const BAR_MIN_WIDTH: f32 = 140.0;
+const STATUS_MAX_WIDTH: f32 = 280.0;
 
 /// The path bar while it is a text field.
 #[derive(Debug, Clone)]
@@ -285,7 +288,7 @@ impl FolderView {
             .id("path-bar")
             .relative()
             .flex_1()
-            .min_w_0()
+            .min_w(px(BAR_MIN_WIDTH))
             .h(px(BAR_HEIGHT))
             .flex()
             .items_center()
@@ -354,11 +357,15 @@ impl FolderView {
                     }),
                 ),
             )
+            // Status shrinks first (with an ellipsis); the bar keeps room.
             .child(
                 div()
-                    .flex_none()
+                    .flex_shrink()
+                    .min_w_0()
+                    .max_w(px(STATUS_MAX_WIDTH))
                     .pl(px(space(2)))
                     .pr(px(space(2)))
+                    .truncate()
                     .text_color(rgba(t.text_secondary))
                     .child(self.status_text(cx)),
             )
@@ -371,13 +378,9 @@ impl FolderView {
         let mut ancestors: Vec<&Path> = self.path.ancestors().collect();
         ancestors.reverse();
         let last = ancestors.len().saturating_sub(1);
-        let mut row = div()
-            .size_full()
-            .min_w_0()
-            .flex()
-            .items_center()
-            .overflow_hidden()
-            .px(px(space(1)));
+        // The crumbs sit in a box that clips from the *start* when they do not
+        // fit, so the current folder (the last crumb) always shows.
+        let mut row = div().flex_none().flex().items_center().px(px(space(1)));
         for (k, dir) in ancestors.iter().enumerate() {
             let label: SharedString = dir
                 .file_name()
@@ -421,20 +424,35 @@ impl FolderView {
                 );
             }
         }
-        row.child(
-            div()
-                .id("crumb-empty")
-                .flex_1()
-                .h_full()
-                .min_w(px(space(6)))
-                .cursor_text()
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(|view, _: &MouseDownEvent, window, cx| {
-                        view.begin_edit(window, cx);
-                    }),
-                ),
-        )
+        let crumbs = div()
+            .flex_shrink()
+            .min_w_0()
+            .h_full()
+            .flex()
+            .items_center()
+            .justify_end()
+            .overflow_hidden()
+            .child(row);
+        div()
+            .size_full()
+            .min_w_0()
+            .flex()
+            .items_center()
+            .child(crumbs)
+            .child(
+                div()
+                    .id("crumb-empty")
+                    .flex_1()
+                    .h_full()
+                    .min_w(px(space(6)))
+                    .cursor_text()
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|view, _: &MouseDownEvent, window, cx| {
+                            view.begin_edit(window, cx);
+                        }),
+                    ),
+            )
     }
 
     fn render_suggestions(

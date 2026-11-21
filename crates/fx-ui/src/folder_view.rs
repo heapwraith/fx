@@ -167,6 +167,36 @@ pub struct FolderView {
     rename_when_listed: Option<OsString>,
     /// Where and which row was pressed (a drag out may start, task T1.15).
     press: Option<(gpui::Point<Pixels>, u32)>,
+    /// Columns shown for the current list width.
+    columns: Columns,
+    last_list_width: f32,
+}
+
+/// Which optional columns fit (T1.19): in a narrow list the date goes first,
+/// then the size, so names stay readable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Columns {
+    size: bool,
+    date: bool,
+}
+
+impl Columns {
+    /// Name column keeps at least this much room.
+    const NAME_MIN: f32 = 200.0;
+
+    fn for_width(width: f32) -> Self {
+        if width <= 0.0 {
+            return Self {
+                size: true,
+                date: true,
+            }; // before the first layout
+        }
+        let room = width - SCROLLBAR_WIDTH - 2.0 * space(4) - ICON_SIZE - Self::NAME_MIN;
+        Self {
+            size: room >= SIZE_COL + space(3),
+            date: room >= SIZE_COL + DATE_COL + 2.0 * space(3),
+        }
+    }
 }
 
 impl FolderView {
@@ -237,6 +267,11 @@ impl FolderView {
             awaiting_folder: None,
             rename_when_listed: None,
             press: None,
+            columns: Columns {
+                size: true,
+                date: true,
+            },
+            last_list_width: 0.0,
         };
         view.start_loading(cx);
         view
@@ -485,6 +520,7 @@ impl FolderView {
         }
         let t = self.look.theme;
         let row_h = self.look.density.row_height();
+        let columns = self.columns;
         let first = range.start;
         // Icons of the rows drawn; unknown ones are requested after this pass.
         let icons = self.icons.read(cx);
@@ -580,22 +616,26 @@ impl FolderView {
                                     .child(SharedString::from(self.list.name(i).to_owned()))
                                     .into_any_element(),
                             })
-                            .child(
-                                div()
-                                    .w(px(SIZE_COL))
-                                    .flex_none()
-                                    .flex()
-                                    .justify_end()
-                                    .text_color(rgba(t.text_secondary))
-                                    .child(size),
-                            )
-                            .child(
-                                div()
-                                    .w(px(DATE_COL))
-                                    .flex_none()
-                                    .text_color(rgba(t.text_secondary))
-                                    .child(date_time_utc(self.list.modified(i))),
-                            ),
+                            .when(columns.size, |d| {
+                                d.child(
+                                    div()
+                                        .w(px(SIZE_COL))
+                                        .flex_none()
+                                        .flex()
+                                        .justify_end()
+                                        .text_color(rgba(t.text_secondary))
+                                        .child(size),
+                                )
+                            })
+                            .when(columns.date, |d| {
+                                d.child(
+                                    div()
+                                        .w(px(DATE_COL))
+                                        .flex_none()
+                                        .text_color(rgba(t.text_secondary))
+                                        .child(date_time_utc(self.list.modified(i))),
+                                )
+                            }),
                     )
                     .on_mouse_down(
                         MouseButton::Left,
@@ -1442,6 +1482,19 @@ impl Render for FolderView {
         }
         let grid_view = self.grid;
         let cols = self.grid_cols;
+        let list_width = f32::from(self.scroll.0.borrow().base_handle.bounds().size.width);
+        self.columns = Columns::for_width(list_width);
+        // `list_width` is the last frame's. Once this frame is laid out, check
+        // the new width: after a resize, draw once more so the columns (and
+        // grid tiles) follow it.
+        self.last_list_width = list_width;
+        cx.on_next_frame(window, |view, _, cx| {
+            let now = f32::from(view.scroll.0.borrow().base_handle.bounds().size.width);
+            if (now - view.last_list_width).abs() > 0.5 {
+                cx.notify();
+            }
+        });
+        let columns = self.columns;
         let header_cell = |label: &'static str| {
             div()
                 .text_size(px(CAPTION_SIZE))
@@ -1492,7 +1545,7 @@ impl Render for FolderView {
                             .border_b_1()
                             .border_color(rgba(t.divider))
                             .child(header_cell("Nome").flex_1())
-                            .when(!grid_view, |d| {
+                            .when(!grid_view && columns.size, |d| {
                                 d.child(
                                     header_cell("Tamanho")
                                         .w(px(SIZE_COL))
@@ -1500,7 +1553,9 @@ impl Render for FolderView {
                                         .flex()
                                         .justify_end(),
                                 )
-                                .child(header_cell("Data (UTC)").w(px(DATE_COL)).flex_none())
+                            })
+                            .when(!grid_view && columns.date, |d| {
+                                d.child(header_cell("Data (UTC)").w(px(DATE_COL)).flex_none())
                             })
                             // Room for the scrollbar, so columns line up with the rows.
                             .child(div().w(px(SCROLLBAR_WIDTH)).flex_none()),
@@ -1560,5 +1615,42 @@ impl Render for FolderView {
                             .child(self.render_scrollbar(cx)),
                     ),
             )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Columns;
+
+    #[test]
+    fn narrow_lists_drop_date_then_size() {
+        assert_eq!(
+            Columns::for_width(0.0),
+            Columns {
+                size: true,
+                date: true
+            }
+        );
+        assert_eq!(
+            Columns::for_width(700.0),
+            Columns {
+                size: true,
+                date: true
+            }
+        );
+        assert_eq!(
+            Columns::for_width(450.0),
+            Columns {
+                size: true,
+                date: false
+            }
+        );
+        assert_eq!(
+            Columns::for_width(300.0),
+            Columns {
+                size: false,
+                date: false
+            }
+        );
     }
 }
