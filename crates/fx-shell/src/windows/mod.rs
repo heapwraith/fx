@@ -2,8 +2,29 @@
 
 use std::time::{Duration, SystemTime};
 
+use windows::Wdk::System::SystemServices::RtlGetVersion;
 use windows::Win32::Foundation::FILETIME;
+use windows::Win32::System::SystemInformation::OSVERSIONINFOW;
 use windows::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
+
+/// Windows build number (e.g. 26200), or `None` if Windows refuses to say.
+/// Uses `RtlGetVersion`, which (unlike `GetVersionExW`) does not depend on the
+/// executable's compatibility manifest.
+pub fn windows_build() -> Option<u32> {
+    let mut info = OSVERSIONINFOW {
+        dwOSVersionInfoSize: std::mem::size_of::<OSVERSIONINFOW>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: `info` is a valid, writable OSVERSIONINFOW with its size field set,
+    // as the API requires.
+    unsafe { RtlGetVersion(&mut info) }.ok().ok()?;
+    Some(info.dwBuildNumber)
+}
+
+/// Mica (`DWMSBT_MAINWINDOW`) exists from Windows 11 22H2 (build 22621).
+pub fn supports_mica() -> bool {
+    windows_build().is_some_and(|b| b >= 22_621)
+}
 
 /// When the current process was created (for "time since process start"
 /// measurements, docs/PERFORMANCE.md). `None` if Windows refuses to say.
@@ -34,6 +55,13 @@ fn filetime_to_system_time(ft: FILETIME) -> SystemTime {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn windows_build_is_plausible() {
+        let build = windows_build().unwrap();
+        assert!(build >= 10_240, "{build}");
+        assert_eq!(supports_mica(), build >= 22_621);
+    }
 
     #[test]
     fn process_started_recently_and_in_the_past() {

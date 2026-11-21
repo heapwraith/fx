@@ -40,9 +40,10 @@ public static class P7 {
         int w = rc.R - rc.L, h = rc.B - rc.T;
 
         // 1) Drag the thumb from the top to the bottom and back. With the list at
-        //    the top, the 24 px thumb sits right below the two header rows (55 px).
+        //    the top, the 24 px thumb sits right below the path bar (40 px), the
+        //    divider (1 px) and the column header (32 px, standard density).
         int x = origin.X + w - (int)(6 * s);
-        int yTop = origin.Y + (int)(67 * s);
+        int yTop = origin.Y + (int)(85 * s);
         int yBottom = origin.Y + h - (int)(12 * s);
         SetCursorPos(x, yTop);
         Thread.Sleep(100);
@@ -81,6 +82,6 @@ for ($i = 0; $i -lt 50 -and $proc.MainWindowHandle -eq 0; $i++) {
     $proc.Refresh()
 }
 if ($proc.MainWindowHandle -eq 0) { throw "fx window not found for process $ProcessId" }
-# 2,000 events of 20 notches each, one every 4 ms (~8 s) reach the end of a
-# 100k-row list (one notch = 3 lines); dragging takes 3 s each way.
-[P7]::Run($proc.MainWindowHandle, 2000, -2400, 4.0, 3000.0)
+# 2,600 events of 20 notches each, one every 4 ms (~10 s) reach the end of a
+# 100k-row list at 32 px rows (one notch = 3 lines); dragging takes 3 s each way.
+[P7]::Run($proc.MainWindowHandle, 2600, -2400, 4.0, 3000.0)

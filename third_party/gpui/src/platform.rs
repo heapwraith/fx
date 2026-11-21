@@ -1323,6 +1323,9 @@ pub enum WindowBackgroundAppearance {
     ///
     /// Not always supported.
     Blurred,
+    /// fx patch: the Windows 11 Mica backdrop (`DWMSBT_MAINWINDOW`) behind
+    /// transparent content. Other platforms treat it as non-opaque.
+    MicaBackdrop,
 }
 
 /// The options that can be configured for a file dialog prompt

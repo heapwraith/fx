@@ -12,6 +12,7 @@ A pasta `examples/` do crate foi removida (4,8 MB que não entram no build). O d
 | `Cargo.toml` | `embed-resource` virou build-dependency incondicional. | Mesmo motivo: estava condicionado ao alvo, mas é usado pelo build script no host. |
 | `src/platform/windows/directx_renderer.rs`, `compile-shaders.ps1`, `shaders-dxbc/` | Os shaders HLSL são pré-compilados para DXBC por `compile-shaders.ps1`, que usa o `d3dcompiler_47.dll` do próprio Windows, e embutidos com `include_bytes!`. O bytecode fica versionado em `shaders-dxbc/`. | Substitui o `fxc.exe` (só existe no Windows SDK) e a leitura dos `.hlsl` de `CARGO_MANIFEST_DIR`. A primeira versão do patch compilava em runtime com `D3DCompile`, mas isso custava ~250 ms na abertura (medido na T0.5). |
 | `src/platform/windows/directx_devices.rs` | O dispositivo D3D11 criado para testar o adaptador é reaproveitado. | O upstream criava dois dispositivos, e cada criação custa ~200 ms no driver da NVIDIA na partida do processo (medido na T0.5). |
+| `src/platform.rs`, `src/platform/windows/window.rs` | Nova variante `WindowBackgroundAppearance::MicaBackdrop`, que liga `DWMWA_SYSTEMBACKDROP_TYPE = DWMSBT_MAINWINDOW`. | Fundo Mica do Windows 11 (T1.1, `docs/PRODUCT.md` "Visual"). O gpui 0.2.2 só tem acrílico (`Blurred`), via API não documentada. As outras plataformas tratam a variante como não opaca. |
 
 **Se um `.hlsl` mudar** (só acontece ao atualizar o gpui), rode `powershell.exe -File third_party/gpui/compile-shaders.ps1` no Windows e faça commit de `shaders-dxbc/`.
 

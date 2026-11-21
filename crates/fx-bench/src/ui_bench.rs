@@ -268,8 +268,12 @@ pub fn scroll() -> std::io::Result<()> {
     };
     let rows_built = trace.number("max_rows_built").unwrap_or(f64::NAN);
     // The wheel phase runs last, so the final offset shows whether it reached the
-    // end of the list (rows are 24 px; the viewport is ~585 px tall).
-    let list_px = fixtures::Spec::FULL.flat_files as f64 * 24.0;
+    // end of the list (offset ≈ rows × row height − viewport height).
+    let row_px = trace
+        .number("row_height_px")
+        .filter(|h| *h > 0.0)
+        .unwrap_or(24.0);
+    let list_px = fixtures::Spec::FULL.flat_files as f64 * row_px;
     let reached = -trace.number("final_offset_px").unwrap_or(0.0) / list_px;
     // D-014: at most 0.5% dropped frames (interval ≥ 1.5 refresh periods).
     let dropped_fraction = total.dropped as f64 / total.frames as f64;

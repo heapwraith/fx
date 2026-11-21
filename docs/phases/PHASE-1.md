@@ -15,7 +15,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.1 — Fundação visual (Fluent 2, claro/escuro, Mica, densidade)
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: tokens Fluent 2 claro/escuro seguindo o Windows, Mica (Win11 22H2+), Segoe UI Variable, densidades 24/32/40 (Ctrl+1/2/3), hover, seleção com indicador e foco; contraste ≥ 4,5:1 testado; P4 p95 3,3 ms, P7 0 perdidos em 4.001 quadros. **Capturas em `bench/results/visual-t1.1/` aguardam aprovação do usuário antes da T1.3.**
 
 **Fazer**
 - Tokens de tema em `fx-ui` (cores, raios, espaçamentos em múltiplos de 4 px, tipografia Segoe UI Variable), com tema claro e escuro seguindo o Windows e mudando ao vivo quando o sistema muda.

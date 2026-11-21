@@ -772,6 +772,25 @@ impl PlatformWindow for WindowsWindow {
                 // ACCENT_ENABLE_ACRYLICBLURBEHIND
                 set_window_composition_attribute(hwnd, Some((0, 0, 0, 0)), 4);
             }
+            // fx patch: Mica (Windows 11 22H2+; older systems ignore the attribute
+            // and keep the opaque background).
+            WindowBackgroundAppearance::MicaBackdrop => {
+                use windows::Win32::Graphics::Dwm::{
+                    DWM_SYSTEMBACKDROP_TYPE, DWMSBT_MAINWINDOW, DWMWA_SYSTEMBACKDROP_TYPE,
+                    DwmSetWindowAttribute,
+                };
+                set_window_composition_attribute(hwnd, None, 0);
+                let backdrop = DWMSBT_MAINWINDOW;
+                unsafe {
+                    DwmSetWindowAttribute(
+                        hwnd,
+                        DWMWA_SYSTEMBACKDROP_TYPE,
+                        &backdrop as *const _ as _,
+                        std::mem::size_of::<DWM_SYSTEMBACKDROP_TYPE>() as u32,
+                    )
+                    .log_err();
+                }
+            }
         }
     }
 

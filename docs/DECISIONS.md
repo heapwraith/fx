@@ -93,3 +93,9 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Contexto (T0.5):** o GPUI desenha no ritmo do monitor (`DwmFlush`). A 239 Hz cada quadro dura 4,18 ms, e o intervalo medido oscila entre ~4,0 e ~4,4 ms sem nenhum quadro perdido. Um quadro perdido aparece como ~8,4 ms. Uma meta "p95 ≤ um período" falha por oscilação do relógio, não por travamento.
 - **Decisão:** P7 = **no máximo 0,5% de quadros perdidos** durante a rolagem (intervalo ≥ 1,5× o período do monitor), medido na taxa real do monitor de teste e anotada no relatório. O p95 e o máximo continuam reportados.
 - **Consequência:** resultado da Fase 0: 1 quadro perdido em 3.425 (0,03%) passa. `fx-bench scroll` passa a usar esse critério.
+
+## D-015 — Fundação visual (T1.1)
+- **Data:** 2026-11-21 · **Status:** aceita
+- **Decisão:** tokens Fluent 2 próprios em `fx-ui/src/theme.rs` (sem biblioteca de componentes). Tema claro/escuro seguindo o Windows ao vivo, Segoe UI Variable com Segoe UI como reserva, espaçamentos em múltiplos de 4 px, densidades de 24/32/40 px (padrão 32, Ctrl+1/2/3). O contraste ≥ 4,5:1 é garantido por teste unitário, com as cores semitransparentes compostas sobre a base da Mica.
+- **Mica:** variante `MicaBackdrop` no patch do gpui (`third_party/gpui/FX-PATCH.md`). Só é pedida no Windows 11 22H2+ (build ≥ 22621, lido com `RtlGetVersion` no `fx-shell`) e só quando o tema do fx é igual ao do sistema, porque a Mica herda a cor do tema do sistema. Nos outros casos, fundo sólido.
+- **Features novas do `windows`** (sem crate novo): `Win32_System_SystemInformation` e `Wdk_System_SystemServices`, para o `RtlGetVersion`. O `GetVersionExW` mente a versão em executáveis sem manifesto, como os de teste.

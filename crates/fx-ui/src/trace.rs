@@ -25,6 +25,7 @@ pub struct Trace {
     first_frame_items: usize,
     loaded_ms: Option<f64>,
     max_rows_built: usize,
+    row_height: f32,
     last_offset: f32,
     last_change: Option<Instant>,
     prev_frame: Option<Instant>,
@@ -51,6 +52,7 @@ impl Trace {
             first_frame_items: 0,
             loaded_ms: None,
             max_rows_built: 0,
+            row_height: 0.0,
             last_offset: 0.0,
             last_change: None,
             prev_frame: None,
@@ -89,6 +91,10 @@ impl Trace {
 
     pub fn record_loaded(&mut self) {
         self.loaded_ms = Some(self.since_start_ms());
+    }
+
+    pub fn set_row_height(&mut self, px: f32) {
+        self.row_height = px;
     }
 
     pub fn record_rows_built(&mut self, rows: usize) {
@@ -163,6 +169,7 @@ impl Trace {
         let _ = writeln!(out, "first_frame_items {}", self.first_frame_items);
         let _ = writeln!(out, "loaded_ms {}", opt(self.loaded_ms));
         let _ = writeln!(out, "max_rows_built {}", self.max_rows_built);
+        let _ = writeln!(out, "row_height_px {:.1}", self.row_height);
         // Scroll position when the trace was written (negative = scrolled down).
         let _ = writeln!(out, "final_offset_px {:.1}", self.last_offset);
         for ms in &self.input_ms {
@@ -198,6 +205,7 @@ mod tests {
             first_frame_items: 0,
             loaded_ms: None,
             max_rows_built: 0,
+            row_height: 0.0,
             last_offset: 0.0,
             last_change: None,
             prev_frame: None,

@@ -1,4 +1,5 @@
-//! Folder window (task T0.5): a virtualized list with Name, Size and Date columns.
+//! Folder window (task T0.5): a virtualized list with Name, Size and Date columns,
+//! styled with the Fluent 2 tokens of `theme.rs` (task T1.1).
 //!
 //! The folder is read on a worker thread (fx-fs); batches are appended on the UI
 //! thread (cheap: ~0.2 ms per 2,000 entries) and the name sort runs on the
@@ -16,18 +17,35 @@ use fx_core::format::{date_time_utc, size_kb};
 use fx_core::{Direction, Entry, FileList, SortKey};
 use fx_fs::Strategy;
 use gpui::{
-    Context, FocusHandle, KeyDownEvent, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
-    ScrollStrategy, SharedString, UniformListScrollHandle, Window, canvas, div, point, prelude::*,
-    px, rgb, uniform_list,
+    Context, FocusHandle, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    Pixels, ScrollStrategy, SharedString, UniformListScrollHandle, Window, canvas, div, point,
+    prelude::*, px, uniform_list,
 };
 
+use crate::theme::{BODY_SIZE, CAPTION_SIZE, Density, Mode, RADIUS, Theme, rgba, space};
 use crate::trace::Trace;
 
-const ROW_HEIGHT: f32 = 24.0;
-const SIZE_COL: f32 = 110.0;
-const DATE_COL: f32 = 140.0;
+const SIZE_COL: f32 = 112.0;
+const DATE_COL: f32 = 144.0;
 const SCROLLBAR_WIDTH: f32 = 12.0;
 const THUMB_MIN: f32 = 24.0;
+/// Width of the accent bar on the selected row (Fluent list selection).
+const INDICATOR_WIDTH: f32 = 3.0;
+
+/// How the window is drawn: theme, density, font and whether Mica shows
+/// through the background.
+#[derive(Debug, Clone, Copy)]
+pub struct Look {
+    pub theme: Theme,
+    /// Set when `FX_THEME` forces a theme: system changes are then ignored.
+    pub forced_mode: bool,
+    pub density: Density,
+    pub font: &'static str,
+    /// Mica is available (Windows 11 22H2+ and not disabled by `FX_MICA=0`).
+    pub mica_supported: bool,
+    /// Mica shows through right now (see `FolderView::set_system_mode`).
+    pub mica: bool,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 enum Status {
@@ -49,11 +67,14 @@ pub struct FolderView {
     filter_text: String,
     /// Rows shown while filtering (indices in display order); `None` = all.
     filtered: Option<Vec<u32>>,
+    /// Selected entry (index into the list), if any. Multi-selection is T1.2.
+    selected: Option<u32>,
+    look: Look,
     trace: Option<Rc<RefCell<Trace>>>,
 }
 
 impl FolderView {
-    pub fn new(path: PathBuf, trace: Option<Trace>, cx: &mut Context<Self>) -> Self {
+    pub fn new(path: PathBuf, look: Look, trace: Option<Trace>, cx: &mut Context<Self>) -> Self {
         let mut trace = trace;
         if let Some(t) = &mut trace {
             t.mark("folder_requested");
@@ -80,6 +101,8 @@ impl FolderView {
             focus: cx.focus_handle(),
             filter_text: String::new(),
             filtered: None,
+            selected: None,
+            look,
             trace,
         }
     }
@@ -154,50 +177,91 @@ impl FolderView {
         .detach();
     }
 
-    fn render_rows(&mut self, range: Range<usize>) -> Vec<impl IntoElement + use<>> {
+    fn render_rows(
+        &mut self,
+        range: Range<usize>,
+        focused: bool,
+        cx: &mut Context<Self>,
+    ) -> Vec<impl IntoElement + use<>> {
         if let Some(trace) = &self.trace {
             trace.borrow_mut().record_rows_built(range.len());
         }
+        let t = self.look.theme;
+        let row_h = self.look.density.row_height();
         let order = self.rows();
         range
             .filter_map(|row| order.get(row).copied())
             .map(|i| {
                 let is_dir = self.list.attributes(i).is_dir();
+                let selected = self.selected == Some(i);
                 let size: SharedString = if is_dir {
                     SharedString::default()
                 } else {
                     size_kb(self.list.size(i)).into()
                 };
                 div()
+                    .id(i as usize)
                     .w_full()
-                    .h(px(ROW_HEIGHT))
-                    .flex()
-                    .items_center()
-                    .px_2()
-                    .gap_2()
+                    .h(px(row_h))
+                    .px(px(space(1)))
                     .child(
                         div()
-                            .flex_1()
-                            .min_w_0()
-                            .truncate()
-                            .when(is_dir, |d| d.text_color(rgb(0x1d4ed8)))
-                            .child(SharedString::from(self.list.name(i).to_owned())),
-                    )
-                    .child(
-                        div()
-                            .w(px(SIZE_COL))
-                            .flex_none()
+                            .relative()
+                            .size_full()
                             .flex()
-                            .justify_end()
-                            .text_color(rgb(0x555555))
-                            .child(size),
+                            .items_center()
+                            .gap(px(space(3)))
+                            .px(px(space(3)))
+                            .rounded(px(RADIUS))
+                            .when(selected, |d| d.bg(rgba(t.selected)))
+                            .when(!selected, |d| d.hover(|s| s.bg(rgba(t.hover))))
+                            .when(selected && focused, |d| {
+                                d.border_1().border_color(rgba(t.focus))
+                            })
+                            .when(selected, |d| {
+                                d.child(
+                                    div()
+                                        .absolute()
+                                        .left_0()
+                                        .top(px(row_h / 2.0 - 8.0))
+                                        .w(px(INDICATOR_WIDTH))
+                                        .h(px(16.0))
+                                        .rounded(px(INDICATOR_WIDTH / 2.0))
+                                        .bg(rgba(t.accent)),
+                                )
+                            })
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .truncate()
+                                    .text_color(rgba(t.text))
+                                    .child(SharedString::from(self.list.name(i).to_owned())),
+                            )
+                            .child(
+                                div()
+                                    .w(px(SIZE_COL))
+                                    .flex_none()
+                                    .flex()
+                                    .justify_end()
+                                    .text_color(rgba(t.text_secondary))
+                                    .child(size),
+                            )
+                            .child(
+                                div()
+                                    .w(px(DATE_COL))
+                                    .flex_none()
+                                    .text_color(rgba(t.text_secondary))
+                                    .child(date_time_utc(self.list.modified(i))),
+                            ),
                     )
-                    .child(
-                        div()
-                            .w(px(DATE_COL))
-                            .flex_none()
-                            .text_color(rgb(0x555555))
-                            .child(date_time_utc(self.list.modified(i))),
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |view, _: &MouseDownEvent, window, cx| {
+                            view.selected = Some(i);
+                            view.focus.focus(window);
+                            cx.notify();
+                        }),
                     )
             })
             .collect()
@@ -233,9 +297,9 @@ impl FolderView {
             .child(
                 div()
                     .size_full()
-                    .rounded_md()
-                    .bg(rgb(0xb0b0b0))
-                    .hover(|s| s.bg(rgb(0x808080))),
+                    .rounded(px(RADIUS))
+                    .bg(rgba(self.look.theme.thumb))
+                    .hover(|s| s.bg(rgba(self.look.theme.thumb_hover))),
             )
             .child(
                 canvas(
@@ -280,6 +344,17 @@ impl FolderView {
             )
     }
 
+    /// The system theme changed (the theme is kept while `FX_THEME` forces one).
+    /// Returns whether Mica should show: the backdrop is tinted by the *system*
+    /// theme, so it only matches when the fx theme is the same.
+    pub fn set_system_mode(&mut self, system: Mode) -> bool {
+        if !self.look.forced_mode {
+            self.look.theme = Theme::for_mode(system);
+        }
+        self.look.mica = self.look.mica_supported && self.look.theme.mode == system;
+        self.look.mica
+    }
+
     pub fn focus_handle(&self) -> FocusHandle {
         self.focus.clone()
     }
@@ -314,6 +389,20 @@ impl FolderView {
     fn on_key_down(&mut self, event: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
         let started = Instant::now();
         let ks = &event.keystroke;
+        // Ctrl+1/2/3: compact, standard, comfortable rows.
+        if ks.modifiers.control && !ks.modifiers.alt && !ks.modifiers.shift {
+            let density = match ks.key.as_str() {
+                "1" => Some(Density::Compact),
+                "2" => Some(Density::Standard),
+                "3" => Some(Density::Comfortable),
+                _ => None,
+            };
+            if let Some(d) = density {
+                self.look.density = d;
+                cx.notify();
+                return;
+            }
+        }
         let mut text = self.filter_text.clone();
         match ks.key.as_str() {
             "backspace" => {
@@ -359,6 +448,7 @@ impl FolderView {
         let Some(trace) = &self.trace else { return };
         let mut t = trace.borrow_mut();
         t.mark("first_render");
+        t.set_row_height(self.look.density.row_height());
         let items = self.list.len();
         if items > 0 {
             t.mark("first_render_with_rows");
@@ -398,8 +488,16 @@ impl FolderView {
 impl Render for FolderView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.trace_frame(window);
+        let t = self.look.theme;
         let count = self.rows().len();
-        let header_cell = |label: &'static str| div().text_color(rgb(0x555555)).child(label);
+        let focused = self.focus.is_focused(window);
+        let row_h = self.look.density.row_height();
+        let header_cell = |label: &'static str| {
+            div()
+                .text_size(px(CAPTION_SIZE))
+                .text_color(rgba(t.text_secondary))
+                .child(label)
+        };
 
         div()
             .track_focus(&self.focus)
@@ -407,58 +505,78 @@ impl Render for FolderView {
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(0xffffff))
-            .text_color(rgb(0x1a1a1a))
-            .text_sm()
+            // With Mica the backdrop shows through; otherwise paint its tint.
+            .when(!self.look.mica, |d| d.bg(rgba(t.base)))
+            .font_family(self.look.font)
+            .text_size(px(BODY_SIZE))
+            .text_color(rgba(t.text))
             .child(
                 div()
-                    .flex()
-                    .justify_between()
-                    .px_2()
-                    .py_1()
-                    .bg(rgb(0xf3f3f3))
-                    .child(div().truncate().child(self.path.display().to_string()))
-                    .child(div().flex_none().pl_4().child(self.status_text())),
-            )
-            .child(
-                div()
-                    .h(px(ROW_HEIGHT))
+                    .h(px(space(10)))
                     .flex()
                     .items_center()
-                    .px_2()
-                    .gap_2()
-                    .border_b_1()
-                    .border_color(rgb(0xe0e0e0))
-                    .child(header_cell("Nome").flex_1())
+                    .justify_between()
+                    .px(px(space(4)))
+                    .child(div().truncate().child(self.path.display().to_string()))
                     .child(
-                        header_cell("Tamanho")
-                            .w(px(SIZE_COL))
+                        div()
                             .flex_none()
-                            .flex()
-                            .justify_end(),
-                    )
-                    .child(header_cell("Data (UTC)").w(px(DATE_COL)).flex_none())
-                    // Room for the scrollbar, so columns line up with the rows.
-                    .child(div().w(px(SCROLLBAR_WIDTH)).flex_none()),
+                            .pl(px(space(4)))
+                            .text_color(rgba(t.text_secondary))
+                            .child(self.status_text()),
+                    ),
             )
             .child(
                 div()
-                    .relative()
                     .flex_1()
                     .min_h_0()
+                    .flex()
+                    .flex_col()
+                    .bg(rgba(t.layer))
+                    .border_t_1()
+                    .border_color(rgba(t.divider))
                     .child(
-                        uniform_list(
-                            "rows",
-                            count,
-                            cx.processor(|view: &mut Self, range: Range<usize>, _, _| {
-                                view.render_rows(range)
-                            }),
-                        )
-                        .size_full()
-                        .pr(px(SCROLLBAR_WIDTH))
-                        .track_scroll(self.scroll.clone()),
+                        div()
+                            .h(px(row_h))
+                            .flex()
+                            .items_center()
+                            .px(px(space(4)))
+                            .gap(px(space(3)))
+                            .border_b_1()
+                            .border_color(rgba(t.divider))
+                            .child(header_cell("Nome").flex_1())
+                            .child(
+                                header_cell("Tamanho")
+                                    .w(px(SIZE_COL))
+                                    .flex_none()
+                                    .flex()
+                                    .justify_end(),
+                            )
+                            .child(header_cell("Data (UTC)").w(px(DATE_COL)).flex_none())
+                            // Room for the scrollbar, so columns line up with the rows.
+                            .child(div().w(px(SCROLLBAR_WIDTH)).flex_none()),
                     )
-                    .child(self.render_scrollbar(cx)),
+                    .child(
+                        div()
+                            .relative()
+                            .flex_1()
+                            .min_h_0()
+                            .child(
+                                uniform_list(
+                                    "rows",
+                                    count,
+                                    cx.processor(
+                                        move |view: &mut Self, range: Range<usize>, _, cx| {
+                                            view.render_rows(range, focused, cx)
+                                        },
+                                    ),
+                                )
+                                .size_full()
+                                .pr(px(SCROLLBAR_WIDTH))
+                                .track_scroll(self.scroll.clone()),
+                            )
+                            .child(self.render_scrollbar(cx)),
+                    ),
             )
     }
 }

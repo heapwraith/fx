@@ -708,3 +708,45 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
      }
  }
  
+diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples a/src/platform/windows/window.rs ./src/platform/windows/window.rs
+--- a/src/platform/windows/window.rs	2006-07-23 21:21:28.000000000 -0400
++++ b/src/platform/windows/window.rs	2026-11-21 05:40:28.387624779 -0400
+@@ -772,6 +772,25 @@
+                 // ACCENT_ENABLE_ACRYLICBLURBEHIND
+                 set_window_composition_attribute(hwnd, Some((0, 0, 0, 0)), 4);
+             }
++            // fx patch: Mica (Windows 11 22H2+; older systems ignore the attribute
++            // and keep the opaque background).
++            WindowBackgroundAppearance::MicaBackdrop => {
++                use windows::Win32::Graphics::Dwm::{
++                    DWM_SYSTEMBACKDROP_TYPE, DWMSBT_MAINWINDOW, DWMWA_SYSTEMBACKDROP_TYPE,
++                    DwmSetWindowAttribute,
++                };
++                set_window_composition_attribute(hwnd, None, 0);
++                let backdrop = DWMSBT_MAINWINDOW;
++                unsafe {
++                    DwmSetWindowAttribute(
++                        hwnd,
++                        DWMWA_SYSTEMBACKDROP_TYPE,
++                        &backdrop as *const _ as _,
++                        std::mem::size_of::<DWM_SYSTEMBACKDROP_TYPE>() as u32,
++                    )
++                    .log_err();
++                }
++            }
+         }
+     }
+ 
+diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples a/src/platform.rs ./src/platform.rs
+--- a/src/platform.rs	2006-07-23 21:21:28.000000000 -0400
++++ b/src/platform.rs	2026-11-21 05:40:28.387051795 -0400
+@@ -1323,6 +1323,9 @@
+     ///
+     /// Not always supported.
+     Blurred,
++    /// fx patch: the Windows 11 Mica backdrop (`DWMSBT_MAINWINDOW`) behind
++    /// transparent content. Other platforms treat it as non-opaque.
++    MicaBackdrop,
+ }
+ 
+ /// The options that can be configured for a file dialog prompt
