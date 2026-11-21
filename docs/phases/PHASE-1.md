@@ -272,7 +272,7 @@ O usuário pediu que o fx tivesse o básico completo, sem bugs visuais, e três 
 - Abrir a pré-visualização em ≤ 100 ms para imagem de até 10 MB e texto (medido); trocar de item com as setas sem travar a lista.
 
 ## T1.23 — Busca no disco (Ctrl+F)
-- [ ] Concluída em: ____ · Resumo: ____
+- [ ] Concluída em: ____ · Resumo: implementada em 2026-11-21 (D-032): Ctrl+F abre o painel, resultados enquanto digita, cada tecla cancela a anterior; sem elevação percorre a pasta e subpastas em segundo plano (fixtures inteiras: ~200 ms, resultados em lotes), elevado usa o índice da MFT; Enter abre, Ctrl+Enter revela. Teste nas fixtures confere com varredura independente. **Falta:** P4 com resultados chegando (adiado: o usuário pausou os testes que usam a janela).
 
 **Fazer**
 - Ctrl+F abre a busca: resultados enquanto digita, abrir/revelar o resultado. Com o fx elevado, usa o índice da MFT (`fx-index`); sem elevação (o normal até o `fx-indexd` da Fase 2), busca na pasta atual e subpastas por enumeração em segundo plano, com resultados chegando aos poucos e cancelamento a cada tecla.

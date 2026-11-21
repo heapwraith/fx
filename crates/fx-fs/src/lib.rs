@@ -15,6 +15,12 @@ mod windows;
 #[cfg(windows)]
 pub use windows::{Watcher, enumerate, watch};
 
+// Uses `enumerate`, which only exists on Windows for now (D-012).
+#[cfg(windows)]
+mod search;
+#[cfg(windows)]
+pub use search::{SearchHit, SearchSummary, search_tree};
+
 /// How a folder is read. All strategies deliver the same entries; they differ
 /// only in speed (task T0.3, docs/DECISIONS.md D-009).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

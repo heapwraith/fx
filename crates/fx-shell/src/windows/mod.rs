@@ -3,6 +3,7 @@
 mod a11y;
 mod clipboard;
 mod dragdrop;
+mod elevation;
 mod icons;
 mod instance;
 mod launch;
@@ -14,6 +15,7 @@ mod time;
 pub use a11y::{A11y, LatestTree};
 pub use clipboard::{clear_clipboard, clipboard_files, set_clipboard_files};
 pub use dragdrop::{DragResult, drag_files, drop_keys, window_id};
+pub use elevation::is_elevated;
 pub use icons::start_icon_service;
 pub use instance::{Instance, claim_instance};
 pub use launch::launch;

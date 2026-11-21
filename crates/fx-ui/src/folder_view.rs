@@ -21,6 +21,7 @@ mod edit_ops;
 mod grid;
 mod path_bar;
 mod quick_look;
+mod search;
 mod view_menu;
 
 pub use view_menu::ViewEvent;
@@ -206,6 +207,8 @@ pub struct FolderView {
     quick_look: Option<quick_look::QuickLook>,
     quick_look_ticket: u64,
     stale_images: Vec<Arc<gpui::RenderImage>>,
+    /// Disk search panel (Ctrl+F, T1.23).
+    search: Option<search::Search>,
 }
 
 /// Which optional columns fit (T1.19): in a narrow list the type goes
@@ -373,6 +376,7 @@ impl FolderView {
             quick_look: None,
             quick_look_ticket: 0,
             stale_images: Vec::new(),
+            search: None,
         };
         view.start_loading(cx);
         view
@@ -1485,6 +1489,15 @@ impl FolderView {
         if self.notice.take().is_some() {
             cx.notify();
         }
+        if self.search_key(ks, started, window, cx) {
+            cx.notify();
+            return;
+        }
+        if ks.key == "f" && only_ctrl {
+            self.close_quick_look();
+            self.open_search(cx);
+            return;
+        }
         if self.view_menu && ks.key == "escape" {
             self.view_menu = false;
             cx.notify();
@@ -2091,6 +2104,7 @@ impl Render for FolderView {
                     ),
             )
             .children(self.render_quick_look(cx))
+            .children(self.render_search(cx))
             .children(self.render_view_menu(cx))
     }
 }

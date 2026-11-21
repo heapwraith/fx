@@ -221,3 +221,11 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Demais tipos e pastas:** miniatura grande do shell (512 px, `IShellItemImageFactory`, o mesmo extrator da grade com o tamanho como parâmetro), ou o ícone grande.
 - **Medido:** prévia de texto de um arquivo de 1 MB, release: **1,5–1,8 ms** para ler e preparar. **Imagem de 10 MB ainda não medida:** o decodificador do GPUI só existe dentro do app, e a medida (`input_preview_ms` no `FX_TRACE`, da tecla até o quadro) pede a janela.
 - **Fase 2:** vídeo, áudio, PDF e preview handlers de terceiros (`fx-preview` isolado em processo).
+
+## D-032 — Busca no disco (T1.23)
+- **Data:** 2026-11-21 · **Status:** aceita
+- **Painel:** Ctrl+F abre um painel de busca sobre a aba: campo no topo, resultados com nome e pasta, status embaixo. Setas escolhem, Enter abre (pasta abre na aba, arquivo no app padrão), Ctrl+Enter mostra o item selecionado na pasta dele, Esc ou clicar fora fecha. Cada tecla cancela a busca anterior (bandeira atômica) e começa outra; um resultado atrasado de uma busca antiga é descartado (bilhete).
+- **Sem elevação (o normal até o `fx-indexd`):** `fx_fs::search_tree` percorre a pasta atual e as subpastas em largura numa thread, com a mesma enumeração das pastas, "contém" sem maiúsculas nem acentos, lotes a cada 8 ms, até 2.000 resultados. Links e junções aparecem mas não são percorridos (sem laços); pastas sem acesso são puladas e contadas no status.
+- **Elevado:** `fx-shell::is_elevated` (token do processo). O fx lê a MFT do volume uma vez numa thread (`fx-index`, alguns segundos) e guarda o índice para o processo inteiro; daí em diante a busca usa o índice (disco inteiro, os 200 melhores por pontuação difusa). Enquanto o índice não fica pronto, vale a busca por pastas.
+- **Medido:** varrer todas as fixtures (~112 mil itens, 108 pastas), release: ~190–200 ms; uma busca com 2.296 resultados os entregou em 11–29 lotes. Teste: nas fixtures, a busca acha exatamente o que uma varredura independente com `std::fs` acha (3 consultas, com acento e maiúsculas).
+- **Falta:** P4 com resultados chegando (`input_search_ms`), que pede a janela.
