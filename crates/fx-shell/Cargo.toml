@@ -13,6 +13,9 @@ workspace = true
 
 [dependencies]
 fx-core.workspace = true
+accesskit.workspace = true
+raw-window-handle.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows.workspace = true
+accesskit_windows.workspace = true

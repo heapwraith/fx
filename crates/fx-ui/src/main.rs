@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 #![windows_subsystem = "windows"]
 
+mod a11y;
 mod folder_view;
 mod icons;
 mod places;
@@ -31,10 +32,11 @@ use gpui::{
     WindowBounds, WindowOptions, px, size,
 };
 
+use a11y::A11yHandle;
 use folder_view::{Look, window_title};
 use icons::{Icons, Media};
 use places::Places;
-use tabs_view::TabsView;
+use tabs_view::{TabsView, WindowServices};
 use theme::{Density, Mode, Theme};
 use thumbs::Thumbs;
 use trace::Trace;
@@ -167,6 +169,9 @@ fn open_folder_window(
                 title: Some(window_title(&path).into()),
                 ..Default::default()
             }),
+            // Hidden until the accessibility adapter is attached (D-008): it
+            // must subclass the window before it is shown.
+            show: false,
             window_background: if mica_supported {
                 WindowBackgroundAppearance::MicaBackdrop
             } else {
@@ -194,8 +199,16 @@ fn open_folder_window(
                 mica_supported,
                 mica,
             };
+            let latest: fx_shell::LatestTree = Rc::new(RefCell::new(None));
+            let a11y = fx_shell::A11y::attach(window, latest.clone())
+                .map(|(adapter, actions)| (A11yHandle::new(adapter, latest), actions));
             let view = cx.new(|cx| {
-                TabsView::new(path, look, trace, shared.places, shared.media, window, cx)
+                let services = WindowServices {
+                    places: shared.places,
+                    media: shared.media,
+                    a11y,
+                };
+                TabsView::new(path, look, trace, services, window, cx)
             });
             // Follow the Windows light/dark setting live.
             let themed = view.clone();

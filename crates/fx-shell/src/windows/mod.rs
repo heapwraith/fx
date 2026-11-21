@@ -1,11 +1,13 @@
 //! Windows implementation.
 
+mod a11y;
 mod icons;
 mod instance;
 mod launch;
 mod places;
 mod thumbs;
 
+pub use a11y::{A11y, LatestTree};
 pub use icons::start_icon_service;
 pub use instance::{Instance, claim_instance};
 pub use launch::launch;

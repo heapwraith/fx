@@ -51,6 +51,11 @@ pub(super) struct Completion {
 }
 
 impl FolderView {
+    /// Text of the path field while editing (for the accessibility tree).
+    pub(super) fn edit_text(&self) -> Option<String> {
+        self.edit.as_ref().map(|e| e.text.clone())
+    }
+
     pub(super) fn begin_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.edit = Some(PathEdit {
             text: self.path.display().to_string(),

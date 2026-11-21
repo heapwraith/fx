@@ -80,6 +80,7 @@ impl FolderView {
                 .update(cx, |icons, _| icons.request(missing_icons));
         }
 
+        self.publish_a11y(first, &entries);
         let mut rows = Vec::with_capacity(range.len());
         for chunk in tiles.chunks(cols) {
             let mut row = div().h(px(TILE_HEIGHT)).px(px(space(1))).flex();

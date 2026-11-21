@@ -127,7 +127,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T1.10 — Acessibilidade com AccessKit (D-008)
-- [ ] Concluída em: ____ · Resumo: ____
+- [x] Concluída em: 2026-11-21 · Resumo: janela aberta oculta, `SubclassingAdapter` no HWND (em `fx-shell`), árvore AccessKit janela → caminho → lista (total) → linhas visíveis com seleção, posição e foco; ações Focus/Click de leitores de tela selecionam a linha (D-021). Árvore UIA (`bench/uia-tree.ps1`): lista "Arquivos", 17 itens visíveis, item selecionado e focado corretos. Com o adaptador ativo: P4 p95 3,35 ms, P7 0 perdidos em 4.000 quadros. **Narrador ao vivo (Ctrl+Win+Enter) aguarda verificação do usuário.** Dependência extra fora da lista: `raw-window-handle` (D-021).
 
 **Fazer**
 - Janela aberta com `show: false`, `accesskit_windows::SubclassingAdapter` no HWND, depois `activate_window`.

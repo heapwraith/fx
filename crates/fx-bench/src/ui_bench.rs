@@ -123,6 +123,27 @@ fn spawn_fx_with(
     cmd.spawn()
 }
 
+/// With `FX_BENCH_UIA=1`, reads fx's UI Automation tree once (like a screen
+/// reader connecting), so the accessibility adapter is active during the run.
+fn activate_uia(pid: u32) -> std::io::Result<()> {
+    if std::env::var_os("FX_BENCH_UIA").is_none_or(|v| v != "1") {
+        return Ok(());
+    }
+    let out = Command::new("powershell")
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+        .arg(Path::new("bench").join("uia-tree.ps1"))
+        .args(["-ProcessId", &pid.to_string()])
+        .output()?;
+    let tree = String::from_utf8_lossy(&out.stdout);
+    if !tree.contains("ListItem") {
+        return Err(std::io::Error::other(format!(
+            "accessibility tree not exposed: {tree}"
+        )));
+    }
+    println!("  (UI Automation adapter active: tree read before the run)");
+    Ok(())
+}
+
 fn wait_with_timeout(child: &mut Child, timeout: Duration) -> std::io::Result<()> {
     let start = Instant::now();
     while child.try_wait()?.is_none() {
@@ -257,6 +278,7 @@ fn scroll_in(folder: &Path, label: &str, env: &[(&str, &str)], task: &str) -> st
     let mut child = spawn_fx_with(folder, false, env)?;
     // Let the folder load and sort before scrolling.
     std::thread::sleep(Duration::from_secs(2));
+    activate_uia(child.id())?;
     let script = Path::new("bench").join("scroll-p7.ps1");
     let out = Command::new("powershell")
         .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
@@ -527,6 +549,7 @@ fn run_key_script_with(
 ) -> std::io::Result<TraceFile> {
     let mut child = spawn_fx_with(folder, false, env)?;
     std::thread::sleep(Duration::from_secs(2));
+    activate_uia(child.id())?;
     let out = Command::new("powershell")
         .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
         .arg(Path::new("bench").join(script))

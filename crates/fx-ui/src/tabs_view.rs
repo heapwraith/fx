@@ -14,14 +14,17 @@ mod sidebar;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::mpsc::Receiver;
 use std::time::Instant;
 
+use accesskit::{Action, ActionRequest};
 use fx_core::Tabs;
 use gpui::{
     ClickEvent, Context, Entity, KeyDownEvent, MouseButton, MouseDownEvent, SharedString, Window,
     div, prelude::*, px,
 };
 
+use crate::a11y::{A11yHandle, row_entry};
 use crate::folder_view::{FolderView, Look, window_title};
 use crate::icons::Media;
 use crate::places::Places;
@@ -35,12 +38,21 @@ const TAB_HEIGHT: f32 = 32.0;
 const TAB_MAX_WIDTH: f32 = 220.0;
 const CLOSE_SIZE: f32 = 20.0;
 
+/// What a window gets from the app: shared places and media caches, and its
+/// own accessibility adapter (with the screen reader's action requests).
+pub struct WindowServices {
+    pub places: Entity<Places>,
+    pub media: Media,
+    pub a11y: Option<(A11yHandle, Receiver<ActionRequest>)>,
+}
+
 pub struct TabsView {
     tabs: Tabs<Entity<FolderView>>,
     look: Look,
     trace: Option<Rc<RefCell<Trace>>>,
     places: Entity<Places>,
     media: Media,
+    a11y: Option<A11yHandle>,
     sidebar_open: bool,
 }
 
@@ -78,12 +90,31 @@ impl TabsView {
         path: PathBuf,
         look: Look,
         trace: Option<Rc<RefCell<Trace>>>,
-        places: Entity<Places>,
-        media: Media,
+        services: WindowServices,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let first = Self::new_tab(path, look, trace.clone(), None, media.clone(), cx);
+        let WindowServices {
+            places,
+            media,
+            a11y,
+        } = services;
+        let (a11y, actions) = match a11y {
+            Some((h, rx)) => (Some(h), Some(rx)),
+            None => (None, None),
+        };
+        if let Some(rx) = actions {
+            Self::listen_a11y(rx, cx);
+        }
+        let first = Self::new_tab(
+            path,
+            look,
+            trace.clone(),
+            None,
+            media.clone(),
+            a11y.clone(),
+            cx,
+        );
         cx.observe(&places, |_, _, cx| cx.notify()).detach();
         let view = Self {
             tabs: Tabs::new(first),
@@ -91,6 +122,7 @@ impl TabsView {
             trace,
             places,
             media,
+            a11y,
             sidebar_open: true,
         };
         view.focus_active(window, cx);
@@ -103,12 +135,46 @@ impl TabsView {
         trace: Option<Rc<RefCell<Trace>>>,
         opened: Option<Instant>,
         media: Media,
+        a11y: Option<A11yHandle>,
         cx: &mut Context<Self>,
     ) -> Entity<FolderView> {
-        let tab = cx.new(|cx| FolderView::new(path, look, trace, opened, media, cx));
+        let tab = cx.new(|cx| FolderView::new(path, look, trace, opened, media, a11y, cx));
         // Re-render the strip when the tab's folder (its label) changes.
         cx.observe(&tab, |_, _, cx| cx.notify()).detach();
         tab
+    }
+
+    /// Focus and click requests from screen readers go to the active tab.
+    fn listen_a11y(rx: Receiver<ActionRequest>, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let background = cx.background_executor().clone();
+            let mut rx = rx;
+            loop {
+                // Wait on a background thread, never on the UI thread.
+                let (back, request) = background
+                    .spawn(async move {
+                        let r = rx.recv();
+                        (rx, r)
+                    })
+                    .await;
+                rx = back;
+                let Ok(request) = request else { break };
+                let alive = this.update(cx, |view, cx| {
+                    let wanted = matches!(request.action, Action::Focus | Action::Click);
+                    if let (true, Some(entry)) = (wanted, row_entry(request.target_node)) {
+                        let tab = view.tabs.active().clone();
+                        tab.update(cx, |tab, cx| {
+                            tab.a11y_select(entry);
+                            cx.notify();
+                        });
+                    }
+                });
+                if alive.is_err() {
+                    break;
+                }
+            }
+        })
+        .detach();
     }
 
     /// Keys go to the active tab; the window title follows it.
@@ -131,6 +197,7 @@ impl TabsView {
             self.trace.clone(),
             opened,
             self.media.clone(),
+            self.a11y.clone(),
             cx,
         );
         self.tabs.open(tab);

@@ -22,3 +22,4 @@ fx-index.workspace = true
 fx-shell.workspace = true
 fx-ops.workspace = true
 gpui.workspace = true
+accesskit.workspace = true

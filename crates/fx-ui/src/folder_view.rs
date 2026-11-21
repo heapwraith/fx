@@ -40,6 +40,7 @@ use gpui::{
     UniformListScrollHandle, Window, canvas, div, img, point, prelude::*, px, uniform_list,
 };
 
+use crate::a11y::{A11yHandle, Row, Snapshot};
 use crate::icons::{Icons, Media};
 use crate::theme::{BODY_SIZE, CAPTION_SIZE, Density, Mode, RADIUS, Theme, rgba, space};
 use crate::thumbs::Thumbs;
@@ -151,6 +152,8 @@ pub struct FolderView {
     /// A message for the status bar (e.g. a file that could not be opened),
     /// cleared by the next key.
     notice: Option<String>,
+    /// UI Automation of the window (task T1.10).
+    a11y: Option<A11yHandle>,
 }
 
 impl FolderView {
@@ -162,6 +165,7 @@ impl FolderView {
         trace: Option<Rc<RefCell<Trace>>>,
         opened: Option<Instant>,
         media: Media,
+        a11y: Option<A11yHandle>,
         cx: &mut Context<Self>,
     ) -> Self {
         let Media { icons, thumbs } = media;
@@ -208,6 +212,7 @@ impl FolderView {
             watcher: None,
             pending_changes: Vec::new(),
             notice: None,
+            a11y,
         };
         view.start_loading(cx);
         view
@@ -433,6 +438,7 @@ impl FolderView {
         }
         let t = self.look.theme;
         let row_h = self.look.density.row_height();
+        let first = range.start;
         // Icons of the rows drawn; unknown ones are requested after this pass.
         let icons = self.icons.read(cx);
         let show_icons = icons.enabled();
@@ -458,6 +464,8 @@ impl FolderView {
         if !missing.is_empty() {
             self.icons.update(cx, |icons, _| icons.request(missing));
         }
+        let shown: Vec<u32> = rows.iter().map(|&(i, _)| i).collect();
+        self.publish_a11y(first, &shown);
         rows.into_iter()
             .map(|(i, icon)| {
                 let is_dir = self.list.attributes(i).is_dir();
@@ -638,6 +646,50 @@ impl FolderView {
         }
         self.look.mica = self.look.mica_supported && self.look.theme.mode == system;
         self.look.mica
+    }
+
+    /// Sends the accessibility tree for the rows on screen (`first` is the
+    /// display position of `shown[0]`). Free when no screen reader listens
+    /// except for building a few dozen nodes.
+    fn publish_a11y(&self, first: usize, shown: &[u32]) {
+        let Some(handle) = &self.a11y else { return };
+        let rows = shown
+            .iter()
+            .enumerate()
+            .map(|(k, &i)| Row {
+                entry: i,
+                position: first + k,
+                name: self.list.name(i).to_owned(),
+                description: if self.list.attributes(i).is_dir() {
+                    "pasta".to_owned()
+                } else {
+                    format!(
+                        "{}, modificado em {}",
+                        size_kb(self.list.size(i)),
+                        date_time_utc(self.list.modified(i))
+                    )
+                },
+                selected: self.selection.is_selected(i),
+            })
+            .collect();
+        handle.publish(&Snapshot {
+            title: window_title(&self.path),
+            path: self.path.display().to_string(),
+            editing: self.edit_text(),
+            total: self.rows().len(),
+            rows,
+            cursor: self.selection.cursor(),
+        });
+    }
+
+    /// A screen reader asked to focus or activate the row of `entry`.
+    pub fn a11y_select(&mut self, entry: u32) {
+        let rows = rows_of(&self.filtered, &self.list);
+        if let Some(pos) = self.selection.position(rows, entry) {
+            self.selection.select_only(entry);
+            let item = if self.grid { pos / self.grid_cols } else { pos };
+            self.scroll.scroll_to_item(item, ScrollStrategy::Center);
+        }
     }
 
     /// Opens `path` in this tab (sidebar), as a new history entry.
