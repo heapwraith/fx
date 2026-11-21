@@ -8,8 +8,8 @@ exclude = ["third_party/*"]
 version = "0.0.1"
 edition = "2024"
 rust-version = "1.100"
-license = "MIT OR Apache-2.0"   # pendente de confirmação (docs/DECISIONS.md D-004)
-repository = "https://github.com/OWNER/fx"
+license = "MIT OR Apache-2.0"   # docs/DECISIONS.md D-004
+repository = "https://github.com/heapwraith/fx"
 publish = false
 
 # Toda dependência nova entra aqui com versão EXATA e é registrada em docs/DECISIONS.md.

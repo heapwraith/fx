@@ -2,7 +2,7 @@
 
 Cópia do crate `gpui` 0.2.2 do crates.io (licença Apache-2.0, ver `LICENSE-APACHE`), usada pelo workspace via `[patch.crates-io]`. Motivo: compilar de forma cruzada do WSL para `x86_64-pc-windows-msvc` (docs/DECISIONS.md D-005 e D-007).
 
-O diff completo contra o upstream está em `fx.patch`. Cada trecho alterado tem um comentário `fx patch:`.
+A pasta `examples/` do crate foi removida (4,8 MB que não entram no build). O diff completo contra o upstream, sem contar essa remoção (os blocos `[[example]]` do `Cargo.toml` aparecem nele), está em `fx.patch`. Cada trecho alterado tem um comentário `fx patch:`.
 
 | Arquivo | Mudança | Por quê |
 |---|---|---|

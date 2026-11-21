@@ -23,7 +23,8 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Consequência:** só NTFS tem busca instantânea; FAT/exFAT/rede caem para enumeração normal.
 
 ## D-004 — Licença: MIT OR Apache-2.0
-- **Data:** 2026-11-20 · **Status:** pendente de confirmação do usuário (alternativa em discussão: GPL-3.0)
+- **Data:** 2026-11-20 · **Status:** aceita (confirmada pelo usuário em 2026-11-21, ao publicar em github.com/heapwraith/fx)
+- **Decisão:** dupla licença MIT OR Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE`), o padrão do ecossistema Rust e compatível com o GPUI (Apache-2.0). A GPL-3.0 foi descartada. O código copiado em `third_party/gpui` continua sob a licença dele (Apache-2.0, `third_party/gpui/LICENSE-APACHE`).
 
 ## D-005 — Ambiente de desenvolvimento: Windows nativo
 - **Data:** 2026-11-20 · **Status:** substituída por D-010

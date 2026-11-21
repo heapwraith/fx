@@ -1,7 +1,142 @@
-diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 a/Cargo.toml ./Cargo.toml
+diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples a/Cargo.toml ./Cargo.toml
 --- a/Cargo.toml	2006-07-23 21:21:28.000000000 -0400
-+++ b/Cargo.toml	2026-11-21 00:13:31.907328651 -0400
-@@ -576,7 +576,9 @@
++++ b/Cargo.toml	2026-11-21 01:22:03.727031618 -0400
+@@ -19,6 +19,7 @@
+ autolib = false
+ autobins = false
+ autoexamples = false
++# fx patch: examples/ removed from the vendored copy, and their [[example]] entries with it.
+ autotests = false
+ autobenches = false
+ description = "Zed's GPU-accelerated UI framework"
+@@ -104,126 +105,6 @@
+ path = "src/gpui.rs"
+ doctest = false
+ 
+-[[example]]
+-name = "animation"
+-path = "examples/animation.rs"
+-
+-[[example]]
+-name = "data_table"
+-path = "examples/data_table.rs"
+-
+-[[example]]
+-name = "drag_drop"
+-path = "examples/drag_drop.rs"
+-
+-[[example]]
+-name = "gif_viewer"
+-path = "examples/gif_viewer.rs"
+-
+-[[example]]
+-name = "gradient"
+-path = "examples/gradient.rs"
+-
+-[[example]]
+-name = "grid_layout"
+-path = "examples/grid_layout.rs"
+-
+-[[example]]
+-name = "hello_world"
+-path = "examples/hello_world.rs"
+-
+-[[example]]
+-name = "image"
+-path = "examples/image/image.rs"
+-
+-[[example]]
+-name = "image_gallery"
+-path = "examples/image_gallery.rs"
+-
+-[[example]]
+-name = "image_loading"
+-path = "examples/image_loading.rs"
+-
+-[[example]]
+-name = "input"
+-path = "examples/input.rs"
+-
+-[[example]]
+-name = "on_window_close_quit"
+-path = "examples/on_window_close_quit.rs"
+-
+-[[example]]
+-name = "opacity"
+-path = "examples/opacity.rs"
+-
+-[[example]]
+-name = "ownership_post"
+-path = "examples/ownership_post.rs"
+-
+-[[example]]
+-name = "painting"
+-path = "examples/painting.rs"
+-
+-[[example]]
+-name = "paths_bench"
+-path = "examples/paths_bench.rs"
+-
+-[[example]]
+-name = "pattern"
+-path = "examples/pattern.rs"
+-
+-[[example]]
+-name = "scrollable"
+-path = "examples/scrollable.rs"
+-
+-[[example]]
+-name = "set_menus"
+-path = "examples/set_menus.rs"
+-
+-[[example]]
+-name = "shadow"
+-path = "examples/shadow.rs"
+-
+-[[example]]
+-name = "svg"
+-path = "examples/svg/svg.rs"
+-
+-[[example]]
+-name = "tab_stop"
+-path = "examples/tab_stop.rs"
+-
+-[[example]]
+-name = "text"
+-path = "examples/text.rs"
+-
+-[[example]]
+-name = "text_layout"
+-path = "examples/text_layout.rs"
+-
+-[[example]]
+-name = "text_wrapper"
+-path = "examples/text_wrapper.rs"
+-
+-[[example]]
+-name = "tree"
+-path = "examples/tree.rs"
+-
+-[[example]]
+-name = "uniform_list"
+-path = "examples/uniform_list.rs"
+-
+-[[example]]
+-name = "window"
+-path = "examples/window.rs"
+-
+-[[example]]
+-name = "window_positioning"
+-path = "examples/window_positioning.rs"
+-
+-[[example]]
+-name = "window_shadow"
+-path = "examples/window_shadow.rs"
+-
+ [[test]]
+ name = "action_macros"
+ path = "tests/action_macros.rs"
+@@ -576,7 +457,9 @@
  ]
  optional = true
  
@@ -12,7 +147,7 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
  version = "25.0"
  features = ["wgsl-in"]
  
-@@ -724,7 +726,7 @@
+@@ -724,7 +607,7 @@
  [target.'cfg(target_os = "windows")'.dependencies.windows-registry]
  version = "0.5"
  
@@ -21,7 +156,7 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
  version = "3.0"
  
  [lints.clippy]
-diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 a/build.rs ./build.rs
+diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples a/build.rs ./build.rs
 --- a/build.rs	2006-07-23 21:21:28.000000000 -0400
 +++ b/build.rs	2026-11-21 00:16:16.109490537 -0400
 @@ -10,11 +10,17 @@
@@ -279,7 +414,7 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
 -            .expect("Failed to write Rust binding file");
 -    }
  }
-diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 a/src/platform/windows/directx_devices.rs ./src/platform/windows/directx_devices.rs
+diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples a/src/platform/windows/directx_devices.rs ./src/platform/windows/directx_devices.rs
 --- a/src/platform/windows/directx_devices.rs	2006-07-23 21:21:28.000000000 -0400
 +++ b/src/platform/windows/directx_devices.rs	2026-11-21 01:02:12.786886238 -0400
 @@ -53,32 +53,25 @@
@@ -373,7 +508,7 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
      unreachable!()
  }
  
-diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 a/src/platform/windows/directx_renderer.rs ./src/platform/windows/directx_renderer.rs
+diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples a/src/platform/windows/directx_renderer.rs ./src/platform/windows/directx_renderer.rs
 --- a/src/platform/windows/directx_renderer.rs	2006-07-23 21:21:28.000000000 -0400
 +++ b/src/platform/windows/directx_renderer.rs	2026-11-21 01:02:45.532052512 -0400
 @@ -1391,14 +1391,11 @@

@@ -23,3 +23,7 @@ cargo xwin run -p fx-ui --release
 ```
 
 Documentação para quem contribui (pessoa ou agente): comece por [`CLAUDE.md`](CLAUDE.md) e [`docs/`](docs/).
+
+## Licença
+
+Dupla licença, à sua escolha: [MIT](LICENSE-MIT) ou [Apache 2.0](LICENSE-APACHE). O código copiado em `third_party/gpui` (GPUI, da Zed Industries) é Apache 2.0 e traz um patch próprio, descrito em `third_party/gpui/FX-PATCH.md`.
