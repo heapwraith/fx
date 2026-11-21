@@ -230,6 +230,67 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 
 ---
 
+## Rodada de polimento antes do uso diário (pedida pelo usuário em 2026-11-21)
+
+O usuário pediu que o fx tivesse o básico completo, sem bugs visuais, e três recursos da Fase 2 (Quick Look, busca no disco e paleta de comandos) antes das 2 semanas de uso do portão. As tarefas abaixo entram antes da T1.18; o restante da Fase 2 (serviço `fx-indexd`, filtros avançados, renomear em lote, beta pública) continua lá.
+
+## T1.19 — Varredura e correção de bugs visuais
+- [ ] Concluída em: ____ · Resumo: ____
+
+**Fazer**
+- Capturas nos dois temas, nas três densidades, em lista e grade, janela larga e estreita: barra de caminho (inclusive o fim dela, onde ficam o botão de vista e o texto de status), abas, lateral, ícones de arquivo, rodapé da fila, diálogos.
+- Corrigir o que aparecer, começando pelo fim da barra de caminho (apontado pelo usuário).
+
+**Aceite**
+- Lista dos problemas encontrados, com captura antes e depois de cada correção; nada sobreposto, cortado sem reticências ou desalinhado em 640 px de largura.
+
+## T1.20 — Ordenar por coluna, coluna Tipo e largura das colunas
+- [ ] Concluída em: ____ · Resumo: ____
+
+**Fazer**
+- Clique no cabeçalho ordena por nome, tamanho, data ou tipo (clicar de novo inverte), com seta indicando; coluna Tipo; arrastar a borda do cabeçalho ajusta a largura. Ordenação fora da thread de UI; persiste por aba.
+
+**Aceite**
+- Reordenar 100 mil itens não trava a UI (P4 medida durante a reordenação); seleção mantida (testes).
+
+## T1.21 — Arquivos ocultos e Propriedades
+- [ ] Concluída em: ____ · Resumo: ____
+
+**Fazer**
+- Mostrar/esconder ocultos e de sistema (Ctrl+H e botão), salvo nas configurações; Alt+Enter e item no menu abrem as Propriedades do Windows.
+
+**Aceite**
+- Testes do filtro de ocultos; Propriedades abre sem bloquear a UI.
+
+## T1.22 — Quick Look (Espaço)
+- [ ] Concluída em: ____ · Resumo: ____
+
+**Fazer**
+- Espaço abre uma janela de pré-visualização do item sob o cursor, que acompanha as setas e fecha com Espaço/Esc: imagem (decodificada fora da UI), texto e código (primeiros 256 KB), e miniatura grande do shell para os demais tipos. Vídeo, áudio, PDF e preview handlers de terceiros ficam para a Fase 2 (`fx-preview` isolado).
+
+**Aceite**
+- Abrir a pré-visualização em ≤ 100 ms para imagem de até 10 MB e texto (medido); trocar de item com as setas sem travar a lista.
+
+## T1.23 — Busca no disco (Ctrl+F)
+- [ ] Concluída em: ____ · Resumo: ____
+
+**Fazer**
+- Ctrl+F abre a busca: resultados enquanto digita, abrir/revelar o resultado. Com o fx elevado, usa o índice da MFT (`fx-index`); sem elevação (o normal até o `fx-indexd` da Fase 2), busca na pasta atual e subpastas por enumeração em segundo plano, com resultados chegando aos poucos e cancelamento a cada tecla.
+
+**Aceite**
+- Nenhuma tecla da busca passa de 16 ms (P4) enquanto os resultados chegam; busca na pasta de fixtures acha os itens esperados (teste).
+
+## T1.24 — Paleta de comandos (Ctrl+K)
+- [ ] Concluída em: ____ · Resumo: ____
+
+**Fazer**
+- Ctrl+K (e Ctrl+Shift+P) abre a paleta: busca difusa sobre os comandos do fx (com o atalho ao lado), pastas recentes e Acesso rápido; Enter executa.
+
+**Aceite**
+- Testes da busca difusa e da lista de comandos; abrir e filtrar em ≤ 16 ms por tecla.
+
+---
+
 ## Portão da Fase 1
 
 Passa para a Fase 2 somente se:
