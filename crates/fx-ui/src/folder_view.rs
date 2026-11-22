@@ -1198,24 +1198,34 @@ impl FolderView {
         .detach();
     }
 
-    /// The update check (T4.1), on a worker thread. `quiet`: the daily check
-    /// at startup, which only speaks when there is a newer version.
+    /// The update check (T4.1/T4.4), on a worker thread: a newer version is
+    /// downloaded, checked and kept ready, applied when fx closes. `quiet`:
+    /// the daily check at startup, which only speaks when one is ready.
     pub fn check_updates(&mut self, quiet: bool, cx: &mut Context<Self>) {
         let work = cx.background_executor().spawn(async move {
+            if let Some((v, _)) = crate::update::ready() {
+                return Ok(Some(v));
+            }
             if quiet && !crate::update::due() {
                 return Ok(None);
             }
-            crate::update::check()
+            match crate::update::check()? {
+                Some(u) if !quiet || crate::update::automatic() => {
+                    crate::update::prepare(&u)?;
+                    Ok(Some(u.version))
+                }
+                _ => Ok(None),
+            }
         });
         cx.spawn(async move |this, cx| {
-            let result = work.await;
+            let result: std::io::Result<Option<fx_core::update::Version>> = work.await;
             let _ = this.update(cx, |view, cx| {
                 let text = match result {
-                    Ok(Some(u)) => {
-                        let v = u.version.to_string();
+                    Ok(Some(v)) => {
+                        let v = v.to_string();
                         trf!(
-                            "Versão {v} disponível · Ctrl+K: atualizar",
-                            "Version {v} available · Ctrl+K: update"
+                            "Versão {v} pronta · entra quando você fechar o fx (Ctrl+K: reiniciar agora)",
+                            "Version {v} ready · applies when you close fx (Ctrl+K: restart now)"
                         )
                     }
                     _ if quiet => return,
@@ -1223,8 +1233,8 @@ impl FolderView {
                         tr!("O fx já está na versão mais recente", "fx is up to date").to_owned()
                     }
                     Err(e) => trf!(
-                        "Não foi possível procurar atualizações: {e}",
-                        "Could not check for updates: {e}"
+                        "Não foi possível atualizar: {e}",
+                        "Could not update: {e}"
                     ),
                 };
                 view.show_notice(text, cx);
@@ -1233,35 +1243,40 @@ impl FolderView {
         .detach();
     }
 
-    /// Palette "Atualizar o fx": installs the version found, or checks now.
+    /// Palette "Atualizar o fx": restarts into the version ready (saving the
+    /// session first), or looks for one now.
     pub fn update_command(&mut self, cx: &mut Context<Self>) {
-        let Some(update) = crate::update::available() else {
-            self.show_notice(
-                tr!("Procurando atualizações…", "Checking for updates…").to_owned(),
-                cx,
-            );
-            self.check_updates(false, cx);
-            return;
-        };
-        let v = update.version.to_string();
-        self.show_notice(
-            trf!("Baixando a versão {v}…", "Downloading version {v}…"),
-            cx,
-        );
         let work = cx
             .background_executor()
-            .spawn(async move { crate::update::install(&update) });
+            .spawn(async move { crate::update::ready().is_some() });
         cx.spawn(async move |this, cx| {
-            let result = work.await;
+            let ready = work.await;
+            // At the app level, not inside this tab's update: saving the
+            // session reads every tab, this one included.
+            if ready {
+                let restarted = cx
+                    .update(|cx| {
+                        if let Some(p) = cx.try_global::<crate::persist::PersistGlobal>() {
+                            let p = p.0.clone();
+                            p.update(cx, |p, cx| p.flush(cx));
+                        }
+                        let started = crate::update::apply(true);
+                        if started {
+                            cx.quit();
+                        }
+                        started
+                    })
+                    .unwrap_or(false);
+                if restarted {
+                    return;
+                }
+            }
             let _ = this.update(cx, |view, cx| {
-                let text = match result {
-                    Ok(()) => trf!(
-                        "Versão {v} instalada: feche e abra o fx para usá-la",
-                        "Version {v} installed: close and reopen fx to use it"
-                    ),
-                    Err(e) => trf!("Atualização cancelada: {e}", "Update canceled: {e}"),
-                };
-                view.show_notice(text, cx);
+                view.show_notice(
+                    tr!("Procurando atualizações…", "Checking for updates…").to_owned(),
+                    cx,
+                );
+                view.check_updates(false, cx);
             });
         })
         .detach();

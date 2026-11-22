@@ -102,7 +102,10 @@ fn write(dir: &Path, enabled: bool, report: &str) -> Option<PathBuf> {
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
-    let path = dir.join(format!("falha-{stamp}-{}.txt", std::process::id()));
+    // A second panic in the same second must not replace the first report.
+    static COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let n = COUNT.fetch_add(1, Ordering::Relaxed);
+    let path = dir.join(format!("falha-{stamp}-{}-{n}.txt", std::process::id()));
     std::fs::write(&path, report).ok()?;
     Some(path)
 }

@@ -125,6 +125,25 @@ pub fn create_shortcut(lnk: &Path, target: &Path, description: &str) -> io::Resu
     Ok(())
 }
 
+/// Waits until process `pid` has ended (or `timeout`); `true` if it ended
+/// or does not exist. The update helper (T4.4) waits for fx to close before
+/// replacing its files.
+pub fn wait_for_exit(pid: u32, timeout: std::time::Duration) -> bool {
+    use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows::Win32::System::Threading::{
+        OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject,
+    };
+    // SAFETY: a handle we own, closed once; no other memory involved.
+    unsafe {
+        let Ok(h) = OpenProcess(PROCESS_SYNCHRONIZE, false, pid) else {
+            return true; // already gone
+        };
+        let r = WaitForSingleObject(h, timeout.as_millis().min(u128::from(u32::MAX)) as u32);
+        let _ = CloseHandle(h);
+        r == WAIT_OBJECT_0
+    }
+}
+
 /// What Settings › Apps shows and runs.
 #[derive(Debug, Clone)]
 pub struct UninstallEntry {
@@ -207,6 +226,23 @@ mod tests {
         assert!(!is_registered(&key));
         let root = format!(r"Software\fx-test-{}", std::process::id());
         let _ = registry::delete_tree(&root);
+    }
+
+    #[test]
+    fn waiting_for_a_process() {
+        let mut child = std::process::Command::new("cmd.exe")
+            .args(["/C", "exit"])
+            .spawn()
+            .unwrap();
+        assert!(wait_for_exit(
+            child.id(),
+            std::time::Duration::from_secs(10)
+        ));
+        let _ = child.wait();
+        assert!(
+            wait_for_exit(0xFFFF_FFF0, std::time::Duration::from_millis(10)),
+            "no such process"
+        );
     }
 
     #[test]

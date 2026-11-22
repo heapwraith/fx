@@ -6,7 +6,7 @@
 
 **Regras desta fase:**
 - Sem dependências novas: rede pelo WinHTTP e hash pelo BCrypt do Windows (`windows-rs`, já no projeto).
-- Nada é baixado nem instalado sem o usuário pedir; a verificação de versão pode ser desligada.
+- Atualizações (como no Zed): baixadas e aplicadas sozinhas ao fechar o fx, com uma opção que desliga tudo; nada é instalado sem conferir hash (e assinatura, quando houver).
 - P8 (memória parado ≤ 88 MB) está a 1,1 MB do limite: nada desta fase pode aumentá-la.
 - Toda tela segue a skill `fx-design`; P4 medido.
 
@@ -53,7 +53,7 @@
 - [x] Concluída em: 2026-11-22 · Resumo: pedido do usuário. "Sobre o fx" (logo, slogan, versão e compilação, licença, créditos, Procurar atualizações, Novidades, Código) e "Como usar o fx" (seis grupos de atalhos, abre sozinha na primeira vez, F1 e paleta), sobreposições com a transição da T4.2; slogan novo também no instalador (D-059). Teste do conteúdo; conferidas em claro e escuro.
 
 ## T4.4 — Atualização ao reiniciar (como o Zed)
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: a versão nova é baixada e conferida sozinha (se `verificar_atualizacoes`) e fica pronta em `%LOCALAPPDATA%\fx\update`; ao fechar o fx, `fx-setup --silent --wait <pid>` troca os arquivos; "Atualizar o fx" na paleta salva a sessão e reinicia na versão nova (`--relaunch`) (D-060). Ponta a ponta numa pasta de teste: 0.2.0 → 9.9.9 ao fechar e 9.9.9 → 9.9.10 reiniciando, fx reaberto sozinho; troca com falha volta ao anterior (teste da T4.3). Achado e corrigido: salvar a sessão de dentro da aba travava o fx.
 
 **Fazer**
 - A versão nova é baixada e conferida em segundo plano (T4.1) e fica pronta; o status diz "Atualização pronta · reinicie o fx". Ao fechar o fx (ou pelo comando "Reiniciar para atualizar"), o `fx-setup --apply` troca os arquivos sem tela e reabre o fx se foi um reinício. Sai o modo "instalador silencioso que fecha o fx".

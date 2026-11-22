@@ -178,6 +178,14 @@ fn main() {
             ops: cx.new(Ops::new),
         };
         let persist = cx.new(|cx| Persist::new(persist, settings, places.clone(), cx));
+        cx.set_global(persist::PersistGlobal(persist.clone()));
+        // An update ready (T4.4) is applied when fx quits: the new fx-setup
+        // waits for this process to end, then replaces the files.
+        cx.on_app_quit(|_| {
+            update::apply(false);
+            async {}
+        })
+        .detach();
         let shared = Shared {
             places,
             media,

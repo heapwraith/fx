@@ -3,7 +3,9 @@
 //!
 //! ```text
 //! fx-setup                      install (the setup carries the package)
-//! fx-setup --silent             install without a window (exit code)
+//! fx-setup --silent [--wait <pid>] [--relaunch]
+//!                               install without a window (exit code); the
+//!                               update helper waits for fx to close first
 //! fx-setup --uninstall [--quiet]
 //! fx-setup --pack <stub> <bin dir> <doc dir> <out>   (CI)
 //! ```
@@ -53,7 +55,9 @@ fn main() -> ExitCode {
     if let [cmd, stub, bins, docs, out] = args.as_slice()
         && cmd == "--pack"
     {
-        let version = transaction::display_version(VERSION);
+        // FX_PACK_VERSION: a different version, for the update tests (T4.4).
+        let version = std::env::var("FX_PACK_VERSION")
+            .unwrap_or_else(|_| transaction::display_version(VERSION));
         return match pack::pack_dirs(
             Path::new(stub),
             Path::new(bins),
@@ -106,10 +110,24 @@ fn main() -> ExitCode {
         }
     };
     if flag("--silent") {
+        // The update helper (T4.4): wait for fx to close, replace the files,
+        // and open the new fx again if this was a restart.
+        let wait = args
+            .iter()
+            .position(|a| a == "--wait")
+            .and_then(|i| args.get(i + 1))
+            .and_then(|p| p.parse::<u32>().ok());
+        if let Some(pid) = wait {
+            fx_shell::install::wait_for_exit(pid, Duration::from_secs(60));
+        }
         let opts = Options {
             desktop_shortcut: false,
         };
-        return match transaction::install(&package, &target, opts, &mut |_| {}) {
+        let result = transaction::install(&package, &target, opts, &mut |_| {});
+        if flag("--relaunch") {
+            let _ = std::process::Command::new(target.exe()).spawn();
+        }
+        return match result {
             Ok(()) => ExitCode::SUCCESS,
             Err(_) => ExitCode::FAILURE,
         };

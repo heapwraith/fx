@@ -1,11 +1,11 @@
-//! The updater (task T4.1). Once a day, on a worker thread, fx asks GitHub
-//! for its releases; a newer one is announced in the status bar and the
-//! palette's "Atualizar o fx" installs it: the installer for this
-//! architecture is downloaded to `%TEMP%`, checked against the release's
-//! `SHA256SUMS.txt` (and its signature, when this fx is signed), then run
-//! silently (`fx-setup --silent`, T4.3): the files are replaced next to the
-//! running fx and the new version starts with the next fx. Nothing is downloaded or installed without the user
-//! asking; `verificar_atualizacoes = false` turns the daily check off.
+//! The updater (tasks T4.1 and T4.4, in the manner of Zed). Once a day, on a
+//! worker thread, fx asks GitHub for its releases; a newer version is
+//! downloaded by itself, checked against the release's `SHA256SUMS.txt`
+//! (and its signature, when this fx is signed) and kept ready in
+//! `%LOCALAPPDATA%\fx\update`. When fx closes, the new fx-setup (T4.3)
+//! waits for it to end and replaces the files; "Reiniciar para atualizar"
+//! does the same and opens fx again. `verificar_atualizacoes = false` turns
+//! all of it off; the palette's "Atualizar o fx" still works on request.
 
 use std::io;
 use std::path::PathBuf;
@@ -21,7 +21,6 @@ const MAX_SETUP: usize = 200 << 20;
 
 static ENABLED: AtomicBool = AtomicBool::new(true);
 static CHOSEN: Mutex<Option<bool>> = Mutex::new(None);
-static AVAILABLE: Mutex<Option<Update>> = Mutex::new(None);
 
 pub fn set_enabled(on: bool) {
     ENABLED.store(on, Ordering::Relaxed);
@@ -44,11 +43,6 @@ pub fn switch() -> bool {
 /// What to save in `verificar_atualizacoes`, if switched this session.
 pub fn chosen() -> Option<bool> {
     CHOSEN.lock().ok().and_then(|c| *c)
-}
-
-/// The update found by the last check, if any.
-pub fn available() -> Option<Update> {
-    AVAILABLE.lock().ok().and_then(|a| a.clone())
 }
 
 fn current() -> Option<Version> {
@@ -82,8 +76,8 @@ pub fn due() -> bool {
     enabled() && fx_core::update::due(last, now_secs())
 }
 
-/// Asks GitHub for a newer version (blocking; worker thread). Remembers it
-/// for the palette and records the time of the check.
+/// Asks GitHub for a newer version (blocking; worker thread) and records
+/// the time of the check.
 pub fn check() -> io::Result<Option<Update>> {
     let current = current().ok_or_else(|| io::Error::other("unknown version"))?;
     let body = fx_shell::net::http_get(RELEASES, MAX_JSON)?;
@@ -95,15 +89,22 @@ pub fn check() -> io::Result<Option<Update>> {
     }
     let text = String::from_utf8_lossy(&body);
     let found = fx_core::update::pick(&text, &current, arch());
-    if let Ok(mut a) = AVAILABLE.lock() {
-        a.clone_from(&found);
-    }
     Ok(found)
 }
 
-/// Downloads and checks the installer, then starts it (blocking; worker
-/// thread). On success the installer is running and will close fx.
-pub fn install(update: &Update) -> io::Result<()> {
+fn update_dir() -> Option<PathBuf> {
+    crate::store::state_path().map(|p| p.with_file_name("update"))
+}
+
+const READY: &str = "ready.txt";
+
+/// Downloads and checks the installer of `update` and keeps it ready
+/// (blocking; worker thread). It is applied when fx closes (T4.4).
+pub fn prepare(update: &Update) -> io::Result<()> {
+    // Only a plain file name from the release: no folders.
+    if !fx_core::package::is_plain_name(&update.setup_name) {
+        return Err(io::Error::other("unexpected installer name"));
+    }
     let sums =
         String::from_utf8_lossy(&fx_shell::net::http_get(&update.sums_url, MAX_SUMS)?).into_owned();
     let setup = fx_shell::net::http_get(&update.setup_url, MAX_SETUP)?;
@@ -114,11 +115,7 @@ pub fn install(update: &Update) -> io::Result<()> {
             "the downloaded installer does not match the release's SHA256SUMS"
         )));
     }
-    // Only a plain file name from the release: no folders.
-    if update.setup_name.contains(['/', '\\']) || update.setup_name.contains("..") {
-        return Err(io::Error::other("unexpected installer name"));
-    }
-    let dir = std::env::temp_dir().join("fx-update");
+    let dir = update_dir().ok_or_else(|| io::Error::other("no data folder"))?;
     std::fs::create_dir_all(&dir)?;
     let path = dir.join(&update.setup_name);
     std::fs::write(&path, &setup)?;
@@ -133,18 +130,60 @@ pub fn install(update: &Update) -> io::Result<()> {
             "the downloaded installer is not signed"
         )));
     }
-    // fx-setup (T4.3) installs next to the running fx (its exe is renamed
-    // aside, not deleted): the new version starts with the next fx.
-    let status = std::process::Command::new(&path).arg("--silent").status()?;
-    let _ = std::fs::remove_file(&path);
-    if status.success() {
-        Ok(())
-    } else {
-        Err(io::Error::other(fx_core::tr!(
-            "o instalador não terminou",
-            "the installer did not finish"
-        )))
+    std::fs::write(
+        dir.join(READY),
+        format!("{}\n{}\n", update.version, update.setup_name),
+    )
+}
+
+/// The version ready to apply and its installer. A leftover from an update
+/// already applied (or a damaged note) is cleaned up.
+pub fn ready() -> Option<(Version, PathBuf)> {
+    let dir = update_dir()?;
+    let note = std::fs::read_to_string(dir.join(READY)).ok();
+    let parsed = note.as_deref().and_then(|text| {
+        let mut lines = text.lines();
+        let version = Version::parse(lines.next()?)?;
+        let name = lines.next()?.trim().to_owned();
+        fx_core::package::is_plain_name(&name).then(|| (version, dir.join(name)))
+    });
+    match parsed {
+        Some((v, path)) if current().is_some_and(|c| v > c) && path.exists() => Some((v, path)),
+        _ => {
+            // Nothing (valid) to apply: an old installer or note goes.
+            if dir.exists() {
+                let _ = std::fs::remove_dir_all(&dir);
+            }
+            None
+        }
     }
+}
+
+/// Starts the update helper for the version ready, if any: the new
+/// fx-setup waits for this process to end, replaces the files and, with
+/// `relaunch`, opens fx again. Returns whether it started. Called when fx
+/// quits (and by "Reiniciar para atualizar").
+pub fn apply(relaunch: bool) -> bool {
+    let Some((_, setup)) = ready() else {
+        return false;
+    };
+    let pid = std::process::id().to_string();
+    let mut cmd = std::process::Command::new(&setup);
+    cmd.args(["--silent", "--wait", &pid]);
+    if relaunch {
+        cmd.arg("--relaunch");
+    }
+    let started = cmd.spawn().is_ok();
+    if started && let Some(dir) = update_dir() {
+        // Applied once; the installer itself is removed on the next start.
+        let _ = std::fs::remove_file(dir.join(READY));
+    }
+    started
+}
+
+/// Whether to download updates by themselves (`verificar_atualizacoes`).
+pub fn automatic() -> bool {
+    enabled()
 }
 
 #[cfg(test)]

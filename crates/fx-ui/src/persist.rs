@@ -28,7 +28,23 @@ pub struct Persist {
     last: Option<Session>,
 }
 
+/// The session writer, reachable from anywhere (restart to update, T4.4).
+pub struct PersistGlobal(pub Entity<Persist>);
+
+impl gpui::Global for PersistGlobal {}
+
 impl Persist {
+    /// Writes the session now (before fx quits on purpose).
+    pub fn flush(&mut self, cx: &mut App) {
+        let session = self.collect(None, cx);
+        if let Some((db, settings_file)) = &self.files
+            && let Ok(mut store) = store::Db::open(db)
+        {
+            let _ = store.save(&session);
+            let _ = store::save_settings(settings_file, &session.settings);
+        }
+    }
+
     pub fn new(
         enabled: bool,
         settings: Settings,
