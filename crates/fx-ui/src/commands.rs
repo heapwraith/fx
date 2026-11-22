@@ -31,6 +31,10 @@ pub enum Action {
     Language,
     /// Cloud files (T3.9): keep on this device (`true`) or free up space.
     CloudPin(bool),
+    /// Opens a GitHub issue with the last crash report (T3.10).
+    ReportCrash,
+    /// Turns the local crash reports on or off.
+    CrashReports,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -195,6 +199,20 @@ pub const COMMANDS: &[Command] = &[
     direct(
         ("Liberar espaço (nuvem)", "Free up space (cloud)"),
         Action::CloudPin(false),
+    ),
+    direct(
+        (
+            "Relatar a última falha (abre uma issue no navegador)",
+            "Report the last crash (opens an issue in the browser)",
+        ),
+        Action::ReportCrash,
+    ),
+    direct(
+        (
+            "Relatórios de falha: ligar ou desligar",
+            "Crash reports: turn on or off",
+        ),
+        Action::CrashReports,
     ),
 ];
 

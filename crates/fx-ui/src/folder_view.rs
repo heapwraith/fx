@@ -1198,6 +1198,40 @@ impl FolderView {
         .detach();
     }
 
+    /// Palette: opens the issue page for the newest crash report (T3.10).
+    /// Reading the small report and starting the browser run off the UI
+    /// thread; the report is then marked as seen.
+    pub fn report_crash(&mut self, cx: &mut Context<Self>) {
+        let work = cx.background_executor().spawn(async move {
+            let path = crate::crash::pending()?;
+            let report = std::fs::read_to_string(&path).ok()?;
+            let url = crate::crash::issue_url(&report);
+            Some((path, url))
+        });
+        cx.spawn(async move |this, cx| {
+            let found = work.await;
+            let _ = this.update(cx, |view, cx| match found {
+                Some((path, url)) => {
+                    view.launch(Launch::Open(PathBuf::from(url)), cx);
+                    crate::crash::mark_seen(&path);
+                    view.show_notice(
+                        tr!(
+                            "Página da issue aberta no navegador: confira o texto e envie se quiser",
+                            "Issue page opened in the browser: check the text and send it if you want"
+                        )
+                        .to_owned(),
+                        cx,
+                    );
+                }
+                None => view.show_notice(
+                    tr!("Nenhuma falha para relatar", "No crash to report").to_owned(),
+                    cx,
+                ),
+            });
+        })
+        .detach();
+    }
+
     pub fn show_notice(&mut self, text: String, cx: &mut Context<Self>) {
         self.notice = Some(text);
         cx.notify();

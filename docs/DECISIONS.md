@@ -420,3 +420,11 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Comandos:** "Manter sempre neste dispositivo" e "Liberar espaço" na paleta mudam só os atributos `PINNED`/`UNPINNED` (é o que `attrib +P -U` / `-P +U` fazem e o que o Explorador usa); o provedor baixa ou libera. Recursivo em pastas, em thread de fundo, com aviso no fim. O menu de contexto do shell continua mostrando os itens do próprio provedor.
 - **Pendente:** placeholders de nuvem também são pontos de nova análise, marcados `LINK`; a busca por pasta não desce em subpastas de nuvem (ajustar com a etiqueta de reparse). Conferência com um OneDrive de verdade vai para os testes finais.
 
+## D-055 — Relatório de falhas (T3.10)
+- **Data:** 2026-11-22 · **Status:** aceita
+- **Só local, nada enviado pelo fx:** o hook de pânico grava `%LOCALAPPDATA%\fx\falhas\falha-<unix>-<pid>.txt`. Na abertura seguinte o status diz "Falha na última abertura · Ctrl+K: relatar"; o comando "Relatar a última falha" abre no navegador `github.com/heapwraith/fx/issues/new` com título e corpo preenchidos (até 6.000 caracteres). O usuário lê e decide enviar. O relatório é então renomeado para `.visto` (não é oferecido de novo, fica no disco).
+- **Sem dados pessoais** (`fx-core/src/crash.rs`, puro e testado): versão com o commit, módulo e `crate/src/arquivo.rs:linha` (sem as pastas acima do crate), mensagem e só os nomes das funções da pilha (as linhas `at caminho:linha` saem; a maquinaria de pânico também). Na mensagem e na pilha: caminhos (`C:\…`, `\\…`, `/a/b`) viram `<caminho>`, texto entre aspas (nomes de arquivo) vira `<texto>`, e o `USERNAME` vira `<usuário>` onde aparecer, sem diferenciar maiúsculas.
+- **Desligar:** `relatorio_falhas = false` no `settings.toml`, ou "Relatórios de falha: ligar ou desligar" na paleta (salvo com a sessão). Desligado, nada é gravado (nem a pasta). Padrão ligado, porque o relatório não sai do computador sem ação do usuário.
+- **Substitui** o log cru em `%TEMP%\fx-crash-<pid>.log` (registrado na Fase 1), que tinha caminhos completos.
+- **Teste manual:** `FX_TEST_PANIC=1` faz o fx entrar em pânico logo ao abrir (só para conferir o relatório).
+

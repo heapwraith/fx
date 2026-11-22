@@ -19,6 +19,7 @@ mod a11y;
 pub(crate) const VERSION: &str = env!("FX_VERSION");
 
 mod commands;
+mod crash;
 mod folder_view;
 mod i18n;
 mod icons;
@@ -76,20 +77,8 @@ struct Startup {
     show_hidden: bool,
 }
 
-/// A window app has no console: write panics to `%TEMP%\fx-crash-<pid>.log`
-/// so a crash can be diagnosed.
-fn log_panics() {
-    let previous = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |info| {
-        let file = std::env::temp_dir().join(format!("fx-crash-{}.log", std::process::id()));
-        let trace = std::backtrace::Backtrace::force_capture();
-        let _ = std::fs::write(file, format!("{info}\n\n{trace}"));
-        previous(info);
-    }));
-}
-
 fn main() {
-    log_panics();
+    crash::install();
     tags::init();
     // An empty argument counts as none (a shell command with "%1" and no item).
     let arg = std::env::args_os().nth(1).filter(|a| !a.is_empty());
@@ -133,6 +122,17 @@ fn main() {
         Settings::default()
     };
     i18n::init(&settings.idioma);
+    crash::set_enabled(settings.relatorio_falhas);
+    // A report left by the last run (T3.10): offered in the status bar.
+    let crashed = (persist && settings.relatorio_falhas)
+        .then(crash::pending)
+        .flatten()
+        .is_some();
+    crash::set_notice(crashed);
+    // Test hook for the crash report (T3.10).
+    if std::env::var_os("FX_TEST_PANIC").is_some_and(|v| v == "1") {
+        panic!("crash report test at C:\\Users\\example\\x.txt");
+    }
     let session = (persist && arg.is_none() && settings.restaurar_sessao)
         .then(persist::load_session)
         .flatten();
@@ -339,6 +339,19 @@ fn open_folder_window(
             });
             if let Some(state) = saved {
                 view.update(cx, |view, cx| view.restore_tabs(state, window, cx));
+            }
+            if crash::take_notice() {
+                let tab = view.read(cx).current();
+                tab.update(cx, |tab, cx| {
+                    tab.show_notice(
+                        tr!(
+                            "Falha na última abertura · Ctrl+K: relatar",
+                            "Crashed last time · Ctrl+K: report"
+                        )
+                        .to_owned(),
+                        cx,
+                    );
+                });
             }
             // Follow the Windows light/dark setting live.
             let themed = view.clone();

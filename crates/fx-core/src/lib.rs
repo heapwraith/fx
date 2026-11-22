@@ -6,6 +6,7 @@
 
 pub mod batch_rename;
 pub mod complete;
+pub mod crash;
 mod entry;
 pub mod format;
 pub mod fuzzy;

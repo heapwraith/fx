@@ -5,6 +5,7 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 ## [Não lançado]
 
 ### Adicionado
+- Relatório de falhas local e anônimo, com issue pré-preenchida (nada é enviado sozinho).
 - Estado de pastas de nuvem (OneDrive e outras) e comandos para manter ou liberar espaço.
 - Interface em português e inglês (idioma do Windows; troca na paleta).
 - Build e instalador para Windows ARM64.

@@ -240,6 +240,21 @@ impl TabsView {
                     tab.update(cx, |view, cx| view.default_manager(on, cx));
                 }
                 Action::CloudPin(keep) => tab.update(cx, |view, cx| view.cloud_pin(keep, cx)),
+                Action::ReportCrash => tab.update(cx, |view, cx| view.report_crash(cx)),
+                Action::CrashReports => tab.update(cx, |view, cx| {
+                    let text = if crate::crash::switch() {
+                        tr!(
+                            "Relatórios de falha ligados (ficam só neste computador)",
+                            "Crash reports on (kept on this computer only)"
+                        )
+                    } else {
+                        tr!(
+                            "Relatórios de falha desligados: nada é gravado",
+                            "Crash reports off: nothing is written"
+                        )
+                    };
+                    view.show_notice(text.to_owned(), cx);
+                }),
                 Action::Language => {
                     crate::i18n::switch();
                     cx.refresh_windows();

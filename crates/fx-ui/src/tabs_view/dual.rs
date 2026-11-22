@@ -22,7 +22,7 @@ pub(super) struct Second {
 impl TabsView {
     /// The pane that commands act on: the active tab's view, or its second
     /// pane when that one has the focus.
-    pub(super) fn current(&self) -> Entity<FolderView> {
+    pub(crate) fn current(&self) -> Entity<FolderView> {
         let primary = self.tabs.active().clone();
         match self.seconds.get(&primary.entity_id()) {
             Some(s) if s.focused => s.view.clone(),

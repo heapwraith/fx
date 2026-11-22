@@ -112,6 +112,9 @@ impl Persist {
             settings.barra_lateral = ui.sidebar;
             settings.mostrar_ocultos = ui.show_hidden;
         }
+        if let Some(on) = crate::crash::chosen() {
+            settings.relatorio_falhas = on;
+        }
         if let Some(lang) = crate::i18n::chosen() {
             settings.idioma = lang.to_owned();
         }

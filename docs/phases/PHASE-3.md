@@ -94,7 +94,7 @@
 - Teste do mapeamento atributos → estado; a lista nunca lê o conteúdo de um item só na nuvem (nem para miniatura).
 
 ## T3.10 — Relatório de falhas (opcional e anônimo)
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: pânico grava `%LOCALAPPDATA%\fx\falhas\falha-*.txt` sem dados pessoais (`fx-core::crash`: versão, módulo, arquivo:linha, mensagem e até 25 funções da pilha; caminhos → `<caminho>`, texto entre aspas → `<texto>`, nome do usuário → `<usuário>`); na abertura seguinte o status avisa e "Relatar a última falha" na paleta abre no navegador uma issue preenchida (nada é enviado pelo fx); `relatorio_falhas = false` ou a paleta desligam (D-055). Testes: relatório sem usuário nem caminhos, desligado não grava; conferido com `FX_TEST_PANIC=1` (relatório limpo, aviso, nada gravado com a opção desligada).
 
 **Fazer**
 - Uma falha (pânico) grava um relatório local sem dados pessoais (versão, módulo, linha, pilha resumida; caminhos e nomes de arquivo removidos). Na próxima abertura, o fx oferece abrir uma issue com o relatório (nada é enviado sozinho). Opção para desligar.

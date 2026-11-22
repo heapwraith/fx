@@ -35,6 +35,8 @@ pub struct Settings {
     pub mostrar_ocultos: bool,
     /// Interface language (T3.7): "pt", "en" or "" (the Windows language).
     pub idioma: String,
+    /// Keep a local crash report (T3.10); nothing is ever sent by fx.
+    pub relatorio_falhas: bool,
 }
 
 /// The part of the settings a window changes (density, sidebar, hidden files).
@@ -53,6 +55,7 @@ impl Default for Settings {
             restaurar_sessao: true,
             mostrar_ocultos: false,
             idioma: String::new(),
+            relatorio_falhas: true,
         }
     }
 }
@@ -447,6 +450,7 @@ mod tests {
             restaurar_sessao: true,
             mostrar_ocultos: true,
             idioma: "en".into(),
+            relatorio_falhas: false,
         };
         save_settings(&path, &s).unwrap();
         assert_eq!(load_settings(&path), s);
