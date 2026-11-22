@@ -9,6 +9,7 @@ use gpui::{
     PromptLevel, PromptResponse, RenderablePromptHandle, Window, div, prelude::*, px,
 };
 
+use crate::a11y::{A11yHandle, Item, Layer, Overlay};
 use crate::theme::{BODY_SIZE, CAPTION_SIZE, Mode, RADIUS, Theme, rgba, space};
 
 /// Installs the renderer (once, at startup).
@@ -26,16 +27,49 @@ fn build(
     cx: &mut App,
 ) -> RenderablePromptHandle {
     let theme = Theme::current(Mode::from_appearance(window.appearance()));
+    let labels: Vec<String> = actions.iter().map(|a| a.label().to_string()).collect();
+    let a11y = A11yHandle::of_window(window.window_handle().window_id());
     let view = cx.new(|cx| FxPrompt {
         opened: std::time::Instant::now(),
         level,
         message: message.to_owned(),
         detail: detail.map(str::to_owned),
-        actions: actions.iter().map(|a| a.label().to_string()).collect(),
+        actions: labels.clone(),
         focus: cx.focus_handle(),
         theme,
+        a11y: a11y.clone(),
     });
+    // Read by screen readers as a modal dialog, with the focus on the first
+    // button (what Enter does); their click answers it (review, D-066).
+    if let Some(h) = &a11y {
+        h.set_overlay(Layer::Prompt, Some(overlay(message, detail, &labels)));
+        let weak = view.downgrade();
+        h.set_prompt_click(Some(Box::new(move |ix, cx| {
+            let _ = weak.update(cx, |_, cx| cx.emit(PromptResponse(ix)));
+        })));
+    }
     handle.with_view(view, window, cx)
+}
+
+/// The dialog as a screen reader reads it.
+fn overlay(message: &str, detail: Option<&str>, labels: &[String]) -> Overlay {
+    let keys = match labels {
+        [] => String::new(),
+        // Key names: the same in both languages.
+        [only] => format!("Enter: {only}."),
+        [first, .., last] => format!("Enter: {first}. Esc: {last}."),
+    };
+    let description = match detail {
+        Some(d) => format!("{d} {keys}"),
+        None => keys,
+    };
+    Overlay {
+        title: message.to_owned(),
+        description: Some(description.trim().to_owned()),
+        items: labels.iter().cloned().map(Item::Button).collect(),
+        focus: (!labels.is_empty()).then_some(0),
+        positions: None,
+    }
 }
 
 struct FxPrompt {
@@ -48,6 +82,17 @@ struct FxPrompt {
     actions: Vec<String>,
     focus: FocusHandle,
     theme: Theme,
+    /// The window's accessibility tree, cleared when the dialog goes.
+    a11y: Option<A11yHandle>,
+}
+
+impl Drop for FxPrompt {
+    fn drop(&mut self) {
+        if let Some(h) = &self.a11y {
+            h.set_overlay(Layer::Prompt, None);
+            h.set_prompt_click(None);
+        }
+    }
 }
 
 impl EventEmitter<PromptResponse> for FxPrompt {}

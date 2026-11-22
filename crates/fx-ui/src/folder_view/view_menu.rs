@@ -39,6 +39,44 @@ enum Item {
     },
 }
 
+impl FolderView {
+    /// The View menu as a screen reader reads it.
+    pub(super) fn view_menu_overlay(&self) -> Option<crate::a11y::Overlay> {
+        use crate::a11y::{Item as A11yItem, Overlay};
+        if !self.view_menu {
+            return None;
+        }
+        let items = self
+            .menu_items()
+            .into_iter()
+            .filter_map(|item| match item {
+                Item::Caption(text) => Some(A11yItem::Text(text.to_owned())),
+                Item::Choice {
+                    label,
+                    hint,
+                    checked,
+                    ..
+                } => Some(A11yItem::Radio {
+                    label: if hint.is_empty() {
+                        label.to_owned()
+                    } else {
+                        format!("{label} ({hint})")
+                    },
+                    checked,
+                }),
+                Item::Divider => None,
+            })
+            .collect();
+        Some(Overlay {
+            title: tr!("Exibir", "View").to_owned(),
+            description: Some(tr!("Esc fecha.", "Esc closes.").to_owned()),
+            items,
+            focus: None,
+            positions: None,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 enum Action {
     ToggleHidden,

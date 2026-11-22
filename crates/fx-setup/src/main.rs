@@ -392,8 +392,7 @@ impl Setup {
             // shortcuts and one for the registry entry (uninstall: the entry).
             Step::Copying(done, total) => {
                 self.files = total;
-                let units = total + if uninstall { 1 } else { 2 };
-                self.goal = done as f32 / units.max(1) as f32;
+                self.goal = goal_for(step, total, uninstall);
                 if uninstall {
                     self.step = trf!(
                         "Removendo arquivos ({done} de {total})…",
@@ -408,19 +407,12 @@ impl Setup {
                 false
             }
             Step::Shortcuts => {
-                // Every file is in place.
-                self.goal = self.files as f32 / (self.files + 2).max(1) as f32;
+                self.goal = goal_for(step, self.files, uninstall);
                 self.step = tr!("Criando atalhos…", "Creating shortcuts…").to_owned();
                 false
             }
             Step::Registering => {
-                let units = self.files + if uninstall { 1 } else { 2 };
-                let done = if uninstall {
-                    self.files
-                } else {
-                    self.files + 1
-                };
-                self.goal = done as f32 / units.max(1) as f32;
+                self.goal = goal_for(step, self.files, uninstall);
                 self.step = if uninstall {
                     tr!(
                         "Removendo dos Aplicativos do Windows…",
@@ -456,6 +448,22 @@ impl Setup {
         }
         cx.stop_propagation();
     }
+}
+
+/// How much of the real work is done when `step` arrives: each file is one
+/// unit, plus one for the shortcuts and one for the Apps entry (uninstall:
+/// the entry only). Nothing is estimated (status is always real).
+fn goal_for(step: Step, files: usize, uninstall: bool) -> f32 {
+    let units = (files + if uninstall { 1 } else { 2 }).max(1) as f32;
+    let done = match step {
+        Step::Copying(done, _) => done,
+        // Every file is in place.
+        Step::Shortcuts => files,
+        Step::Registering if uninstall => files,
+        Step::Registering => files + 1,
+        Step::Done => return 1.0,
+    };
+    (done as f32 / units).min(1.0)
 }
 
 /// What the failure screen says: exactly what was left on disk.
@@ -834,5 +842,26 @@ impl Render for Setup {
             .child(header)
             .child(content)
             .child(footer)
+    }
+}
+
+#[cfg(test)]
+mod progress_tests {
+    use super::{Step, goal_for};
+
+    #[test]
+    fn the_bar_follows_the_work_done() {
+        // 4 files + shortcuts + registry = 6 units.
+        assert_eq!(goal_for(Step::Copying(0, 4), 4, false), 0.0);
+        assert_eq!(goal_for(Step::Copying(2, 4), 4, false), 2.0 / 6.0);
+        assert_eq!(goal_for(Step::Shortcuts, 4, false), 4.0 / 6.0);
+        assert_eq!(goal_for(Step::Registering, 4, false), 5.0 / 6.0);
+        assert_eq!(goal_for(Step::Done, 4, false), 1.0);
+        // Uninstall: 4 files + the entry = 5 units.
+        assert_eq!(goal_for(Step::Copying(4, 4), 4, true), 4.0 / 5.0);
+        assert_eq!(goal_for(Step::Registering, 4, true), 4.0 / 5.0);
+        // Never past the end, never a division by zero.
+        assert_eq!(goal_for(Step::Copying(0, 0), 0, true), 0.0);
+        assert!(goal_for(Step::Copying(9, 4), 4, false) <= 1.0);
     }
 }

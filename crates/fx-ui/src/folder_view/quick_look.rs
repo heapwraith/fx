@@ -161,6 +161,56 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 /// The open preview.
+impl FolderView {
+    /// Quick Look as a screen reader reads it: the name, what it is, and
+    /// the start of a text.
+    pub(super) fn quick_look_overlay(&self) -> Option<crate::a11y::Overlay> {
+        use crate::a11y::{Item, Overlay};
+        const LINES: usize = 40;
+        let q = self.quick_look.as_ref()?;
+        let text = match &q.content {
+            Content::Text { lines, .. } => Some(
+                lines
+                    .iter()
+                    .take(LINES)
+                    .map(|l| l.as_ref())
+                    .collect::<Vec<&str>>()
+                    .join("\n"),
+            ),
+            Content::Markdown(lines, _) => Some(
+                lines
+                    .iter()
+                    .take(LINES)
+                    .map(|l| l.text.as_str())
+                    .collect::<Vec<&str>>()
+                    .join("\n"),
+            ),
+            Content::Nothing(message) => Some((*message).to_owned()),
+            Content::Icon(_, caption) => Some((*caption).to_owned()),
+            Content::Loading => Some(tr!("Carregando…", "Loading…").to_owned()),
+            _ => None,
+        };
+        Some(Overlay {
+            title: q.name.clone(),
+            description: Some(format!(
+                "{}. {}",
+                q.detail,
+                tr!(
+                    "Espaço ou Esc fecha; ↑ e ↓ passam de item.",
+                    "Space or Esc closes; ↑ and ↓ move between items."
+                )
+            )),
+            items: text
+                .filter(|t| !t.is_empty())
+                .map(Item::Text)
+                .into_iter()
+                .collect(),
+            focus: None,
+            positions: None,
+        })
+    }
+}
+
 pub(super) struct QuickLook {
     entry: u32,
     ticket: u64,

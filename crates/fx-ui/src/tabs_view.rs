@@ -31,7 +31,7 @@ use gpui::{
     SharedString, Window, div, prelude::*, px,
 };
 
-use crate::a11y::{A11yHandle, row_entry};
+use crate::a11y::{A11yHandle, Layer, Overlay, overlay_item, row_entry};
 use crate::folder_view::{FolderView, Look, ViewEvent, window_title};
 use crate::icons::Media;
 use crate::places::Places;
@@ -78,6 +78,11 @@ pub struct TabsView {
     guide: bool,
     /// The settings dialog and its section (Ctrl+, or the sidebar gear).
     settings: Option<settings::Section>,
+    /// The Settings control with the keyboard (Tab order).
+    settings_focus: usize,
+    /// What a screen reader's click on each item of the window's overlay
+    /// does (built with the overlay).
+    a11y_acts: Vec<Option<WindowAct>>,
     /// Command palette (Ctrl+K, Ctrl+Shift+P; T1.24).
     palette: Option<palette::Palette>,
     /// Second panes (F3, T3.2), by the tab's own view.
@@ -132,7 +137,7 @@ impl TabsView {
             None => (None, None),
         };
         if let Some(rx) = actions {
-            Self::listen_a11y(rx, cx);
+            Self::listen_a11y(rx, window, cx);
         }
         let first = Self::new_tab(
             path,
@@ -159,6 +164,8 @@ impl TabsView {
             history_open: false,
             guide: false,
             settings: None,
+            settings_focus: 0,
+            a11y_acts: Vec::new(),
             palette: None,
             seconds: std::collections::HashMap::new(),
         };
@@ -249,12 +256,13 @@ impl TabsView {
         cx.notify();
     }
 
-    /// Focus and click requests from screen readers go to the active tab.
-    fn listen_a11y(rx: Receiver<ActionRequest>, cx: &mut Context<Self>) {
-        cx.spawn(async move |this, cx| {
+    /// Focus and click requests from screen readers: rows go to the active
+    /// tab; a click on a dialog's item does what clicking it would.
+    fn listen_a11y(rx: Receiver<ActionRequest>, window: &mut Window, cx: &mut Context<Self>) {
+        cx.spawn_in(window, async move |this, cx| {
             let mut rx = crate::chan::stream(rx);
             while let Some(request) = rx.next().await {
-                let alive = this.update(cx, |view, cx| {
+                let alive = this.update_in(cx, |view, window, cx| {
                     let wanted = matches!(request.action, Action::Focus | Action::Click);
                     if let (true, Some(entry)) = (wanted, row_entry(request.target_node)) {
                         let tab = view.current();
@@ -262,6 +270,10 @@ impl TabsView {
                             tab.a11y_select(entry);
                             cx.notify();
                         });
+                    } else if let (Action::Click, Some(k)) =
+                        (request.action, overlay_item(request.target_node))
+                    {
+                        view.a11y_click(k, window, cx);
                     }
                 });
                 if alive.is_err() {
@@ -428,6 +440,8 @@ impl TabsView {
             match ks.key.as_str() {
                 "up" => self.open_settings(all[(at + all.len() - 1) % all.len()], cx),
                 "down" => self.open_settings(all[(at + 1) % all.len()], cx),
+                "tab" => self.settings_move_focus(!m.shift, cx),
+                "space" | "enter" if !event.is_held => self.settings_activate(cx),
                 _ => {}
             }
             cx.stop_propagation();
@@ -682,6 +696,7 @@ impl Render for TabsView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = self.look.theme;
         let wide = f32::from(window.viewport_size().width) >= SIDEBAR_MIN_WINDOW;
+        self.publish_window_overlay(cx);
         self.sync_pane_focus(window, cx);
         let active = self.tabs.active_index();
         if self.shown_active != Some(active) {
@@ -744,5 +759,78 @@ impl TabsView {
     /// The sidebar footer's "Configurações".
     pub(crate) fn open_settings_general(&mut self, cx: &mut Context<Self>) {
         self.open_settings(settings::Section::General, cx);
+    }
+}
+
+/// What a screen reader's click on an item of the window's dialog does.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum WindowAct {
+    Section(settings::Section),
+    Settings(settings::Act),
+    Answer(fx_ops::Resolution),
+    ApplyAll,
+    Palette(usize),
+    Undo(usize),
+}
+
+impl TabsView {
+    /// Puts the window's topmost dialog in the accessibility tree (or
+    /// removes it): conflict, Settings, guide, palette, history.
+    fn publish_window_overlay(&mut self, cx: &mut Context<Self>) {
+        let Some(handle) = self.a11y.clone() else {
+            return;
+        };
+        let (overlay, acts): (Option<Overlay>, Vec<Option<WindowAct>>) =
+            if let Some((o, a)) = self.conflict_overlay(cx) {
+                (Some(o), a)
+            } else if let Some(section) = self.settings {
+                let (o, a) = self.settings_overlay(section);
+                (Some(o), a)
+            } else if let Some(o) = self.guide_overlay() {
+                (Some(o), Vec::new())
+            } else if let Some((o, a)) = self.palette_overlay() {
+                (Some(o), a)
+            } else if let Some((o, a)) = self.history_overlay(cx) {
+                (Some(o), a)
+            } else {
+                (None, Vec::new())
+            };
+        self.a11y_acts = acts;
+        handle.set_overlay(Layer::Window, overlay);
+    }
+
+    /// A screen reader clicked item `k` of the dialog on top.
+    fn a11y_click(&mut self, k: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(handle) = self.a11y.clone() else {
+            return;
+        };
+        match handle.top_layer() {
+            Some(Layer::Prompt) => handle.click_prompt(k, cx),
+            Some(Layer::Window) => {
+                let Some(act) = self.a11y_acts.get(k).copied().flatten() else {
+                    return;
+                };
+                match act {
+                    WindowAct::Section(s) => self.open_settings(s, cx),
+                    WindowAct::Settings(a) => self.act(a, cx),
+                    WindowAct::Answer(resolution) => {
+                        let all = self.apply_all;
+                        self.apply_all = false;
+                        self.media
+                            .ops
+                            .update(cx, |ops, cx| ops.answer(resolution, all, cx));
+                    }
+                    WindowAct::ApplyAll => {
+                        self.apply_all = !self.apply_all;
+                        cx.notify();
+                    }
+                    WindowAct::Palette(i) => self.palette_run(i, window, cx),
+                    WindowAct::Undo(index) => {
+                        self.media.ops.update(cx, |ops, cx| ops.undo_at(index, cx));
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 }

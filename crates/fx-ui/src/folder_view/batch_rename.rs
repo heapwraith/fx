@@ -36,6 +36,58 @@ fn field_label(k: usize) -> &'static str {
 /// One preview line: old name, new name, problem, whether it changes.
 type PreviewRow = (SharedString, SharedString, Option<&'static str>, bool);
 
+impl FolderView {
+    /// Batch rename as a screen reader reads it: the three fields (the
+    /// focus on the one being typed in) and the start of the preview.
+    pub(super) fn batch_rename_overlay(&self) -> Option<crate::a11y::Overlay> {
+        use crate::a11y::{Item, Overlay};
+        use fx_core::batch_rename::Problem;
+        const PREVIEW: usize = 40;
+        let b = self.batch_rename.as_ref()?;
+        let values = [&b.rules.find, &b.rules.replace, &b.rules.template];
+        let mut items: Vec<Item> = (0..FIELDS)
+            .map(|k| Item::Input {
+                label: field_label(k).to_owned(),
+                value: values[k].clone(),
+            })
+            .collect();
+        match &b.plan {
+            Ok(plan) => {
+                for p in plan.iter().take(PREVIEW) {
+                    let problem = p.problem.as_ref().map(|pr| match pr {
+                        Problem::Invalid(reason) => (*reason).to_owned(),
+                        Problem::Duplicate => {
+                            tr!("nome repetido no lote", "name repeated in the batch").to_owned()
+                        }
+                        Problem::Exists => {
+                            tr!("esse nome já existe", "that name exists").to_owned()
+                        }
+                    });
+                    items.push(Item::Choice {
+                        label: format!("{} → {}", p.old, p.new),
+                        description: problem,
+                        selected: false,
+                    });
+                }
+            }
+            Err(e) => items.push(Item::Text(e.clone())),
+        }
+        let (changes, problems) = b.counts();
+        Some(Overlay {
+            title: tr!("Renomear em lote", "Batch rename").to_owned(),
+            description: Some(trf!(
+                "{} mudam, {} com problema. Tab passa entre os campos, Enter renomeia, Esc cancela.",
+                "{} change, {} with a problem. Tab moves between fields, Enter renames, Esc cancels.",
+                changes,
+                problems
+            )),
+            items,
+            focus: Some(b.field.min(FIELDS - 1)),
+            positions: None,
+        })
+    }
+}
+
 pub(super) struct BatchRename {
     entries: Vec<u32>,
     names: Vec<String>,

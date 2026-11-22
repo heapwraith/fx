@@ -92,7 +92,7 @@ pub fn read(setup: &[u8]) -> io::Result<Option<Package>> {
     let Some((_, payload)) = package::detach(setup) else {
         return Ok(None);
     };
-    let bad = |e: String| io::Error::new(io::ErrorKind::InvalidData, e);
+    let bad = |e: package::PackageError| io::Error::new(io::ErrorKind::InvalidData, e);
     let (manifest, blob) = package::decode(payload).map_err(bad)?;
     let data = fx_shell::install::decompress(blob, manifest.total_size() as usize)?;
     let files = package::split(&manifest, &data, hash)

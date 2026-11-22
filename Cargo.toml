@@ -37,7 +37,7 @@ raw-window-handle = "=0.6.2"
 # Persistência (T1.17, D-026): configurações em TOML, estado em SQLite (embutido).
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=0.8.23"
-rusqlite = { version = "=0.37.0", features = ["bundled"] }
+rusqlite = { version = "=0.43.0", default-features = false, features = ["bundled"] }
 
 # GPUI: fixado na T0.1 (D-007). Resolvido para a cópia com patch em third_party/gpui
 # via [patch.crates-io] abaixo, para compilar de forma cruzada WSL -> Windows (D-005).

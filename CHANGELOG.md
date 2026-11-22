@@ -26,9 +26,26 @@ Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualiz
 - Delete pergunta antes de enviar para a Lixeira (dá para desligar na paleta); as confirmações usam um diálogo do fx, traduzido, em vez da caixa do Windows.
 - Barra de progresso mais visível, com porcentagem, velocidade e tempo restante; a operação concluída fica um instante na tela.
 - **Configurações** (Ctrl+, ou a engrenagem no rodapé da barra lateral): idioma, Lixeira, sessão, aparência, atualizações, privacidade, sistema e "Sobre o fx". O rodapé da lateral também tem "Ajuda" (F1).
-- A vista em colunas mostra sempre a coluna da pasta atual inteira.
+- A vista em colunas mostra sempre a coluna da pasta atual inteira; faixas nas bordas mostram quantas colunas estão escondidas e trazem a próxima com um clique.
+- **Leitores de tela** (Narrador, NVDA): diálogos de confirmação, conflito, paleta, Configurações, guia, histórico, busca, Quick Look, renomear em lote, menu Exibir, terminal e vista em colunas agora existem para eles, com o foco no item ativo e "x de N" nas listas; o clique do leitor de tela aciona os botões.
+- **Configurações pelo teclado:** Tab passa entre os controles, Espaço usa, ↑ e ↓ trocam de seção, com anel de foco visível.
+- Registro de avisos e erros em `%LOCALAPPDATA%\fx\logs\fx.log` (local, até 1 MB), para diagnosticar problemas.
+- Esperas da interface não ocupam mais o pool de threads do Windows; a atualização roda numa thread própria.
 
 ### Corrigido
+- **Revisão de código completa (D-066):**
+  - Enter segurado não confirma mais um diálogo (a paleta podia confirmar "Excluir permanentemente" sem ser vista); diálogos e sobreposições bloqueiam o mouse; as Configurações não deixam mais Delete chegar à lista escondida; excluir pelo menu de contexto também pede confirmação; na vista em colunas, Delete age no item visível.
+  - O atualizador reconfere o instalador (hash e editor da assinatura) na hora de aplicar e nunca roda elevado; a assinatura passa a exigir o mesmo editor e checar revogação.
+  - Os pipes de instância única e do `fx-indexd` ficam restritos ao usuário; um cliente parado não trava mais a busca no disco inteiro.
+  - Com o fx como padrão, Lixeira, Este Computador e Painel de Controle voltam a abrir (no Explorador).
+  - Copiar ou mover um arquivo cujo nome não é Unicode criava o destino com outro nome; desfazer um renomear ou um envio para a Lixeira desses nomes também falhava.
+  - Nomes muito longos falhavam ao copiar (o temporário passava de 255 caracteres).
+  - O instalador dizia "nenhum arquivo foi alterado" mesmo depois de trocar os arquivos.
+  - Fechar o terminal podia congelar a janela no Windows 10.
+  - Etiquetas se perdiam ao mover pastas com certos caracteres (como "İ").
+  - Velocidade e tempo restante contavam o tempo pausado; a barra ficava vazia ao copiar uma pasta vazia.
+  - "3 itens itens"; escolher o idioma já em uso trocava o idioma; F1 com as Configurações abertas abria o guia atrás delas.
+  - SQLite atualizado (rusqlite 0.43) por causa de uma vulnerabilidade do SQLite embutido (RUSTSEC-2026-0459).
 - O diálogo de conflito deixava as teclas chegarem à lista atrás dele; agora Enter mantém os dois e Esc pula.
 - O arquivo temporário de uma cópia em andamento aparecia na lista.
 - O progresso do instalador tinha etapas simuladas; agora mostra só o trabalho feito.

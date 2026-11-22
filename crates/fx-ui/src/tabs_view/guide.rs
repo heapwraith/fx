@@ -170,6 +170,32 @@ impl TabsView {
         cx.notify();
     }
 
+    /// "Como usar o fx" as a screen reader reads it: each shortcut and what
+    /// it does.
+    pub(super) fn guide_overlay(&self) -> Option<crate::a11y::Overlay> {
+        if !self.guide {
+            return None;
+        }
+        let mut items = Vec::new();
+        for (title, lines) in sections() {
+            items.push(crate::a11y::Item::Text(title.to_owned()));
+            for (keys, what) in lines {
+                items.push(crate::a11y::Item::Text(format!("{keys}: {what}")));
+            }
+        }
+        Some(crate::a11y::Overlay {
+            title: tr!("Como usar o fx", "How to use fx").to_owned(),
+            description: Some(format!(
+                "{} {}",
+                slogan(),
+                tr!("Esc ou F1 fecha.", "Esc or F1 closes.")
+            )),
+            items,
+            focus: None,
+            positions: None,
+        })
+    }
+
     pub(super) fn render_guide(&self, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
         if !self.guide {
             return None;

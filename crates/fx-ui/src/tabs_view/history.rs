@@ -14,6 +14,50 @@ const PANEL_WIDTH: f32 = 380.0;
 const PANEL_MAX_HEIGHT: f32 = 440.0;
 
 impl TabsView {
+    /// The history as a screen reader reads it: each operation and its
+    /// "Desfazer".
+    pub(super) fn history_overlay(
+        &self,
+        cx: &mut Context<Self>,
+    ) -> Option<(crate::a11y::Overlay, Vec<Option<super::WindowAct>>)> {
+        use crate::a11y::{Item, Overlay};
+        if !self.history_open {
+            return None;
+        }
+        let done = self.media.ops.read(cx).done();
+        let mut items = Vec::new();
+        let mut acts = Vec::new();
+        if done.is_empty() {
+            items.push(Item::Text(
+                tr!(
+                    "Nada para desfazer nesta sessão.",
+                    "Nothing to undo in this session."
+                )
+                .to_owned(),
+            ));
+            acts.push(None);
+        }
+        for op in done {
+            items.push(Item::Button(fx_core::trf!(
+                "Desfazer: {}",
+                "Undo: {}",
+                op.label
+            )));
+            acts.push(Some(super::WindowAct::Undo(op.index)));
+        }
+        let focus = (!acts.is_empty() && acts[0].is_some()).then_some(0);
+        Some((
+            Overlay {
+                title: tr!("Histórico de operações", "Operation history").to_owned(),
+                description: Some(tr!("Esc fecha.", "Esc closes.").to_owned()),
+                items,
+                focus,
+                positions: None,
+            },
+            acts,
+        ))
+    }
+
     pub(super) fn render_history(
         &self,
         cx: &mut Context<Self>,

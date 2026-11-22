@@ -70,22 +70,45 @@ fn put_str(out: &mut Vec<u8>, s: &str) {
     out.extend_from_slice(s.as_bytes());
 }
 
+/// Why a package was refused (CLAUDE.md: typed errors in libraries).
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum PackageError {
+    #[error("{}", crate::tr!("não é um pacote do fx", "not an fx package"))]
+    NotAPackage,
+    #[error("{}", crate::tr!("pacote cortado", "package cut short"))]
+    CutShort,
+    #[error("{}", crate::tr!("arquivos demais", "too many files"))]
+    TooManyFiles,
+    #[error("{}", crate::trf!("nome de arquivo inseguro: {:?}", "unsafe file name: {:?}", .0))]
+    UnsafeName(String),
+    #[error("{}", crate::tr!("pacote grande demais", "package too large"))]
+    TooLarge,
+    #[error("{}", crate::tr!("bytes sobrando no pacote", "trailing bytes in the package"))]
+    TrailingBytes,
+    #[error("{}", crate::tr!("texto inválido no pacote", "bad text in the package"))]
+    BadText,
+    #[error("{}", crate::tr!("o tamanho do pacote não confere com a lista", "package size does not match its list"))]
+    SizeMismatch,
+    #[error("{}", crate::trf!("{} está danificado", "{} is damaged", .0))]
+    Damaged(String),
+}
+
 /// Reads a payload: its manifest and the compressed blob.
-pub fn decode(payload: &[u8]) -> Result<(Manifest, &[u8]), String> {
+pub fn decode(payload: &[u8]) -> Result<(Manifest, &[u8]), PackageError> {
     let mut r = Reader { b: payload, i: 0 };
     if r.take(8)? != PAYLOAD_MAGIC {
-        return Err("not an fx package".into());
+        return Err(PackageError::NotAPackage);
     }
     let version = r.string()?;
     let count = r.u32()?;
     if count > MAX_FILES {
-        return Err("too many files".into());
+        return Err(PackageError::TooManyFiles);
     }
     let mut files = Vec::with_capacity(count as usize);
     for _ in 0..count {
         let name = r.string()?;
         if !is_plain_name(&name) {
-            return Err(format!("unsafe file name: {name:?}"));
+            return Err(PackageError::UnsafeName(name));
         }
         let size = r.u64()?;
         let mut sha256 = [0u8; 32];
@@ -94,12 +117,12 @@ pub fn decode(payload: &[u8]) -> Result<(Manifest, &[u8]), String> {
     }
     let manifest = Manifest { version, files };
     if manifest.total_size() > MAX_TOTAL {
-        return Err("package too large".into());
+        return Err(PackageError::TooLarge);
     }
     let len = r.u64()? as usize;
     let blob = r.take(len)?;
     if r.i != payload.len() {
-        return Err("trailing bytes in the package".into());
+        return Err(PackageError::TrailingBytes);
     }
     Ok((manifest, blob))
 }
@@ -139,16 +162,16 @@ pub fn split<'a>(
     manifest: &'a Manifest,
     data: &'a [u8],
     hash: impl Fn(&[u8]) -> [u8; 32],
-) -> Result<Vec<(&'a str, &'a [u8])>, String> {
+) -> Result<Vec<(&'a str, &'a [u8])>, PackageError> {
     if data.len() as u64 != manifest.total_size() {
-        return Err("package size does not match its list".into());
+        return Err(PackageError::SizeMismatch);
     }
     let mut at = 0usize;
     let mut out = Vec::with_capacity(manifest.files.len());
     for f in &manifest.files {
         let bytes = &data[at..at + f.size as usize];
         if hash(bytes) != f.sha256 {
-            return Err(format!("{} is damaged", f.name));
+            return Err(PackageError::Damaged(f.name.clone()));
         }
         out.push((f.name.as_str(), bytes));
         at += f.size as usize;
@@ -162,31 +185,31 @@ struct Reader<'a> {
 }
 
 impl<'a> Reader<'a> {
-    fn take(&mut self, n: usize) -> Result<&'a [u8], String> {
+    fn take(&mut self, n: usize) -> Result<&'a [u8], PackageError> {
         let end = self.i.checked_add(n).filter(|&e| e <= self.b.len());
-        let end = end.ok_or_else(|| "package cut short".to_string())?;
+        let end = end.ok_or(PackageError::CutShort)?;
         let s = &self.b[self.i..end];
         self.i = end;
         Ok(s)
     }
-    fn u16(&mut self) -> Result<u16, String> {
+    fn u16(&mut self) -> Result<u16, PackageError> {
         Ok(u16::from_le_bytes(
             self.take(2)?.try_into().unwrap_or([0; 2]),
         ))
     }
-    fn u32(&mut self) -> Result<u32, String> {
+    fn u32(&mut self) -> Result<u32, PackageError> {
         Ok(u32::from_le_bytes(
             self.take(4)?.try_into().unwrap_or([0; 4]),
         ))
     }
-    fn u64(&mut self) -> Result<u64, String> {
+    fn u64(&mut self) -> Result<u64, PackageError> {
         Ok(u64::from_le_bytes(
             self.take(8)?.try_into().unwrap_or([0; 8]),
         ))
     }
-    fn string(&mut self) -> Result<String, String> {
+    fn string(&mut self) -> Result<String, PackageError> {
         let n = self.u16()? as usize;
-        String::from_utf8(self.take(n)?.to_vec()).map_err(|_| "bad text in the package".into())
+        String::from_utf8(self.take(n)?.to_vec()).map_err(|_| PackageError::BadText)
     }
 }
 
@@ -241,7 +264,10 @@ mod tests {
     fn damage_is_caught() {
         let (m, mut data) = sample();
         data[1] ^= 0xFF;
-        assert!(split(&m, &data, h).unwrap_err().contains("fx.exe"));
+        assert_eq!(
+            split(&m, &data, h).unwrap_err(),
+            PackageError::Damaged("fx.exe".into())
+        );
         let payload = encode(&m, &data);
         assert!(decode(&payload[..payload.len() - 1]).is_err(), "cut short");
         let mut extra = payload.clone();
@@ -267,6 +293,9 @@ mod tests {
                 sha256: [0; 32],
             }],
         };
-        assert!(decode(&encode(&m, &[])).unwrap_err().contains("unsafe"));
+        assert!(matches!(
+            decode(&encode(&m, &[])).unwrap_err(),
+            PackageError::UnsafeName(_)
+        ));
     }
 }

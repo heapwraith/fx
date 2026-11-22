@@ -51,6 +51,8 @@ Regra central: **a interface só desenha.** Tudo que pode demorar roda em thread
 
 **Esperas na interface (D-066):** o GPUI roda as tarefas de fundo no pool de threads do Windows, cujos itens devem ser curtos. Nada espera canal com `recv()` dentro delas: quem espera é uma thread própria (`fx-ui/src/chan.rs`) ou um canal do `futures`, aguardado sem bloquear. Rede e downloads (atualização) também rodam em thread própria.
 
+**Acessibilidade (D-008, D-066):** cada janela tem uma árvore do AccessKit (`fx-ui/src/a11y.rs`, adaptador UIA no `fx-shell`): janela, caminho, lista (só as linhas visíveis, com "x de N") e, por cima, o diálogo ou painel com o teclado, em três camadas: painéis da aba, diálogos da janela e a confirmação. Quem desenha uma sobreposição declara o que o leitor de tela deve ler; a árvore só é enviada quando muda e quando há um leitor de tela ouvindo.
+
 **Registro (D-066):** avisos e erros do fx e do GPUI vão para `%LOCALAPPDATA%\fx\logs\fx.log` (máx. 1 MB, mais `fx.old.log`), escritos por uma thread própria; `FX_LOG=info|debug|trace` registra mais.
 
 ## Plataformas (D-012)

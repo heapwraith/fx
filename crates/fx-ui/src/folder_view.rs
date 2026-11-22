@@ -690,7 +690,7 @@ impl FolderView {
                 position: first + k,
                 name: self.list.name(i).to_owned(),
                 description: if self.list.attributes(i).is_dir() {
-                    "pasta".to_owned()
+                    tr!("pasta", "folder").to_owned()
                 } else {
                     trf!(
                         "{}, modificado em {}",
@@ -702,7 +702,7 @@ impl FolderView {
                 selected: self.selection.is_selected(i),
             })
             .collect();
-        handle.publish(&Snapshot {
+        handle.publish(Snapshot {
             title: window_title(&self.path),
             path: self.path.display().to_string(),
             editing: self.edit_text(),
@@ -1372,6 +1372,9 @@ pub fn window_title(path: &Path) -> String {
 
 impl Render for FolderView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(handle) = &self.a11y {
+            handle.set_overlay(crate::a11y::Layer::Tab, self.tab_overlay());
+        }
         self.trace_frame(window);
         self.sync_quick_look(window, cx);
         self.sync_terminal_size();
@@ -1605,6 +1608,16 @@ impl FolderView {
 }
 
 impl FolderView {
+    /// The tab's panel with the keyboard, for the accessibility tree.
+    fn tab_overlay(&self) -> Option<crate::a11y::Overlay> {
+        self.batch_rename_overlay()
+            .or_else(|| self.quick_look_overlay())
+            .or_else(|| self.view_menu_overlay())
+            .or_else(|| self.search_overlay())
+            .or_else(|| self.terminal_overlay())
+            .or_else(|| self.columns_overlay())
+    }
+
     /// The folder the user is looking at: the focused column in the column
     /// view, the listed folder otherwise.
     pub(super) fn folder_in_view(&self) -> PathBuf {

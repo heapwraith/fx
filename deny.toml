@@ -1,0 +1,9 @@
+# cargo-deny, CI job "audit": known vulnerabilities and yanked versions in the
+# dependencies (RustSec advisory database). Review of code, D-066.
+[graph]
+targets = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"]
+
+[advisories]
+version = 2
+yanked = "deny"
+ignore = []

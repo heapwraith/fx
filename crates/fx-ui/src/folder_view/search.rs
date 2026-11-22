@@ -128,6 +128,60 @@ enum Order {
     Modified,
 }
 
+impl FolderView {
+    /// The search panel as a screen reader reads it: the query and the
+    /// results around the chosen one ("x de N" over all of them).
+    pub(super) fn search_overlay(&self) -> Option<crate::a11y::Overlay> {
+        use crate::a11y::{Item, Overlay};
+        const AROUND: usize = 20;
+        let s = self.search.as_ref()?;
+        let first = s.cursor.saturating_sub(AROUND);
+        let end = (first + 2 * AROUND).min(s.hits.len());
+        let mut items = vec![Item::Input {
+            label: trf!("Buscar em {}", "Search in {}", s.root.display()),
+            value: s.query.clone(),
+        }];
+        for (k, f) in s
+            .hits
+            .get(first..end)
+            .unwrap_or_default()
+            .iter()
+            .enumerate()
+        {
+            items.push(Item::Choice {
+                label: f.name.to_string(),
+                description: Some(f.folder.to_string()),
+                selected: first + k == s.cursor,
+            });
+        }
+        let status = if s.running {
+            tr!("Buscando…", "Searching…").to_owned()
+        } else {
+            s.summary
+                .clone()
+                .unwrap_or_else(|| fx_core::format::count(s.hits.len()))
+        };
+        let focus = if s.hits.is_empty() {
+            Some(0)
+        } else {
+            Some(1 + s.cursor - first)
+        };
+        Some(Overlay {
+            title: tr!("Buscar", "Search").to_owned(),
+            description: Some(format!(
+                "{status}. {}",
+                tr!(
+                    "↑ e ↓ escolhem, Enter abre, Tab troca onde buscar, Esc fecha.",
+                    "↑ and ↓ choose, Enter opens, Tab changes where to search, Esc closes."
+                )
+            )),
+            items,
+            focus,
+            positions: Some((first, s.hits.len())),
+        })
+    }
+}
+
 /// The open search panel.
 pub(super) struct Search {
     query: String,

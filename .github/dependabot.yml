@@ -1,0 +1,11 @@
+# Keeps the actions pinned in .github/workflows up to date (they are pinned
+# to commit SHAs, which do not move by themselves). Review of code, D-066.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

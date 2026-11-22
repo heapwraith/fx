@@ -68,8 +68,8 @@ impl Section {
 }
 
 /// What a control does when used.
-#[derive(Debug, Clone, Copy)]
-enum Act {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) enum Act {
     /// `true`: English. Choosing the language already in use does nothing.
     Language(bool),
     ConfirmRecycle,
@@ -88,11 +88,43 @@ enum Act {
 
 impl TabsView {
     pub(super) fn open_settings(&mut self, section: Section, cx: &mut Context<Self>) {
+        if self.settings != Some(section) {
+            self.settings_focus = 0;
+        }
         self.settings = Some(section);
         cx.notify();
     }
 
-    fn act(&mut self, act: Act, cx: &mut Context<Self>) {
+    /// Tab / Shift+Tab: the next or previous control of the section.
+    pub(super) fn settings_move_focus(&mut self, forward: bool, cx: &mut Context<Self>) {
+        let Some(section) = self.settings else {
+            return;
+        };
+        let n = controls(&self.setting_rows(section)).len();
+        if n > 0 {
+            self.settings_focus = if forward {
+                (self.settings_focus + 1) % n
+            } else {
+                (self.settings_focus + n - 1) % n
+            };
+            cx.notify();
+        }
+    }
+
+    /// Space / Enter: uses the focused control.
+    pub(super) fn settings_activate(&mut self, cx: &mut Context<Self>) {
+        let Some(section) = self.settings else {
+            return;
+        };
+        let act = controls(&self.setting_rows(section))
+            .get(self.settings_focus)
+            .map(|c| c.act);
+        if let Some(act) = act {
+            self.act(act, cx);
+        }
+    }
+
+    pub(super) fn act(&mut self, act: Act, cx: &mut Context<Self>) {
         let tab = self.current();
         match act {
             Act::Language(english) => {
@@ -126,6 +158,346 @@ impl TabsView {
             Act::Link(url) => tab.update(cx, |view, cx| view.open_url(url, cx)),
         }
         cx.notify();
+    }
+}
+
+/// The control of a settings row.
+pub(super) enum Control {
+    None,
+    Switch(bool, Act),
+    /// A choice among options: label, selected, action.
+    Segments(Vec<(&'static str, bool, Act)>),
+    /// A value shown before the buttons (the version), then the buttons.
+    Buttons(Option<String>, Vec<(&'static str, Act)>),
+}
+
+/// One settings row: what it is, what it does, how to change it. The same
+/// data draws the screen and the screen reader's tree (review, D-066).
+pub(super) struct Row {
+    pub title: &'static str,
+    pub detail: &'static str,
+    pub control: Control,
+}
+
+/// A control that takes the keyboard (each option of a choice is one).
+pub(super) struct Focusable {
+    pub label: String,
+    pub kind: FocusKind,
+    pub act: Act,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum FocusKind {
+    Switch(bool),
+    Option(bool),
+    Button,
+}
+
+/// The controls of `rows` in Tab order.
+pub(super) fn controls(rows: &[Row]) -> Vec<Focusable> {
+    let mut out = Vec::new();
+    for row in rows {
+        match &row.control {
+            Control::None => {}
+            Control::Switch(on, act) => out.push(Focusable {
+                label: row.title.to_owned(),
+                kind: FocusKind::Switch(*on),
+                act: *act,
+            }),
+            Control::Segments(options) => {
+                for (label, selected, act) in options {
+                    out.push(Focusable {
+                        label: format!("{}: {label}", row.title),
+                        kind: FocusKind::Option(*selected),
+                        act: *act,
+                    });
+                }
+            }
+            Control::Buttons(_, buttons) => {
+                for (label, act) in buttons {
+                    out.push(Focusable {
+                        label: (*label).to_owned(),
+                        kind: FocusKind::Button,
+                        act: *act,
+                    });
+                }
+            }
+        }
+    }
+    out
+}
+
+impl TabsView {
+    /// The rows of `section`, with the real state of each setting.
+    pub(super) fn setting_rows(&self, section: Section) -> Vec<Row> {
+        let english = fx_core::locale::english();
+        let density = self.look.density;
+        match section {
+            Section::General => vec![
+                Row {
+                    title: tr!("Idioma", "Language"),
+                    detail: tr!(
+                        "O padrão segue o idioma do Windows.",
+                        "By default it follows the Windows language."
+                    ),
+                    control: Control::Segments(vec![
+                        ("Português", !english, Act::Language(false)),
+                        ("English", english, Act::Language(true)),
+                    ]),
+                },
+                Row {
+                    title: tr!(
+                        "Confirmar antes de enviar para a Lixeira",
+                        "Confirm before sending to the Recycle Bin"
+                    ),
+                    detail: tr!(
+                        "Excluir de vez (Shift+Delete) sempre pergunta.",
+                        "Deleting for good (Shift+Delete) always asks."
+                    ),
+                    control: Control::Switch(
+                        crate::prefs::CONFIRM_RECYCLE.get(),
+                        Act::ConfirmRecycle,
+                    ),
+                },
+                Row {
+                    title: tr!(
+                        "Reabrir abas e janelas ao iniciar",
+                        "Reopen tabs and windows at start"
+                    ),
+                    detail: tr!(
+                        "Vale na próxima abertura do fx.",
+                        "Applies the next time fx opens."
+                    ),
+                    control: Control::Switch(
+                        crate::prefs::RESTORE_SESSION.get(),
+                        Act::RestoreSession,
+                    ),
+                },
+            ],
+            Section::Appearance => vec![
+                Row {
+                    title: tr!("Densidade das linhas", "Row density"),
+                    detail: tr!(
+                        "Ctrl+1, Ctrl+2 e Ctrl+3 também trocam.",
+                        "Ctrl+1, Ctrl+2 and Ctrl+3 switch it too."
+                    ),
+                    control: Control::Segments(vec![
+                        (
+                            tr!("Compacta", "Compact"),
+                            density == Density::Compact,
+                            Act::Density(Density::Compact),
+                        ),
+                        (
+                            tr!("Padrão", "Standard"),
+                            density == Density::Standard,
+                            Act::Density(Density::Standard),
+                        ),
+                        (
+                            tr!("Confortável", "Comfortable"),
+                            density == Density::Comfortable,
+                            Act::Density(Density::Comfortable),
+                        ),
+                    ]),
+                },
+                Row {
+                    title: tr!("Mostrar itens ocultos", "Show hidden items"),
+                    detail: tr!(
+                        "Arquivos ocultos e de sistema (Ctrl+H).",
+                        "Hidden and system files (Ctrl+H)."
+                    ),
+                    control: Control::Switch(self.look.show_hidden, Act::Hidden),
+                },
+                Row {
+                    title: tr!("Barra lateral", "Sidebar"),
+                    detail: tr!(
+                        "Acesso rápido e unidades (Ctrl+B).",
+                        "Quick access and drives (Ctrl+B)."
+                    ),
+                    control: Control::Switch(self.sidebar_open, Act::Sidebar),
+                },
+                Row {
+                    title: tr!("Tema", "Theme"),
+                    detail: tr!(
+                        "Segue o tema claro ou escuro do Windows, e o alto contraste.",
+                        "Follows the Windows light or dark theme, and high contrast."
+                    ),
+                    control: Control::None,
+                },
+            ],
+            Section::Updates => {
+                let version = crate::VERSION.split('+').next().unwrap_or(crate::VERSION);
+                vec![
+                    Row {
+                        title: tr!("Atualizações automáticas", "Automatic updates"),
+                        detail: tr!(
+                            "Baixa a versão nova em segundo plano, confere e instala quando você fecha o fx.",
+                            "Downloads the new version in the background, checks it and installs it when you close fx."
+                        ),
+                        control: Control::Switch(crate::prefs::UPDATES.get(), Act::AutoUpdate),
+                    },
+                    Row {
+                        title: tr!("Versão instalada", "Installed version"),
+                        detail: tr!("A versão deste fx.", "This fx's version."),
+                        control: Control::Buttons(
+                            Some(version.to_owned()),
+                            vec![(tr!("Procurar agora", "Check now"), Act::CheckNow)],
+                        ),
+                    },
+                ]
+            }
+            Section::Privacy => vec![
+                Row {
+                    title: tr!("Relatórios de falha", "Crash reports"),
+                    detail: tr!(
+                        "Se o fx fechar com uma falha, guarda um relatório sem caminhos nem nomes neste computador. Nada é enviado sem você.",
+                        "If fx closes with a crash, it keeps a report with no paths or names on this computer. Nothing is sent without you."
+                    ),
+                    control: Control::Switch(crate::prefs::CRASH_REPORTS.get(), Act::CrashReports),
+                },
+                Row {
+                    title: tr!("Dados que o fx envia", "Data fx sends"),
+                    detail: tr!(
+                        "Nenhum. A verificação de atualizações só consulta a lista de versões no GitHub.",
+                        "None. The update check only reads the list of versions on GitHub."
+                    ),
+                    control: Control::None,
+                },
+            ],
+            Section::System => vec![
+                Row {
+                    title: tr!("Gerenciador de arquivos padrão", "Default file manager"),
+                    detail: tr!(
+                        "Pastas, unidades e Win+E abrem no fx. Voltar ao Explorador restaura tudo.",
+                        "Folders, drives and Win+E open in fx. Back to Explorer restores everything."
+                    ),
+                    control: Control::Buttons(
+                        None,
+                        vec![
+                            (tr!("Usar o fx", "Use fx"), Act::DefaultManager(true)),
+                            (
+                                tr!("Usar o Explorador", "Use Explorer"),
+                                Act::DefaultManager(false),
+                            ),
+                        ],
+                    ),
+                },
+                Row {
+                    title: tr!("Busca no disco inteiro", "Whole-disk search"),
+                    detail: tr!(
+                        "Um serviço do Windows mantém o índice dos discos NTFS. Pede administrador uma vez.",
+                        "A Windows service keeps the index of NTFS disks. Asks for administrator once."
+                    ),
+                    control: Control::Buttons(
+                        None,
+                        vec![
+                            (tr!("Ativar", "Turn on"), Act::IndexService(true)),
+                            (tr!("Desativar", "Turn off"), Act::IndexService(false)),
+                        ],
+                    ),
+                },
+            ],
+            Section::About => vec![
+                Row {
+                    title: tr!("Licença", "License"),
+                    detail: tr!(
+                        "Software livre, sob as licenças MIT ou Apache 2.0. Feito em Rust, nativo do Windows.",
+                        "Free software, under the MIT or Apache 2.0 licenses. Made in Rust, native to Windows."
+                    ),
+                    control: Control::None,
+                },
+                Row {
+                    title: tr!("Mais", "More"),
+                    detail: "",
+                    control: Control::Buttons(
+                        None,
+                        vec![
+                            (tr!("Como usar (F1)", "How to use (F1)"), Act::HowTo),
+                            (
+                                tr!("Novidades", "What's new"),
+                                Act::Link(
+                                    "https://github.com/heapwraith/fx/blob/main/CHANGELOG.md",
+                                ),
+                            ),
+                            (
+                                tr!("Código e sugestões", "Code and feedback"),
+                                Act::Link("https://github.com/heapwraith/fx"),
+                            ),
+                            (
+                                tr!("Relatar um problema", "Report a problem"),
+                                Act::Link("https://github.com/heapwraith/fx/issues/new/choose"),
+                            ),
+                        ],
+                    ),
+                },
+            ],
+        }
+    }
+
+    /// Settings as a screen reader reads them: the sections, then each row
+    /// and its controls; the focus on the focused control. `acts[k]` is what
+    /// a click on item `k` does.
+    pub(super) fn settings_overlay(
+        &self,
+        section: Section,
+    ) -> (crate::a11y::Overlay, Vec<Option<super::WindowAct>>) {
+        use crate::a11y::{Item, Overlay};
+        let rows = self.setting_rows(section);
+        let mut items = Vec::new();
+        let mut acts = Vec::new();
+        for s in Section::ALL {
+            items.push(Item::Choice {
+                label: s.label().to_owned(),
+                description: None,
+                selected: s == section,
+            });
+            acts.push(Some(super::WindowAct::Section(s)));
+        }
+        if section == Section::About {
+            items.push(Item::Text(about_line()));
+            acts.push(None);
+        }
+        let mut focus = None;
+        let mut control = 0usize;
+        for row in &rows {
+            let text = if row.detail.is_empty() {
+                row.title.to_owned()
+            } else {
+                format!("{}. {}", row.title, row.detail)
+            };
+            items.push(Item::Text(text));
+            acts.push(None);
+            if let Control::Buttons(Some(value), _) = &row.control {
+                items.push(Item::Text(value.clone()));
+                acts.push(None);
+            }
+            for c in controls(std::slice::from_ref(row)) {
+                if control == self.settings_focus {
+                    focus = Some(items.len());
+                }
+                items.push(match c.kind {
+                    FocusKind::Switch(on) => Item::Switch { label: c.label, on },
+                    FocusKind::Option(selected) => Item::Radio {
+                        label: c.label,
+                        checked: selected,
+                    },
+                    FocusKind::Button => Item::Button(c.label),
+                });
+                acts.push(Some(super::WindowAct::Settings(c.act)));
+                control += 1;
+            }
+        }
+        let overlay = Overlay {
+            title: tr!("Configurações", "Settings").to_owned(),
+            description: Some(trf!(
+                "{}. Tab passa entre os controles, Espaço usa, ↑ e ↓ trocam de seção, Esc fecha.",
+                "{}. Tab moves between controls, Space uses one, ↑ and ↓ change section, Esc closes.",
+                section.label()
+            )),
+            items,
+            focus,
+            positions: None,
+        };
+        (overlay, acts)
     }
 
     pub(super) fn render_settings(
@@ -162,33 +534,20 @@ impl TabsView {
             })
             .collect();
 
-        // A row: title, explanation, control.
-        let row = |title: &'static str, detail: &'static str, control: gpui::AnyElement| {
+        let rows = self.setting_rows(section);
+        let focus = self.settings_focus;
+        // The keyboard focus: a 2 px accent ring; the others get the same
+        // ring, transparent, so nothing moves when it changes.
+        let ring = move |focused: bool, el: gpui::AnyElement| {
             div()
-                .py(px(space(3)))
-                .flex()
-                .items_center()
-                .gap(px(space(4)))
-                .border_b_1()
-                .border_color(rgba(t.divider))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .gap(px(2.0))
-                        .child(title)
-                        .child(
-                            div()
-                                .text_size(px(CAPTION_SIZE))
-                                .text_color(rgba(t.text_secondary))
-                                .child(detail),
-                        ),
-                )
-                .child(div().flex_none().child(control))
+                .rounded(px(RADIUS + 2.0))
+                .p(px(1.0))
+                .border_2()
+                .border_color(rgba(if focused { t.accent } else { 0x0000_0000 }))
+                .child(el)
+                .into_any_element()
         };
-        let switch = |id: &'static str, on: bool, act: Act, cx: &mut Context<Self>| {
+        let switch = |id: SharedString, on: bool, act: Act, cx: &mut Context<Self>| {
             div()
                 .id(id)
                 .w(px(40.0))
@@ -208,7 +567,7 @@ impl TabsView {
                 .on_click(cx.listener(move |view, _, _, cx| view.act(act, cx)))
                 .into_any_element()
         };
-        let button = |id: &'static str, label: &'static str, act: Act, cx: &mut Context<Self>| {
+        let button = |id: SharedString, label: &'static str, act: Act, cx: &mut Context<Self>| {
             div()
                 .id(id)
                 .h(px(30.0))
@@ -223,273 +582,95 @@ impl TabsView {
                 .hover(|h| h.bg(rgba(t.hover)))
                 .child(label)
                 .on_click(cx.listener(move |view, _, _, cx| view.act(act, cx)))
+                .into_any_element()
         };
-        // Segmented choice: (label, selected, action).
-        let segmented =
-            |id: &'static str, options: Vec<(&'static str, bool, Act)>, cx: &mut Context<Self>| {
+        let mut next = 0usize;
+        let mut body = div().flex().flex_col();
+        if section == Section::About {
+            body = body.child(about_header(t));
+        }
+        for (r, row) in rows.into_iter().enumerate() {
+            let control: gpui::AnyElement = match row.control {
+                Control::None => div().into_any_element(),
+                Control::Switch(on, act) => {
+                    let id = SharedString::from(format!("set-{r}-switch"));
+                    let el = ring(next == focus, switch(id, on, act, cx));
+                    next += 1;
+                    el
+                }
+                Control::Segments(options) => {
+                    let mut seg = div()
+                        .flex()
+                        .rounded(px(RADIUS))
+                        .border_1()
+                        .border_color(rgba(t.divider))
+                        .overflow_hidden();
+                    for (k, (label, selected, act)) in options.into_iter().enumerate() {
+                        let focused = next == focus;
+                        next += 1;
+                        seg = seg.child(
+                            div()
+                                .id(SharedString::from(format!("set-{r}-{k}")))
+                                .h(px(28.0))
+                                .px(px(space(3)))
+                                .flex()
+                                .items_center()
+                                .cursor_pointer()
+                                .border_2()
+                                .border_color(rgba(if focused { t.accent } else { 0x0000_0000 }))
+                                .when(selected, |d| {
+                                    d.bg(rgba(t.selected)).text_color(rgba(t.text))
+                                })
+                                .when(!selected, |d| {
+                                    d.text_color(rgba(t.text_secondary))
+                                        .hover(|h| h.bg(rgba(t.hover)))
+                                })
+                                .child(label)
+                                .on_click(cx.listener(move |view, _, _, cx| view.act(act, cx))),
+                        );
+                    }
+                    seg.into_any_element()
+                }
+                Control::Buttons(value, buttons) => {
+                    let mut line = div().flex().flex_wrap().items_center().gap(px(space(2)));
+                    if let Some(v) = value {
+                        line = line.child(div().text_color(rgba(t.text_secondary)).child(v));
+                    }
+                    for (k, (label, act)) in buttons.into_iter().enumerate() {
+                        let id = SharedString::from(format!("set-{r}-b{k}"));
+                        line = line.child(ring(next == focus, button(id, label, act, cx)));
+                        next += 1;
+                    }
+                    line.into_any_element()
+                }
+            };
+            body = body.child(
                 div()
+                    .py(px(space(3)))
                     .flex()
-                    .rounded(px(RADIUS))
-                    .border_1()
+                    .items_center()
+                    .gap(px(space(4)))
+                    .border_b_1()
                     .border_color(rgba(t.divider))
-                    .overflow_hidden()
-                    .children(
-                        options
-                            .into_iter()
-                            .enumerate()
-                            .map(|(k, (label, selected, act))| {
-                                div()
-                                    .id(SharedString::from(format!("{id}-{k}")))
-                                    .h(px(28.0))
-                                    .px(px(space(3)))
-                                    .flex()
-                                    .items_center()
-                                    .cursor_pointer()
-                                    .when(selected, |d| {
-                                        d.bg(rgba(t.selected)).text_color(rgba(t.text))
-                                    })
-                                    .when(!selected, |d| {
-                                        d.text_color(rgba(t.text_secondary))
-                                            .hover(|h| h.bg(rgba(t.hover)))
-                                    })
-                                    .child(label)
-                                    .on_click(cx.listener(move |view, _, _, cx| view.act(act, cx)))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.0))
+                            .child(row.title)
+                            .when(!row.detail.is_empty(), |d| {
+                                d.child(
+                                    div()
+                                        .text_size(px(CAPTION_SIZE))
+                                        .text_color(rgba(t.text_secondary))
+                                        .child(row.detail),
+                                )
                             }),
                     )
-                    .into_any_element()
-            };
-
-        let english = fx_core::locale::english();
-        let density = self.look.density;
-        let mut body = div().flex().flex_col();
-        match section {
-            Section::General => {
-                body = body
-                    .child(row(
-                        tr!("Idioma", "Language"),
-                        tr!(
-                            "O padrão segue o idioma do Windows.",
-                            "By default it follows the Windows language."
-                        ),
-                        segmented(
-                            "lang",
-                            vec![
-                                ("Português", !english, Act::Language(false)),
-                                ("English", english, Act::Language(true)),
-                            ],
-                            cx,
-                        ),
-                    ))
-                    .child(row(
-                        tr!(
-                            "Confirmar antes de enviar para a Lixeira",
-                            "Confirm before sending to the Recycle Bin"
-                        ),
-                        tr!(
-                            "Excluir de vez (Shift+Delete) sempre pergunta.",
-                            "Deleting for good (Shift+Delete) always asks."
-                        ),
-                        switch(
-                            "confirm-recycle",
-                            crate::prefs::CONFIRM_RECYCLE.get(),
-                            Act::ConfirmRecycle,
-                            cx,
-                        ),
-                    ))
-                    .child(row(
-                        tr!(
-                            "Reabrir abas e janelas ao iniciar",
-                            "Reopen tabs and windows at start"
-                        ),
-                        tr!(
-                            "Vale na próxima abertura do fx.",
-                            "Applies the next time fx opens."
-                        ),
-                        switch(
-                            "restore",
-                            crate::prefs::RESTORE_SESSION.get(),
-                            Act::RestoreSession,
-                            cx,
-                        ),
-                    ));
-            }
-            Section::Appearance => {
-                body = body
-                    .child(row(
-                        tr!("Densidade das linhas", "Row density"),
-                        tr!(
-                            "Ctrl+1, Ctrl+2 e Ctrl+3 também trocam.",
-                            "Ctrl+1, Ctrl+2 and Ctrl+3 switch it too."
-                        ),
-                        segmented(
-                            "density",
-                            vec![
-                                (
-                                    tr!("Compacta", "Compact"),
-                                    density == Density::Compact,
-                                    Act::Density(Density::Compact),
-                                ),
-                                (
-                                    tr!("Padrão", "Standard"),
-                                    density == Density::Standard,
-                                    Act::Density(Density::Standard),
-                                ),
-                                (
-                                    tr!("Confortável", "Comfortable"),
-                                    density == Density::Comfortable,
-                                    Act::Density(Density::Comfortable),
-                                ),
-                            ],
-                            cx,
-                        ),
-                    ))
-                    .child(row(
-                        tr!("Mostrar itens ocultos", "Show hidden items"),
-                        tr!(
-                            "Arquivos ocultos e de sistema (Ctrl+H).",
-                            "Hidden and system files (Ctrl+H)."
-                        ),
-                        switch("hidden", self.look.show_hidden, Act::Hidden, cx),
-                    ))
-                    .child(row(
-                        tr!("Barra lateral", "Sidebar"),
-                        tr!(
-                            "Acesso rápido e unidades (Ctrl+B).",
-                            "Quick access and drives (Ctrl+B)."
-                        ),
-                        switch("sidebar", self.sidebar_open, Act::Sidebar, cx),
-                    ))
-                    .child(row(
-                        tr!("Tema", "Theme"),
-                        tr!(
-                            "Segue o tema claro ou escuro do Windows, e o alto contraste.",
-                            "Follows the Windows light or dark theme, and high contrast."
-                        ),
-                        div().into_any_element(),
-                    ));
-            }
-            Section::Updates => {
-                let version = crate::VERSION.split('+').next().unwrap_or(crate::VERSION);
-                body = body
-                    .child(row(
-                        tr!("Atualizações automáticas", "Automatic updates"),
-                        tr!(
-                            "Baixa a versão nova em segundo plano, confere e instala quando você fecha o fx.",
-                            "Downloads the new version in the background, checks it and installs it when you close fx."
-                        ),
-                        switch("auto-update", crate::prefs::UPDATES.get(), Act::AutoUpdate, cx),
-                    ))
-                    .child(row(
-                        tr!("Versão instalada", "Installed version"),
-                        tr!("A versão deste fx.", "This fx's version."),
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(space(3)))
-                            .child(div().text_color(rgba(t.text_secondary)).child(version.to_owned()))
-                            .child(button("check-now", tr!("Procurar agora", "Check now"), Act::CheckNow, cx))
-                            .into_any_element(),
-                    ));
-            }
-            Section::Privacy => {
-                body = body
-                    .child(row(
-                        tr!("Relatórios de falha", "Crash reports"),
-                        tr!(
-                            "Se o fx fechar com uma falha, guarda um relatório sem caminhos nem nomes neste computador. Nada é enviado sem você.",
-                            "If fx closes with a crash, it keeps a report with no paths or names on this computer. Nothing is sent without you."
-                        ),
-                        switch("crash", crate::prefs::CRASH_REPORTS.get(), Act::CrashReports, cx),
-                    ))
-                    .child(row(
-                        tr!("Dados que o fx envia", "Data fx sends"),
-                        tr!(
-                            "Nenhum. A verificação de atualizações só consulta a lista de versões no GitHub.",
-                            "None. The update check only reads the list of versions on GitHub."
-                        ),
-                        div().into_any_element(),
-                    ));
-            }
-            Section::System => {
-                body = body
-                    .child(row(
-                        tr!("Gerenciador de arquivos padrão", "Default file manager"),
-                        tr!(
-                            "Pastas, unidades e Win+E abrem no fx. Voltar ao Explorador restaura tudo.",
-                            "Folders, drives and Win+E open in fx. Back to Explorer restores everything."
-                        ),
-                        div()
-                            .flex()
-                            .gap(px(space(2)))
-                            .child(button("default-on", tr!("Usar o fx", "Use fx"), Act::DefaultManager(true), cx))
-                            .child(button("default-off", tr!("Usar o Explorador", "Use Explorer"), Act::DefaultManager(false), cx))
-                            .into_any_element(),
-                    ))
-                    .child(row(
-                        tr!("Busca no disco inteiro", "Whole-disk search"),
-                        tr!(
-                            "Um serviço do Windows mantém o índice dos discos NTFS. Pede administrador uma vez.",
-                            "A Windows service keeps the index of NTFS disks. Asks for administrator once."
-                        ),
-                        div()
-                            .flex()
-                            .gap(px(space(2)))
-                            .child(button("index-on", tr!("Ativar", "Turn on"), Act::IndexService(true), cx))
-                            .child(button("index-off", tr!("Desativar", "Turn off"), Act::IndexService(false), cx))
-                            .into_any_element(),
-                    ));
-            }
-            Section::About => {
-                let version = crate::VERSION
-                    .split('+')
-                    .next()
-                    .unwrap_or(crate::VERSION)
-                    .to_owned();
-                let commit = crate::VERSION.split_once('+').map(|(_, c)| c.to_owned());
-                let logo = logo();
-                body = body
-                    .child(
-                        div()
-                            .py(px(space(4)))
-                            .flex()
-                            .items_center()
-                            .gap(px(space(4)))
-                            .child(img(logo).size(px(64.0)))
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_col()
-                                    .gap(px(space(1)))
-                                    .child(div().text_size(px(22.0)).font_weight(gpui::FontWeight::SEMIBOLD).child("fx"))
-                                    .child(div().text_color(rgba(t.text_secondary)).child(super::guide::slogan()))
-                                    .child(
-                                        div()
-                                            .text_size(px(CAPTION_SIZE))
-                                            .text_color(rgba(t.text_secondary))
-                                            .child(match &commit {
-                                                Some(c) => trf!("Versão {version} · compilação {c}", "Version {version} · build {c}"),
-                                                None => trf!("Versão {version}", "Version {version}"),
-                                            }),
-                                    ),
-                            ),
-                    )
-                    .child(row(
-                        tr!("Licença", "License"),
-                        tr!("Software livre, sob as licenças MIT ou Apache 2.0. Feito em Rust, nativo do Windows.", "Free software, under the MIT or Apache 2.0 licenses. Made in Rust, native to Windows."),
-                        div().into_any_element(),
-                    ))
-                    .child(
-                        div()
-                            .pt(px(space(4)))
-                            .flex()
-                            .flex_wrap()
-                            .gap(px(space(2)))
-                            .child(button("about-howto", tr!("Como usar (F1)", "How to use (F1)"), Act::HowTo, cx))
-                            .child(button("about-news", tr!("Novidades", "What's new"), Act::Link("https://github.com/heapwraith/fx/blob/main/CHANGELOG.md"), cx))
-                            .child(button("about-code", tr!("Código e sugestões", "Code and feedback"), Act::Link("https://github.com/heapwraith/fx"), cx))
-                            .child(button("about-issue", tr!("Relatar um problema", "Report a problem"), Act::Link("https://github.com/heapwraith/fx/issues/new/choose"), cx)),
-                    );
-            }
+                    .child(div().flex_none().child(control)),
+            );
         }
 
         let card = div()
@@ -530,7 +711,10 @@ impl TabsView {
                             .py(px(space(2)))
                             .text_size(px(CAPTION_SIZE))
                             .text_color(rgba(t.text_secondary))
-                            .child(tr!("Ctrl+, abre · Esc fecha", "Ctrl+, opens · Esc closes")),
+                            .child(tr!(
+                                "Tab passa · Espaço usa · Esc fecha",
+                                "Tab moves · Space uses · Esc closes"
+                            )),
                     ),
             )
             .child(
@@ -576,4 +760,55 @@ impl TabsView {
             .with_priority(2),
         )
     }
+}
+
+/// "fx", the slogan and the version, at the top of "Sobre o fx".
+fn about_header(t: crate::theme::Theme) -> gpui::AnyElement {
+    div()
+        .py(px(space(4)))
+        .flex()
+        .items_center()
+        .gap(px(space(4)))
+        .child(img(logo()).size(px(64.0)))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(space(1)))
+                .child(
+                    div()
+                        .text_size(px(22.0))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .child("fx"),
+                )
+                .child(
+                    div()
+                        .text_color(rgba(t.text_secondary))
+                        .child(super::guide::slogan()),
+                )
+                .child(
+                    div()
+                        .text_size(px(CAPTION_SIZE))
+                        .text_color(rgba(t.text_secondary))
+                        .child(version_text()),
+                ),
+        )
+        .into_any_element()
+}
+
+/// "Versão 0.2.0 · compilação abc1234".
+fn version_text() -> String {
+    let version = crate::VERSION.split('+').next().unwrap_or(crate::VERSION);
+    match crate::VERSION.split_once('+') {
+        Some((_, c)) => trf!(
+            "Versão {version} · compilação {c}",
+            "Version {version} · build {c}"
+        ),
+        None => trf!("Versão {version}", "Version {version}"),
+    }
+}
+
+/// The header of "Sobre o fx" as one line, for screen readers.
+fn about_line() -> String {
+    format!("fx. {}. {}.", super::guide::slogan(), version_text())
 }

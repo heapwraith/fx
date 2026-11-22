@@ -41,6 +41,35 @@ pub(super) struct Terminal {
 }
 
 impl FolderView {
+    /// The terminal (when it has the keyboard) as a screen reader reads it:
+    /// the text on its screen.
+    pub(super) fn terminal_overlay(&self) -> Option<crate::a11y::Overlay> {
+        use crate::a11y::{Item, Overlay};
+        let t = self.terminal.as_ref().filter(|t| t.focused)?;
+        let screen = t.screen.lock().unwrap_or_else(PoisonError::into_inner);
+        let text = (0..screen.rows)
+            .map(|r| screen.line_text(r))
+            .filter(|l| !l.trim().is_empty())
+            .collect::<Vec<String>>()
+            .join("\n");
+        Some(Overlay {
+            title: "Terminal".to_owned(),
+            description: Some(trf!(
+                "PowerShell em {}. Ctrl+J fecha; um clique na lista volta para ela.",
+                "PowerShell in {}. Ctrl+J closes; a click on the list goes back to it.",
+                self.path.display()
+            )),
+            items: vec![Item::Input {
+                label: "PowerShell".to_owned(),
+                value: text,
+            }],
+            focus: Some(0),
+            positions: None,
+        })
+    }
+}
+
+impl FolderView {
     /// Ctrl+J: opens the terminal (focused) or closes it.
     pub(super) fn toggle_terminal(&mut self, cx: &mut Context<Self>) {
         if self.terminal.take().is_some() {

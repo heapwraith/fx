@@ -213,6 +213,67 @@ impl TabsView {
         }
     }
 
+    /// The palette as a screen reader reads it: the query field and the
+    /// results, with the focus on the chosen one.
+    pub(super) fn palette_overlay(
+        &self,
+    ) -> Option<(crate::a11y::Overlay, Vec<Option<super::WindowAct>>)> {
+        use crate::a11y::{Item as A11yItem, Overlay};
+        let p = self.palette.as_ref()?;
+        let mut items = vec![A11yItem::Input {
+            label: tr!("Comando ou pasta", "Command or folder").to_owned(),
+            value: p.query.clone(),
+        }];
+        let mut acts = vec![None];
+        for (k, &i) in p.shown.iter().enumerate() {
+            let description = match &p.items[i] {
+                Item::Command(c) => c.shortcut(),
+                Item::Folder { path, .. } => Some(path.display().to_string()),
+            };
+            items.push(A11yItem::Choice {
+                label: p.items[i].label(),
+                description,
+                selected: k == p.cursor,
+            });
+            acts.push(Some(super::WindowAct::Palette(k)));
+        }
+        let focus = if p.shown.is_empty() {
+            Some(0)
+        } else {
+            Some(1 + p.cursor)
+        };
+        Some((
+            Overlay {
+                title: tr!("Paleta de comandos", "Command palette").to_owned(),
+                description: Some(
+                    tr!(
+                        "Digite para filtrar. ↑ e ↓ escolhem, Enter executa, Esc fecha.",
+                        "Type to filter. ↑ and ↓ choose, Enter runs, Esc closes."
+                    )
+                    .to_owned(),
+                ),
+                items,
+                focus,
+                positions: None,
+            },
+            acts,
+        ))
+    }
+
+    /// A screen reader clicked result `k`: runs it, as Enter would.
+    pub(super) fn palette_run(&mut self, k: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let choice = self
+            .palette
+            .as_ref()
+            .and_then(|p| p.shown.get(k).map(|&i| p.items[i].clone()));
+        self.palette = None;
+        if let Some(item) = choice {
+            self.run_item(item, window, cx);
+        }
+        self.focus_active(window, cx);
+        cx.notify();
+    }
+
     fn run_item(&mut self, item: Item, window: &mut Window, cx: &mut Context<Self>) {
         let tab = self.current();
         match item {

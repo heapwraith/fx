@@ -120,6 +120,55 @@ impl TabsView {
     }
 
     /// The conflict dialog, over the whole window, while a job waits.
+    /// The conflict dialog as a screen reader reads it; the focus on "Manter
+    /// os dois" (what Enter does).
+    pub(super) fn conflict_overlay(
+        &self,
+        cx: &mut Context<Self>,
+    ) -> Option<(crate::a11y::Overlay, Vec<Option<super::WindowAct>>)> {
+        use super::WindowAct;
+        use crate::a11y::{Item, Overlay};
+        let ask = self.media.ops.read(cx).current_ask()?.clone();
+        let mut items: Vec<Item> = compare(ask.existing, ask.incoming)
+            .into_iter()
+            .map(|(label, text)| Item::Text(format!("{label}: {text}")))
+            .collect();
+        let mut acts: Vec<Option<WindowAct>> = items.iter().map(|_| None).collect();
+        items.push(Item::Switch {
+            label: tr!("Aplicar a todos", "Apply to all").to_owned(),
+            on: self.apply_all,
+        });
+        acts.push(Some(WindowAct::ApplyAll));
+        for (label, resolution) in [
+            (tr!("Pular", "Skip"), Resolution::Skip),
+            (tr!("Substituir", "Replace"), Resolution::Replace),
+            (tr!("Manter os dois", "Keep both"), Resolution::KeepBoth),
+        ] {
+            items.push(Item::Button(label.to_owned()));
+            acts.push(Some(WindowAct::Answer(resolution)));
+        }
+        let focus = Some(items.len() - 1);
+        Some((
+            Overlay {
+                title: tr!(
+                    "Já existe um item com esse nome",
+                    "An item with that name already exists"
+                )
+                .to_owned(),
+                description: Some(trf!(
+                    "\"{}\" já existe em {}. Enter mantém os dois, Esc pula, Espaço marca aplicar a todos.",
+                    "\"{}\" already exists in {}. Enter keeps both, Esc skips, Space checks apply to all.",
+                    ask.name,
+                    ask.folder
+                )),
+                items,
+                focus,
+                positions: None,
+            },
+            acts,
+        ))
+    }
+
     pub(super) fn render_conflict(
         &self,
         cx: &mut Context<Self>,

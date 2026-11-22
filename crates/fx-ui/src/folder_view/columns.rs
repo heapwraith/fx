@@ -368,6 +368,49 @@ impl FolderView {
     }
 }
 
+impl FolderView {
+    /// The column view as a screen reader reads it: the focused column's
+    /// items around the chosen one ("x de N" over all of them).
+    pub(super) fn columns_overlay(&self) -> Option<crate::a11y::Overlay> {
+        use crate::a11y::{Item, Overlay};
+        const AROUND: usize = 20;
+        let c = self.miller.as_ref()?;
+        let k = c.model.focus;
+        let col = c.model.columns.get(k)?;
+        let entries = c.entries_of(k).map(|e| e.as_slice()).unwrap_or_default();
+        let chosen = c.chosen_index(k);
+        let first = chosen.unwrap_or(0).saturating_sub(AROUND);
+        let end = (first + 2 * AROUND).min(entries.len());
+        let items: Vec<Item> = entries
+            .get(first..end)
+            .unwrap_or_default()
+            .iter()
+            .enumerate()
+            .map(|(i, e)| Item::Choice {
+                label: e.name.to_string(),
+                description: e.is_dir.then(|| tr!("pasta", "folder").to_owned()),
+                selected: chosen == Some(first + i),
+            })
+            .collect();
+        let focus = chosen
+            .and_then(|ch| ch.checked_sub(first))
+            .filter(|_| !items.is_empty());
+        Some(Overlay {
+            title: folder_label(&col.dir),
+            description: Some(
+                tr!(
+                    "Vista em colunas. ↑ e ↓ escolhem, → entra na pasta, ← volta, Esc volta à lista.",
+                    "Column view. ↑ and ↓ choose, → enters the folder, ← goes back, Esc returns to the list."
+                )
+                .to_owned(),
+            ),
+            items,
+            focus,
+            positions: Some((first, entries.len())),
+        })
+    }
+}
+
 /// A strip at an edge: the chevron and how many columns are hidden there;
 /// clicking it focuses column `reveal`, which brings it into view.
 fn edge_strip(

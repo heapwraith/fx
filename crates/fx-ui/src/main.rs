@@ -357,6 +357,10 @@ fn open_folder_window(
             let latest: fx_shell::LatestTree = Rc::new(RefCell::new(None));
             let a11y = fx_shell::A11y::attach(window, latest.clone())
                 .map(|(adapter, actions)| (A11yHandle::new(adapter, latest), actions));
+            // The confirmations find the window's tree through it.
+            if let Some((handle, _)) = &a11y {
+                handle.register(window.window_handle().window_id());
+            }
             let view = cx.new(|cx| {
                 let services = WindowServices {
                     places: shared.places,
