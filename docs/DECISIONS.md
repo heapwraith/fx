@@ -461,7 +461,7 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 ## D-059 — "Sobre", "Como usar" e o slogan (T4.6)
 - **Data:** 2026-11-22 · **Status:** aceita (pedido do usuário)
 - **Slogan:** "Pastas abrem na hora. Arquivos aparecem enquanto você digita." / "Folders open instantly. Files appear as you type." Vem das duas promessas medidas do projeto (P2 e P5), sem adjetivo vazio. Usado no instalador e no "Sobre".
-- **"Sobre o fx"** (paleta): logo, nome, slogan, versão e compilação, licença, "Feito em Rust com o GPUI, o motor de interface do Zed", e links: Procurar atualizações, Novidades (CHANGELOG), Código e sugestões (GitHub), Como usar. Substitui o aviso no status.
+- **"Sobre o fx"** (paleta): logo, nome, slogan, versão e compilação, licença, "Feito em Rust, nativo do Windows" (sem citar o Zed na interface, a pedido do usuário; a atribuição do GPUI fica na licença, ver abaixo), e links: Procurar atualizações, Novidades (CHANGELOG), Código e sugestões (GitHub), Como usar. Substitui o aviso no status.
 - **"Como usar o fx"** (F1, paleta e sozinha na primeira abertura, `guia_visto` no `settings.toml`): seis grupos (Navegar, Buscar, Arquivos, Ver, Abas e painéis, Organizar) com os atalhos que existem no código, em duas colunas, rolável em janelas baixas. Esc ou clique fora fecha.
 - **Textos do instalador** reescritos: título que acolhe ("Bem-vindo ao fx"), o slogan como subtítulo, uma frase prática ("Leva poucos segundos. Instala só para você, sem pedir senha de administrador."), erros que dizem o que fazer, e a versão discreta no rodapé.
 

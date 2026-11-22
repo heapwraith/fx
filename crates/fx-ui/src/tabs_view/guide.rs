@@ -305,8 +305,8 @@ impl TabsView {
                         "Free software, under the MIT or Apache 2.0 licenses."
                     ))
                     .child(tr!(
-                        "Feito em Rust com o GPUI, o motor de interface do Zed.",
-                        "Made in Rust with GPUI, the interface engine of Zed."
+                        "Feito em Rust, nativo do Windows.",
+                        "Made in Rust, native to Windows."
                     )),
             )
             .child(
