@@ -9,8 +9,8 @@ use std::sync::mpsc::Receiver;
 
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
 use windows::Win32::UI::Shell::{
-    SEE_MASK_FLAG_NO_UI, SEE_MASK_INVOKEIDLIST, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW,
-    SHMultiFileProperties, ShellExecuteExW,
+    SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW, SHOP_FILEPATH, SHObjectProperties,
+    ShellExecuteExW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{ASFW_ANY, AllowSetForegroundWindow, SW_SHOWNORMAL};
 use windows::core::PCWSTR;
@@ -41,27 +41,29 @@ pub fn launch(what: Launch) -> Receiver<io::Result<()>> {
     })
 }
 
-/// The shell's Properties sheet: the "properties" verb for one item, the
-/// multi-item sheet for several (it sums sizes, like Explorer's).
+/// The shell's Properties sheet: `SHObjectProperties` for one item (it
+/// needs nothing from this short-lived thread), the multi-item sheet for
+/// several (it sums sizes, like Explorer's), hosted by `super::sheets`.
 fn properties(items: &[std::path::PathBuf]) -> io::Result<()> {
     match items {
         [] => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "nada selecionado",
         )),
-        [one] => shell_execute(
-            Some("properties"),
-            one.as_os_str(),
-            None,
-            None,
-            SEE_MASK_INVOKEIDLIST,
-        ),
-        many => {
-            let data = super::dragdrop::data_object(many)?;
-            // SAFETY: `data` is the shell's own data object for `many`; the
-            // sheet keeps its own reference.
-            unsafe { SHMultiFileProperties(&data, 0) }.map_err(to_io)
+        [one] => {
+            let path = wide_z(one.as_os_str());
+            // SAFETY: `path` is NUL-terminated and alive for the call; no owner
+            // window, default page.
+            let ok = unsafe {
+                SHObjectProperties(None, SHOP_FILEPATH, PCWSTR(path.as_ptr()), PCWSTR::null())
+            };
+            if ok.as_bool() {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            }
         }
+        many => super::sheets::multi(many.to_vec()),
     }
 }
 
@@ -136,5 +138,77 @@ mod tests {
         assert!(!missing.exists());
         let r = shell_execute(None, missing.as_os_str(), None, None, SEE_MASK_FLAG_NO_UI);
         assert!(r.is_err());
+    }
+}
+
+/// Opens real Properties sheets (one item and two items), checks that each
+/// window appears and closes it. Ignored: it shows windows on the desktop.
+#[cfg(test)]
+mod sheet_tests {
+    use std::time::{Duration, Instant};
+
+    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible, PostMessageW,
+        WM_CLOSE,
+    };
+    use windows::core::BOOL;
+
+    use crate::launch::Launch;
+
+    /// Visible top-level windows of this process: (handle, title).
+    fn own_windows() -> Vec<(HWND, String)> {
+        unsafe extern "system" fn collect(h: HWND, l: LPARAM) -> BOOL {
+            // SAFETY: `l` is the `Vec` passed below, alive during EnumWindows.
+            let found = unsafe { &mut *(l.0 as *mut Vec<(HWND, String)>) };
+            let mut pid = 0;
+            // SAFETY: plain calls on a window handle given by EnumWindows.
+            unsafe { GetWindowThreadProcessId(h, Some(&mut pid)) };
+            // SAFETY: as above.
+            let visible = unsafe { IsWindowVisible(h) }.as_bool();
+            if pid == std::process::id() && visible {
+                let mut buf = [0u16; 256];
+                // SAFETY: `buf` is a valid buffer of its length.
+                let n = unsafe { GetWindowTextW(h, &mut buf) };
+                found.push((h, String::from_utf16_lossy(&buf[..n.max(0) as usize])));
+            }
+            true.into()
+        }
+        let mut found: Vec<(HWND, String)> = Vec::new();
+        // SAFETY: the callback only touches `found`, which outlives the call.
+        let _ = unsafe { EnumWindows(Some(collect), LPARAM(&mut found as *mut _ as isize)) };
+        found
+    }
+
+    fn wait_for_sheet(name: &str) -> HWND {
+        let start = Instant::now();
+        loop {
+            if let Some((h, _)) = own_windows().into_iter().find(|(_, t)| t.contains(name)) {
+                return h;
+            }
+            assert!(
+                start.elapsed() < Duration::from_secs(10),
+                "no sheet for {name}"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn properties_sheets_appear() {
+        let windir = std::path::PathBuf::from(std::env::var("windir").unwrap());
+        let one = crate::launch(Launch::Properties(vec![windir.join("notepad.exe")]));
+        one.recv_timeout(Duration::from_secs(10)).unwrap().unwrap();
+        let h = wait_for_sheet("notepad.exe");
+        // SAFETY: plain call on a window of this process.
+        unsafe { PostMessageW(Some(h), WM_CLOSE, WPARAM(0), LPARAM(0)) }.unwrap();
+
+        let two = vec![windir.join("notepad.exe"), windir.join("explorer.exe")];
+        let rx = crate::launch(Launch::Properties(two));
+        rx.recv_timeout(Duration::from_secs(10)).unwrap().unwrap();
+        let h = wait_for_sheet("notepad.exe, ");
+        // SAFETY: as above.
+        unsafe { PostMessageW(Some(h), WM_CLOSE, WPARAM(0), LPARAM(0)) }.unwrap();
     }
 }

@@ -354,6 +354,7 @@ impl FolderView {
                 .map(|i| {
                     let f = &hits[i];
                     div()
+                        .w_full()
                         .h(px(ROW_HEIGHT))
                         .px(px(space(3)))
                         .flex()

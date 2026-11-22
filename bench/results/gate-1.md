@@ -27,6 +27,12 @@ Mesma da Fase 0: AMD Ryzen 7 5700X, 32 GB, RTX 5070, monitor 1920×1080 a 239 Hz
 | T1.15 Arrastar e soltar | ✅ entre dois fx · **Explorador, área de trabalho e navegador pendentes (manual)** |
 | T1.16 Menu de contexto | ✅ funcional · **p95 acima da meta neste PC** (ver abaixo) |
 | T1.17 Persistência | ✅ |
+| T1.19 Revisão visual | ✅ |
+| T1.20 Ordenar por coluna, Tipo, larguras | ✅ · P4 com reordenação de 100 mil: p95 ≤ 4,4 ms |
+| T1.21 Ocultos e Propriedades | ✅ · Propriedades corrigidas na conferência (D-034) |
+| T1.22 Quick Look | ✅ · foto de 9,5 MB: ≤ 69 ms (meta 100) |
+| T1.23 Busca no disco (Ctrl+F) | ✅ · P4 com resultados chegando: p95 ≤ 5,3 ms |
+| T1.24 Paleta de comandos | ✅ · P4: p95 ≤ 4,7 ms |
 | T1.18 Relatório do portão | este documento · **falta o registro das 2 semanas de uso** |
 
 ## Critérios do portão × resultados

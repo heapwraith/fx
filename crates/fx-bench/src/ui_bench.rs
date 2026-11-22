@@ -582,6 +582,19 @@ fn report_keys(
     folder: &str,
     input: &str,
 ) -> std::io::Result<()> {
+    report_keys_against(trace, title, kinds, task, folder, input, TARGET_P4_MS)
+}
+
+/// [`report_keys`] with another target (Quick Look: key -> preview shown).
+fn report_keys_against(
+    trace: &TraceFile,
+    title: &str,
+    kinds: &[(&str, &str)],
+    task: &str,
+    folder: &str,
+    input: &str,
+    target: f64,
+) -> std::io::Result<()> {
     println!("{title}");
     let mut parts = Vec::new();
     let mut pass = true;
@@ -592,10 +605,10 @@ fn report_keys(
         }
         let (median, p95) = median_p95(&ms_samples(&samples));
         let max = samples.iter().copied().fold(0.0, f64::max);
-        let ok = p95 <= TARGET_P4_MS;
+        let ok = p95 <= target;
         pass &= ok;
         println!(
-            "  {label}: {} keys  median {median:.2} ms  p95 {p95:.2} ms  max {max:.2} ms   target ≤ {TARGET_P4_MS} ms  {}",
+            "  {label}: {} keys  median {median:.2} ms  p95 {p95:.2} ms  max {max:.2} ms   target ≤ {target} ms  {}",
             samples.len(),
             if ok { "pass" } else { "FAIL" }
         );
@@ -616,7 +629,7 @@ fn report_keys(
         folder = json_string(folder),
         input = json_string(input),
         parts = parts.join(", "),
-        t = TARGET_P4_MS,
+        t = target,
         pass = pass,
         machine = json_string(&machine()),
         commit = json_string(commit()),
@@ -937,6 +950,115 @@ pub fn menu_latency() -> std::io::Result<()> {
     );
     std::fs::write(results_dir()?.join(format!("{date}-T1.16-menu.json")), json)?;
     Ok(())
+}
+
+/// fx on `folder`, driven by `bench/drive.ps1` with `steps` (real input).
+fn run_steps(folder: &Path, steps: &str) -> std::io::Result<TraceFile> {
+    let mut child = spawn_fx_with(folder, false, &[])?;
+    std::thread::sleep(Duration::from_secs(2));
+    let out = Command::new("powershell")
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+        .arg(Path::new("bench").join("drive.ps1"))
+        .args(["-ProcessId", &child.id().to_string()])
+        .args(["-Steps", steps])
+        .output()?;
+    Command::new("powershell")
+        .args(["-NoProfile", "-Command"])
+        .arg(format!(
+            "(Get-Process -Id {}).CloseMainWindow() | Out-Null",
+            child.id()
+        ))
+        .status()?;
+    wait_with_timeout(&mut child, Duration::from_secs(10))?;
+    if !out.status.success() {
+        return Err(std::io::Error::other(format!(
+            "drive.ps1 failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        )));
+    }
+    read_trace(child.id())
+}
+
+/// Quick Look must show an image of up to 10 MB within this (T1.22).
+const TARGET_PREVIEW_MS: f64 = 100.0;
+
+/// Tasks T1.20-T1.24 with real input:
+/// - re-sorting 100,000 items from the command palette, then arrows right
+///   away (keys while the sort runs off the UI thread): P4 for both;
+/// - typing in the disk search (Ctrl+F) on the fixtures root while results
+///   arrive: P4;
+/// - Quick Look on a ~10 MB JPEG, a ~10 MB PNG and a text file: key ->
+///   preview on screen (≤ 100 ms).
+pub fn features() -> std::io::Result<()> {
+    let flat = flat_100k()?;
+    let mut steps = String::new();
+    for _ in 0..KEY_ROUNDS {
+        for cmd in [
+            "ordenar por tipo",
+            "ordenar por tamanho",
+            "ordenar por data",
+            "ordenar por nome",
+        ] {
+            steps.push_str(&format!("key:ctrl+k;type:{cmd};key:enter;"));
+            steps.push_str(&"key:down;".repeat(6));
+            steps.push_str("wait:300;");
+        }
+    }
+    let trace = run_steps(&flat, &steps)?;
+    report_keys(
+        &trace,
+        "P4: key -> frame presented, palette and arrows while re-sorting flat-100k (release)",
+        &[
+            ("palette", "palette keys (Ctrl+K, typing, Enter)"),
+            ("move", "arrows right after each re-sort"),
+        ],
+        "T1.20",
+        "flat-100k",
+        "drive.ps1: 3 rounds x 4 sort commands from the palette, 6 arrows after each",
+    )?;
+
+    let root = fixtures_root()?;
+    let mut steps = String::from("key:ctrl+f;wait:200;");
+    for q in ["report", "photo", "budget", "scan", "invoice"] {
+        steps.push_str(&format!("type:{q};wait:400;"));
+        steps.push_str(&"key:back;".repeat(q.len()));
+        steps.push_str("wait:200;");
+    }
+    steps.push_str("key:esc;");
+    let trace = run_steps(&root, &steps)?;
+    report_keys(
+        &trace,
+        "P4: key -> frame presented, disk search (Ctrl+F) on the fixtures root (release)",
+        &[("search", "search keys while results arrive")],
+        "T1.23",
+        "fx-fixtures (all fixtures, ~112k items)",
+        "drive.ps1: 5 queries typed and erased, 40 ms between keys",
+    )?;
+
+    let status = Command::new("powershell")
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+        .arg(Path::new("bench").join("preview-fixture.ps1"))
+        .status()?;
+    if !status.success() {
+        return Err(std::io::Error::other("preview-fixture.ps1 failed"));
+    }
+    let preview = root.join("preview");
+    let mut steps = String::new();
+    for _ in 0..5 {
+        steps.push_str(
+            "key:home;key:space;wait:900;key:down;wait:900;key:down;wait:600;key:esc;wait:300;",
+        );
+    }
+    let trace = run_steps(&preview, &steps)?;
+    report_keys_against(
+        &trace,
+        "Quick Look: key -> preview on screen, 9.5 MB JPEG (12 MP), 10.4 MB PNG, 0.6 MB text (release)",
+        &[("preview", "previews (Space, then arrows)")],
+        "T1.22",
+        "fx-fixtures/preview",
+        "drive.ps1: 5 rounds of Space on the JPEG, Down to the PNG, Down to the text",
+        TARGET_PREVIEW_MS,
+    )
 }
 
 #[cfg(test)]

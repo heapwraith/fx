@@ -17,13 +17,15 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::Shell::{
     IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF, SIIGBF_BIGGERSIZEOK,
-    SIIGBF_INCACHEONLY,
+    SIIGBF_ICONONLY, SIIGBF_INCACHEONLY, SIIGBF_THUMBNAILONLY,
 };
 use windows::core::PCWSTR;
 
 use super::icons::bitmap_bgra;
-use crate::icons::encode_png;
-use crate::thumbs::{THUMB_SIZE, THUMB_TIME_LIMIT, ThumbReady, ThumbService, fit_rgba};
+use crate::icons::{encode_bmp, encode_png};
+use crate::thumbs::{
+    ShellPreview, THUMB_SIZE, THUMB_TIME_LIMIT, ThumbReady, ThumbService, fit_rgba,
+};
 
 /// Starts the thumbnail service.
 pub fn start_thumb_service(replies: Sender<ThumbReady>) -> std::io::Result<ThumbService> {
@@ -43,24 +45,54 @@ fn thumbnail(path: &Path, cache_only: bool) -> Option<Vec<u8>> {
     thumbnail_sized(path, cache_only, THUMB_SIZE)
 }
 
-/// A large shell thumbnail (PNG, at most `max` pixels) for Quick Look
-/// (T1.22): photos, videos, documents with a thumbnail handler, or the big
-/// icon. Initializes COM on the calling thread (a dedicated worker).
-pub fn preview_png(path: &Path, max: u32) -> Option<Vec<u8>> {
+/// A large shell thumbnail for Quick Look (T1.22), at most `max` pixels:
+/// photos (decoded by WIC at a reduced size), videos, documents with a
+/// thumbnail handler. Without a thumbnail: the type's icon at `icon` pixels,
+/// or `None` when `icon` is `None`. Initializes COM on the calling thread (a
+/// dedicated worker).
+pub fn preview_image(path: &Path, max: u32, icon: Option<u32>) -> Option<ShellPreview> {
     // SAFETY: COM on this worker thread; harmless if already initialized.
     let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
-    thumbnail_sized(path, false, max)
+    if let Some((w, h, bgra)) = image_bgra(path, SIIGBF_THUMBNAILONLY, max) {
+        return Some(ShellPreview {
+            bmp: encode_bmp(w, h, &bgra),
+            is_icon: false,
+        });
+    }
+    let (w, h, bgra) = image_bgra(path, SIIGBF_ICONONLY, icon?)?;
+    Some(ShellPreview {
+        bmp: encode_bmp(w, h, &bgra),
+        is_icon: true,
+    })
 }
 
 fn thumbnail_sized(path: &Path, cache_only: bool, max: u32) -> Option<Vec<u8>> {
+    let extra = if cache_only {
+        SIIGBF_INCACHEONLY
+    } else {
+        SIIGBF(0)
+    };
+    image_png(path, extra, max)
+}
+
+/// `IShellItemImageFactory::GetImage` with `extra` flags, as a PNG of at most
+/// `max` pixels.
+fn image_png(path: &Path, extra: SIIGBF, max: u32) -> Option<Vec<u8>> {
+    let (w, h, mut px) = image_bgra(path, extra, max)?;
+    for p in px.as_chunks_mut::<4>().0 {
+        p.swap(0, 2); // BGRA -> RGBA
+    }
+    Some(encode_png(w, h, &px))
+}
+
+/// `IShellItemImageFactory::GetImage` with `extra` flags: straight-alpha BGRA
+/// pixels, at most `max` pixels on a side.
+fn image_bgra(path: &Path, extra: SIIGBF, max: u32) -> Option<(u32, u32, Vec<u8>)> {
     let wide: Vec<u16> = OsStr::new(path).encode_wide().chain([0]).collect();
     // SAFETY: `wide` is NUL-terminated and outlives the call; no bind context.
     let factory: IShellItemImageFactory =
         unsafe { SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None) }.ok()?;
-    let mut flags = SIIGBF_BIGGERSIZEOK;
-    if cache_only {
-        flags = SIIGBF(flags.0 | SIIGBF_INCACHEONLY.0);
-    }
+    let flags = SIIGBF(SIIGBF_BIGGERSIZEOK.0 | extra.0);
     let size = SIZE {
         cx: max as i32,
         cy: max as i32,
@@ -71,15 +103,13 @@ fn thumbnail_sized(path: &Path, cache_only: bool, max: u32) -> Option<Vec<u8>> {
     // SAFETY: GetImage gave us ownership of the bitmap; deleted once.
     let _ = unsafe { DeleteObject(HGDIOBJ(bitmap.0)) };
     let (w, h, mut bgra) = pixels?;
-    let opaque = bgra.as_chunks::<4>().0.iter().all(|p| p[3] == 0);
-    for p in bgra.as_chunks_mut::<4>().0 {
-        p.swap(0, 2); // BGRA -> RGBA
-        if opaque {
+    if bgra.as_chunks::<4>().0.iter().all(|p| p[3] == 0) {
+        for p in bgra.as_chunks_mut::<4>().0 {
             p[3] = 255; // photos come without alpha
         }
     }
-    let (w, h, rgba) = fit_rgba(w, h, bgra, max);
-    Some(encode_png(w, h, &rgba))
+    // Box-filters the 4 channels alike, so BGRA works as well as RGBA.
+    Some(fit_rgba(w, h, bgra, max))
 }
 
 #[cfg(test)]

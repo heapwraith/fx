@@ -10,6 +10,7 @@
 use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::channel;
 use std::time::Instant;
 
@@ -27,8 +28,23 @@ use crate::theme::{CAPTION_SIZE, RADIUS, rgba, space};
 
 /// Largest side of the shell thumbnail used for "other" files.
 const SHELL_PREVIEW: u32 = 512;
+/// Types without a thumbnail show their icon at this size (not stretched).
+const ICON_PREVIEW: u32 = 128;
+/// JPEG and TIFF photos above this size are shown from the shell's thumbnail
+/// (WIC decodes a JPEG straight at a reduced size): decoding a 12 MP photo
+/// in full takes ~140 ms, the thumbnail ~45 ms. PNG decodes faster in fx
+/// (10 MB: ~40 ms, via the shell ~55 ms); GIF keeps its animation.
+const LARGE_IMAGE: u64 = 2 * 1024 * 1024;
+/// Largest side of that thumbnail: covers the panel of a maximized 1080p
+/// window.
+const LARGE_PREVIEW: u32 = 1920;
 const MONO_FONT: &str = "Consolas";
 const LINE_HEIGHT: f32 = 18.0;
+
+/// Whether the shell's photo decoder (WIC and its JPEG thumbnail provider)
+/// was warmed up in this process. Its first use costs ~50 ms more (88 ms
+/// instead of 39 for a 12 MP JPEG), which would land on the first Space.
+static PHOTO_DECODER_WARM: AtomicBool = AtomicBool::new(false);
 
 /// The open preview.
 pub(super) struct QuickLook {
@@ -45,6 +61,8 @@ pub(super) struct QuickLook {
 enum Content {
     Loading,
     Image(Arc<RenderImage>),
+    /// The file type's icon (no thumbnail handler for it), with a caption.
+    Icon(Arc<RenderImage>, &'static str),
     Text {
         lines: Arc<Vec<SharedString>>,
         truncated: bool,
@@ -68,7 +86,7 @@ impl FolderView {
 
     pub(super) fn close_quick_look(&mut self) {
         if let Some(q) = self.quick_look.take()
-            && let Content::Image(image) = q.content
+            && let Content::Image(image) | Content::Icon(image, _) = q.content
         {
             self.stale_images.push(image);
         }
@@ -80,12 +98,38 @@ impl FolderView {
         for image in self.stale_images.drain(..) {
             let _ = window.drop_image(image);
         }
+        self.warm_photo_decoder();
         let Some(q) = &self.quick_look else { return };
         match self.selection.cursor() {
             Some(c) if c != q.entry => self.load_quick_look(c, Instant::now(), cx),
             Some(_) => {}
             None => self.close_quick_look(),
         }
+    }
+
+    /// The first time the cursor rests on a large photo, decodes it once in
+    /// the background and throws the result away: the decoder is then loaded
+    /// when Space comes. Only users who look at photos pay its memory.
+    fn warm_photo_decoder(&self) {
+        if PHOTO_DECODER_WARM.load(Ordering::Relaxed) {
+            return;
+        }
+        let Some(c) = self.selection.cursor() else {
+            return;
+        };
+        let is_dir = self.list.attributes(c).is_dir();
+        let photo = matches!(
+            preview_kind(self.list.name(c), is_dir),
+            PreviewKind::Image(ImageKind::Jpeg | ImageKind::Tiff)
+        );
+        if !photo || self.list.size(c) <= LARGE_IMAGE {
+            return;
+        }
+        PHOTO_DECODER_WARM.store(true, Ordering::Relaxed);
+        let path = self.path.join(self.list.os_name(c));
+        let _ = std::thread::Builder::new()
+            .name("fx-preview-warm".into())
+            .spawn(move || drop(fx_shell::preview_image(&path, LARGE_PREVIEW, None)));
     }
 
     fn load_quick_look(&mut self, entry: u32, asked: Instant, cx: &mut Context<Self>) {
@@ -122,7 +166,7 @@ impl FolderView {
         let spawned = std::thread::Builder::new()
             .name("fx-preview".into())
             .spawn(move || {
-                let _ = tx.send(load(&path, kind, bytes, &decode));
+                let _ = tx.send(load(&path, kind, bytes, is_dir, &decode));
             });
         if spawned.is_err() {
             if let Some(q) = &mut self.quick_look {
@@ -136,7 +180,7 @@ impl FolderView {
             let Ok(content) = content else { return };
             let _ = this.update(cx, |view, cx| {
                 let Some(q) = view.quick_look.as_mut().filter(|q| q.ticket == ticket) else {
-                    if let Content::Image(image) = content {
+                    if let Content::Image(image) | Content::Icon(image, _) = content {
                         view.stale_images.push(image);
                     }
                     return;
@@ -160,6 +204,20 @@ impl FolderView {
         let body = match q.content.clone() {
             Content::Loading => message("Carregando…", t.text_secondary).into_any_element(),
             Content::Nothing(why) => message(why, t.text_secondary).into_any_element(),
+            Content::Icon(image, caption) => div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .gap(px(space(4)))
+                .child(
+                    img(ImageSource::Render(image))
+                        .size(px(ICON_PREVIEW as f32))
+                        .object_fit(ObjectFit::Contain),
+                )
+                .child(div().text_color(rgba(t.text_secondary)).child(caption))
+                .into_any_element(),
             Content::Image(image) => div()
                 .size_full()
                 .p(px(space(2)))
@@ -286,8 +344,22 @@ fn message(text: &'static str, color: crate::theme::Color) -> gpui::Div {
 type Decode = dyn Fn(Image) -> Option<Arc<RenderImage>>;
 
 /// Runs on the preview worker.
-fn load(path: &Path, kind: PreviewKind, bytes: u64, decode: &Decode) -> Content {
+fn load(path: &Path, kind: PreviewKind, bytes: u64, is_dir: bool, decode: &Decode) -> Content {
+    let caption = if is_dir {
+        "Enter abre a pasta."
+    } else {
+        "Sem pré-visualização para este tipo de arquivo."
+    };
+    let shell = |path: &Path, decode: &Decode| shell(path, decode, caption);
     match kind {
+        PreviewKind::Image(k)
+            if bytes > LARGE_IMAGE
+                && matches!(k, ImageKind::Jpeg | ImageKind::Tiff)
+                && let Some(image) = fx_shell::preview_image(path, LARGE_PREVIEW, None)
+                    .and_then(|p| decode(Image::from_bytes(ImageFormat::Bmp, p.bmp))) =>
+        {
+            Content::Image(image)
+        }
         PreviewKind::Image(k) if bytes <= IMAGE_LIMIT => match std::fs::read(path) {
             Ok(data) => match decode(Image::from_bytes(format_of(k), data)) {
                 Some(image) => Content::Image(image),
@@ -321,13 +393,15 @@ fn read_start(path: &Path) -> std::io::Result<(Vec<u8>, bool)> {
     Ok((data, more))
 }
 
-fn shell(path: &Path, decode: &Decode) -> Content {
-    fx_shell::preview_png(path, SHELL_PREVIEW)
-        .and_then(|png| decode(Image::from_bytes(ImageFormat::Png, png)))
-        .map_or(
-            Content::Nothing("Sem pré-visualização para este tipo de arquivo."),
-            Content::Image,
-        )
+fn shell(path: &Path, decode: &Decode, caption: &'static str) -> Content {
+    let Some(preview) = fx_shell::preview_image(path, SHELL_PREVIEW, Some(ICON_PREVIEW)) else {
+        return Content::Nothing("Sem pré-visualização para este tipo de arquivo.");
+    };
+    match decode(Image::from_bytes(ImageFormat::Bmp, preview.bmp)) {
+        Some(image) if preview.is_icon => Content::Icon(image, caption),
+        Some(image) => Content::Image(image),
+        None => Content::Nothing("Sem pré-visualização para este tipo de arquivo."),
+    }
 }
 
 fn format_of(k: ImageKind) -> ImageFormat {
@@ -362,7 +436,7 @@ mod tests {
         assert!(more);
 
         let started = Instant::now();
-        let content = load(&path, PreviewKind::Text, 0, &*no_decoder());
+        let content = load(&path, PreviewKind::Text, 0, false, &*no_decoder());
         let took = started.elapsed();
         let Content::Text { lines, truncated } = content else {
             panic!("text expected");
@@ -379,7 +453,7 @@ mod tests {
     fn unreadable_file_says_so() {
         let dir = tempfile::tempdir().unwrap();
         let missing = dir.path().join("sumiu.txt");
-        let content = load(&missing, PreviewKind::Text, 0, &*no_decoder());
+        let content = load(&missing, PreviewKind::Text, 0, false, &*no_decoder());
         assert!(matches!(content, Content::Nothing(m) if m.contains("ler")));
     }
 }

@@ -28,17 +28,19 @@ const ICON_COMMAND: &str = "\u{E756}";
 #[derive(Debug, Clone)]
 enum Item {
     Command(&'static Command),
-    Folder { path: PathBuf, pinned: bool },
+    /// `name`: the sidebar's label (Portuguese names of known folders).
+    Folder {
+        path: PathBuf,
+        pinned: bool,
+        name: String,
+    },
 }
 
 impl Item {
     fn label(&self) -> String {
         match self {
             Item::Command(c) => c.label.to_owned(),
-            Item::Folder { path, .. } => path.file_name().map_or_else(
-                || path.display().to_string(),
-                |n| n.to_string_lossy().into_owned(),
-            ),
+            Item::Folder { name, .. } => name.clone(),
         }
     }
 }
@@ -114,15 +116,19 @@ impl TabsView {
                 push(p);
             }
         }
-        items.extend(recent.into_iter().map(|path| Item::Folder {
+        let places = self.places.read(cx);
+        let folder = |path: PathBuf, pinned: bool| Item::Folder {
+            name: places.label(&path).to_string(),
             path,
-            pinned: false,
-        }));
-        let pinned: Vec<PathBuf> = self.places.read(cx).pinned.paths().to_vec();
+            pinned,
+        };
+        items.extend(recent.into_iter().map(|p| folder(p, false)));
         items.extend(
-            pinned
-                .into_iter()
-                .map(|path| Item::Folder { path, pinned: true }),
+            places
+                .pinned
+                .paths()
+                .iter()
+                .map(|p| folder(p.clone(), true)),
         );
         items.extend(COMMANDS.iter().map(Item::Command));
         let mut palette = Palette {
@@ -254,7 +260,7 @@ impl TabsView {
                     detail: SharedString::default(),
                     shortcut: c.shortcut().unwrap_or_default().into(),
                 },
-                item @ Item::Folder { path, pinned } => Row {
+                item @ Item::Folder { path, pinned, .. } => Row {
                     glyph: if *pinned { ICON_PIN } else { ICON_FOLDER },
                     label: item.label().into(),
                     detail: path.display().to_string().into(),
@@ -270,6 +276,7 @@ impl TabsView {
                 .map(|i| {
                     let r = &rows[i];
                     div()
+                        .w_full()
                         .h(px(ROW_HEIGHT))
                         .px(px(space(3)))
                         .flex()
@@ -391,6 +398,7 @@ impl TabsView {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     fn palette(folders: &[(&str, bool)]) -> Palette {
         let mut items: Vec<Item> = folders
@@ -398,6 +406,9 @@ mod tests {
             .map(|(p, pinned)| Item::Folder {
                 path: PathBuf::from(p),
                 pinned: *pinned,
+                name: Path::new(p)
+                    .file_name()
+                    .map_or_else(|| p.to_string(), |n| n.to_string_lossy().into_owned()),
             })
             .collect();
         items.extend(COMMANDS.iter().map(Item::Command));

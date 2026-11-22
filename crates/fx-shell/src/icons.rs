@@ -183,6 +183,39 @@ pub fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
     png
 }
 
+/// Encodes straight-alpha BGRA pixels (top-down rows) as a 32-bit BMP with
+/// an alpha mask (BITMAPV4HEADER, `BI_BITFIELDS`). For large Quick Look
+/// images (T1.22): no checksums or compression, so building it costs about a
+/// copy of the pixels.
+pub fn encode_bmp(width: u32, height: u32, bgra: &[u8]) -> Vec<u8> {
+    debug_assert_eq!(bgra.len(), (width * height * 4) as usize);
+    const FILE_HEADER: u32 = 14;
+    const V4_HEADER: u32 = 108;
+    let offset = FILE_HEADER + V4_HEADER;
+    let mut bmp = Vec::with_capacity(offset as usize + bgra.len());
+    bmp.extend_from_slice(b"BM");
+    bmp.extend_from_slice(&(offset + bgra.len() as u32).to_le_bytes());
+    bmp.extend_from_slice(&[0; 4]); // reserved
+    bmp.extend_from_slice(&offset.to_le_bytes());
+    bmp.extend_from_slice(&V4_HEADER.to_le_bytes());
+    bmp.extend_from_slice(&(width as i32).to_le_bytes());
+    bmp.extend_from_slice(&(-(height as i32)).to_le_bytes()); // top-down
+    bmp.extend_from_slice(&1u16.to_le_bytes()); // planes
+    bmp.extend_from_slice(&32u16.to_le_bytes()); // bits per pixel
+    bmp.extend_from_slice(&3u32.to_le_bytes()); // BI_BITFIELDS
+    bmp.extend_from_slice(&(bgra.len() as u32).to_le_bytes());
+    bmp.extend_from_slice(&[0; 8]); // resolution
+    bmp.extend_from_slice(&[0; 8]); // palette
+    for mask in [0x00FF_0000u32, 0x0000_FF00, 0x0000_00FF, 0xFF00_0000] {
+        bmp.extend_from_slice(&mask.to_le_bytes()); // R, G, B, A
+    }
+    bmp.extend_from_slice(b"BGRs"); // LCS_sRGB, stored little-endian
+    bmp.extend_from_slice(&[0; 36 + 12]); // endpoints, gamma
+    debug_assert_eq!(bmp.len(), offset as usize);
+    bmp.extend_from_slice(bgra);
+    bmp
+}
+
 fn adler32(data: &[u8]) -> u32 {
     let (mut a, mut b) = (1u32, 0u32);
     for &x in data {
@@ -211,6 +244,21 @@ fn crc32(data: &[u8]) -> u32 {
 mod tests {
     use super::*;
     use std::time::Instant;
+
+    #[test]
+    fn bmp_header_describes_the_pixels() {
+        let bgra = [1u8, 2, 3, 255, 4, 5, 6, 128];
+        let bmp = encode_bmp(2, 1, &bgra);
+        assert_eq!(&bmp[..2], b"BM");
+        let u32_at = |i: usize| u32::from_le_bytes(bmp[i..i + 4].try_into().unwrap());
+        assert_eq!(u32_at(2) as usize, bmp.len());
+        assert_eq!(u32_at(10), 122); // pixels start
+        assert_eq!(u32_at(18), 2); // width
+        assert_eq!(u32_at(22) as i32, -1); // top-down
+        assert_eq!(u32_at(30), 3); // BI_BITFIELDS
+        assert_eq!(u32_at(66), 0xFF00_0000); // alpha mask
+        assert_eq!(&bmp[122..], &bgra);
+    }
 
     #[test]
     fn keys_share_by_extension_except_per_file_icons() {

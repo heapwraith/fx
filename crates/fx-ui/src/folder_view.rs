@@ -1582,10 +1582,19 @@ impl FolderView {
             return;
         }
         let plain = !m.control && !m.alt && !m.shift && !m.platform;
-        if m.control && m.shift && !m.alt {
-            let grid = match ks.key.as_str() {
-                "2" => Some(true),
-                "6" => Some(false),
+        if m.control && !m.alt {
+            // With Shift, GPUI reports the digit's shifted character ("@")
+            // and drops Shift; the keyboard state tells the digit.
+            let digit = if m.shift {
+                ks.key.parse::<u8>().ok()
+            } else if !ks.key.chars().all(|c| c.is_ascii_alphanumeric()) {
+                fx_shell::shifted_digit()
+            } else {
+                None
+            };
+            let grid = match digit {
+                Some(2) => Some(true),
+                Some(6) => Some(false),
                 _ => None,
             };
             if let Some(grid) = grid {
@@ -1611,6 +1620,10 @@ impl FolderView {
             "up" if only_alt => self.go_up(window, cx).then_some("open"),
             "left" if only_alt => self.go_back(window, cx).then_some("open"),
             "right" if only_alt => self.go_forward(window, cx).then_some("open"),
+            "enter" if only_alt => {
+                self.show_properties(cx);
+                Some("open")
+            }
             _ if m.alt || m.platform => None,
             _ if step.is_some() => {
                 let mode = if m.shift {
@@ -1626,10 +1639,6 @@ impl FolderView {
                 Some("move")
             }
             "enter" if plain => self.open_cursor(window, cx).then_some("open"),
-            "enter" if only_alt => {
-                self.show_properties(cx);
-                Some("open")
-            }
             "enter" if m.shift && !m.control && !m.alt => {
                 let file = self
                     .selection
@@ -1704,27 +1713,32 @@ impl FolderView {
         if let Some(notice) = self.ops.read(cx).notice() {
             return notice.to_owned();
         }
-        let text = self.load_text();
-        match self.selection.len() {
-            0 => text,
-            1 => format!("{text} · 1 selecionado"),
-            k => format!("{text} · {k} selecionados"),
-        }
+        // The selection goes right after the count: when the status is cut
+        // with an ellipsis, the hidden count and the load time go first.
+        let (head, tail) = self.load_text();
+        let selected = match self.selection.len() {
+            0 => String::new(),
+            1 => " · 1 selecionado".to_owned(),
+            k => format!(" · {k} selecionados"),
+        };
+        format!("{head}{selected}{tail}")
     }
 
-    fn load_text(&self) -> String {
+    /// The status without the selection: (count, rest).
+    fn load_text(&self) -> (String, String) {
         let n = self.list.len();
         if let Some(filtered) = self
             .filtered
             .as_ref()
             .filter(|_| !self.filter_text.is_empty())
         {
-            return format!(
+            let head = format!(
                 "filtro \"{}\": {} de {}",
                 self.filter_text,
                 fx_core::format::count(filtered.len()),
                 fx_core::format::count(n)
             );
+            return (head, String::new());
         }
         // Without a name filter, `filtered` only leaves hidden entries out.
         let shown = rows_of(&self.filtered, &self.list).len();
@@ -1733,16 +1747,17 @@ impl FolderView {
             1 => " · 1 oculto".to_owned(),
             k => format!(" · {} ocultos", fx_core::format::count(k)),
         };
-        match &self.status {
-            Status::Loading => format!("{} — carregando…", items(shown)),
-            Status::Sorting => format!("{} — ordenando…", items(shown)),
+        let tail = match &self.status {
+            Status::Loading => " — carregando…".to_owned(),
+            Status::Sorting => " — ordenando…".to_owned(),
             Status::Ready => match self.loaded_in {
-                Some(d) => format!("{}{hidden} · lida em {}", items(shown), elapsed_text(d)),
-                None => format!("{}{hidden}", items(shown)),
+                Some(d) => format!("{hidden} · lida em {}", elapsed_text(d)),
+                None => hidden,
             },
             // The message itself is shown in the list area.
-            Status::Failed(_) => format!("{} · erro", items(shown)),
-        }
+            Status::Failed(_) => " · erro".to_owned(),
+        };
+        (items(shown), tail)
     }
 
     /// Message shown in the middle of the list: an error, an empty folder or
@@ -2036,7 +2051,8 @@ impl Render for FolderView {
                             .h(px(row_h))
                             .flex()
                             .items_center()
-                            .px(px(space(4)))
+                            // Rows: 4 px outside, 1 px border, 12 px inside.
+                            .px(px(space(4) + 1.0))
                             .gap(px(space(3)))
                             .border_b_1()
                             .border_color(rgba(t.divider))
@@ -2066,8 +2082,9 @@ impl Render for FolderView {
                                 ))
                             })
                             .children(self.resize_tracker(cx))
-                            // Room for the scrollbar, so columns line up with the rows.
-                            .child(div().w(px(SCROLLBAR_WIDTH)).flex_none()),
+                            // Room for the scrollbar, so columns line up with the rows
+                            // (the negative margin cancels the gap before it).
+                            .child(div().w(px(SCROLLBAR_WIDTH)).ml(px(-space(3))).flex_none()),
                     )
                     .child(
                         div()

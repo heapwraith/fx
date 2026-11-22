@@ -6,9 +6,11 @@ mod dragdrop;
 mod elevation;
 mod icons;
 mod instance;
+mod keys;
 mod launch;
 mod menu;
 mod places;
+mod sheets;
 mod thumbs;
 mod time;
 
@@ -18,10 +20,11 @@ pub use dragdrop::{DragResult, drag_files, drop_keys, window_id};
 pub use elevation::is_elevated;
 pub use icons::start_icon_service;
 pub use instance::{Instance, claim_instance};
+pub use keys::shifted_digit;
 pub use launch::launch;
 pub use menu::show_context_menu;
 pub use places::{drives, known_folder, known_folders, watch_drives};
-pub use thumbs::{preview_png, start_thumb_service};
+pub use thumbs::{preview_image, start_thumb_service};
 pub use time::utc_offset_at;
 
 use std::time::{Duration, SystemTime};

@@ -27,6 +27,15 @@ pub struct ThumbReady {
     pub png: Option<Arc<[u8]>>,
 }
 
+/// A Quick Look image from the shell (T1.22): a real thumbnail, or the file
+/// type's icon when the type has no thumbnail handler (shown at its own size,
+/// not stretched). `bmp`: a 32-bit BMP (see `crate::icons::encode_bmp`).
+#[derive(Debug, Clone)]
+pub struct ShellPreview {
+    pub bmp: Vec<u8>,
+    pub is_icon: bool,
+}
+
 /// `(path, cache_only)` -> PNG bytes; runs on the worker thread.
 pub type ThumbExtractor = Arc<dyn Fn(&Path, bool) -> Option<Vec<u8>> + Send + Sync>;
 

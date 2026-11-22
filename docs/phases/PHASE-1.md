@@ -245,7 +245,7 @@ O usuário pediu que o fx tivesse o básico completo, sem bugs visuais, e três 
 - Lista dos problemas encontrados, com captura antes e depois de cada correção; nada sobreposto, cortado sem reticências ou desalinhado em 640 px de largura.
 
 ## T1.20 — Ordenar por coluna, coluna Tipo e largura das colunas
-- [ ] Concluída em: ____ · Resumo: implementada em 2026-11-21 (D-029): cabeçalho ordena com seta, coluna Tipo, larguras ajustáveis, ordenação em thread de fundo (100 mil: tamanho 9,5 ms, data 8,9, nome 39,5, tipo 69), seleção mantida (teste), persistência por aba. **Falta:** P4 durante a reordenação e a conferência visual na janela (adiadas: o usuário pausou os testes que usam a janela).
+- [x] Concluída em: 2026-11-21 · Resumo: cabeçalho ordena com seta, coluna Tipo, larguras ajustáveis, ordenação em thread de fundo (100 mil: tamanho 9,5 ms, data 8,9, nome 39,5, tipo 69), seleção mantida (teste), persistência por aba (D-029). **P4 durante a reordenação** (`fx-bench features`, flat-100k, 4 ordenações pela paleta × 3 com setas logo após): setas p95 3,8–4,4 ms, teclas da paleta p95 3,6–4,7 ms. Conferido na janela: títulos das colunas Tipo/Tamanho/Data estavam 11 px fora dos valores, corrigido (D-034).
 
 **Fazer**
 - Clique no cabeçalho ordena por nome, tamanho, data ou tipo (clicar de novo inverte), com seta indicando; coluna Tipo; arrastar a borda do cabeçalho ajusta a largura. Ordenação fora da thread de UI; persiste por aba.
@@ -254,7 +254,7 @@ O usuário pediu que o fx tivesse o básico completo, sem bugs visuais, e três 
 - Reordenar 100 mil itens não trava a UI (P4 medida durante a reordenação); seleção mantida (testes).
 
 ## T1.21 — Arquivos ocultos e Propriedades
-- [ ] Concluída em: ____ · Resumo: implementada em 2026-11-21 (D-030): ocultos e de sistema escondidos por padrão, Ctrl+H e menu Exibir (com ordenar e densidade), salvo em `settings.toml`, esmaecidos quando visíveis; Alt+Enter e menu abrem Propriedades numa thread de lançamento (1 ou vários itens). Testes do filtro, da configuração e de que Propriedades não espera. **Falta:** ver na janela o menu Exibir e a janela de Propriedades abrindo de fato (adiado: o usuário pausou os testes que usam a janela).
+- [x] Concluída em: 2026-11-21 · Resumo: ocultos e de sistema escondidos por padrão, Ctrl+H e menu Exibir (com ordenar e densidade), salvo em `settings.toml`, esmaecidos quando visíveis (D-030). Conferido na janela: menu Exibir e ocultos esmaecidos ok; **Propriedades não abriam** (Alt+Enter caía num braço genérico do teclado e, mesmo chamada, a folha morria com a thread de lançamento). Corrigido (D-034): `SHObjectProperties` para 1 item e thread STA dedicada para vários; abre na janela com 1 e 2 itens, e teste (ignorado, abre janelas) confere as duas folhas.
 
 **Fazer**
 - Mostrar/esconder ocultos e de sistema (Ctrl+H e botão), salvo nas configurações; Alt+Enter e item no menu abrem as Propriedades do Windows.
@@ -263,7 +263,7 @@ O usuário pediu que o fx tivesse o básico completo, sem bugs visuais, e três 
 - Testes do filtro de ocultos; Propriedades abre sem bloquear a UI.
 
 ## T1.22 — Quick Look (Espaço)
-- [ ] Concluída em: ____ · Resumo: implementada em 2026-11-21 (D-031): Espaço abre o painel de prévia, que acompanha as setas e fecha com Espaço/Esc; imagem decodificada na thread da prévia, texto (256 KB, UTF-8/UTF-16) em lista virtualizada, miniatura grande do shell para o resto. Texto de 1 MB: 1,5–1,8 ms (release). **Falta:** medir imagem de 10 MB (≤ 100 ms, `input_preview_ms`) e ver na janela (adiado: o usuário pausou os testes que usam a janela).
+- [x] Concluída em: 2026-11-21 · Resumo: Espaço abre a prévia, que acompanha as setas e fecha com Espaço/Esc; texto (256 KB, UTF-8/UTF-16) em lista virtualizada; tipos sem miniatura mostram o ícone em tamanho natural (D-031, D-034). **Medido** (`fx-bench features`, tecla → prévia na tela, 5 rodadas): JPEG 9,5 MB (12 MP) 37–69 ms, PNG 10,4 MB 38–51 ms, texto 0,6 MB 6–10 ms; p95 66 ms (meta 100). O JPEG decodificado inteiro levava 133–150 ms: fotos grandes vêm da miniatura do shell (WIC) em 1920 px, aquecida uma vez por processo.
 
 **Fazer**
 - Espaço abre uma janela de pré-visualização do item sob o cursor, que acompanha as setas e fecha com Espaço/Esc: imagem (decodificada fora da UI), texto e código (primeiros 256 KB), e miniatura grande do shell para os demais tipos. Vídeo, áudio, PDF e preview handlers de terceiros ficam para a Fase 2 (`fx-preview` isolado).
@@ -272,7 +272,7 @@ O usuário pediu que o fx tivesse o básico completo, sem bugs visuais, e três 
 - Abrir a pré-visualização em ≤ 100 ms para imagem de até 10 MB e texto (medido); trocar de item com as setas sem travar a lista.
 
 ## T1.23 — Busca no disco (Ctrl+F)
-- [ ] Concluída em: ____ · Resumo: implementada em 2026-11-21 (D-032): Ctrl+F abre o painel, resultados enquanto digita, cada tecla cancela a anterior; sem elevação percorre a pasta e subpastas em segundo plano (fixtures inteiras: ~200 ms, resultados em lotes), elevado usa o índice da MFT; Enter abre, Ctrl+Enter revela. Teste nas fixtures confere com varredura independente. **Falta:** P4 com resultados chegando (adiado: o usuário pausou os testes que usam a janela).
+- [x] Concluída em: 2026-11-21 · Resumo: Ctrl+F abre o painel, resultados enquanto digita, cada tecla cancela a anterior; sem elevação percorre a pasta e subpastas em segundo plano (fixtures inteiras: ~200 ms, resultados em lotes), elevado usa o índice da MFT; Enter abre, Ctrl+Enter revela (D-032). Teste nas fixtures confere com varredura independente. **P4 com resultados chegando** (`fx-bench features`, raiz das fixtures, 56 teclas): p95 3,8–5,3 ms, máx. 6,4 ms. Linha selecionada agora ocupa a largura toda.
 
 **Fazer**
 - Ctrl+F abre a busca: resultados enquanto digita, abrir/revelar o resultado. Com o fx elevado, usa o índice da MFT (`fx-index`); sem elevação (o normal até o `fx-indexd` da Fase 2), busca na pasta atual e subpastas por enumeração em segundo plano, com resultados chegando aos poucos e cancelamento a cada tecla.
@@ -281,7 +281,7 @@ O usuário pediu que o fx tivesse o básico completo, sem bugs visuais, e três 
 - Nenhuma tecla da busca passa de 16 ms (P4) enquanto os resultados chegam; busca na pasta de fixtures acha os itens esperados (teste).
 
 ## T1.24 — Paleta de comandos (Ctrl+K)
-- [ ] Concluída em: ____ · Resumo: implementada em 2026-11-21 (D-033): Ctrl+K/Ctrl+Shift+P, busca difusa sobre 36 comandos (com atalho), Acesso rápido e pastas recentes; cada comando executa o próprio atalho (mesmo caminho do teclado); Ctrl+Shift+C copia o caminho. Testes da busca difusa e da lista de comandos; filtro de 336 itens: pior tecla 0,2–0,35 ms (release). **Falta:** ver na janela e medir tecla→quadro (adiado: o usuário pausou os testes que usam a janela).
+- [x] Concluída em: 2026-11-21 · Resumo: Ctrl+K/Ctrl+Shift+P, busca difusa sobre 36 comandos (com atalho), Acesso rápido e pastas recentes; cada comando executa o próprio atalho (D-033); Ctrl+Shift+C copia o caminho. Filtro de 336 itens: pior tecla 0,2–0,35 ms. **Tecla → quadro na janela** (201 teclas): p95 3,6–4,7 ms. Conferido na janela: pastas conhecidas agora com o nome da lateral ("Área de Trabalho", não "Desktop") e linha selecionada na largura toda.
 
 **Fazer**
 - Ctrl+K (e Ctrl+Shift+P) abre a paleta: busca difusa sobre os comandos do fx (com o atalho ao lado), pastas recentes e Acesso rápido; Enter executa.

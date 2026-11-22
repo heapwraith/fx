@@ -30,7 +30,7 @@ const BAR_HEIGHT: f32 = 32.0;
 const BUTTON_SIZE: f32 = 32.0;
 /// The path bar never gets narrower than this (the status text gives way).
 const BAR_MIN_WIDTH: f32 = 140.0;
-const STATUS_MAX_WIDTH: f32 = 280.0;
+const STATUS_MAX_WIDTH: f32 = 400.0;
 
 /// The path bar while it is a text field.
 #[derive(Debug, Clone)]
@@ -364,16 +364,19 @@ impl FolderView {
                         view.toggle_view_menu(cx);
                     })),
             )
-            // Status shrinks first (with an ellipsis); the bar keeps room.
+            // Status and bar share the free width (the status up to its
+            // maximum, the bar takes the rest). A width from the flex layout,
+            // not from the text, is what lets GPUI truncate with an ellipsis.
             .child(
                 div()
-                    .flex_shrink()
+                    .flex_1()
                     .min_w_0()
                     .max_w(px(STATUS_MAX_WIDTH))
                     .pl(px(space(2)))
                     .pr(px(space(2)))
                     .flex()
                     .items_center()
+                    .justify_end()
                     .gap(px(space(1)))
                     .text_color(rgba(t.text_secondary))
                     // While typing to filter, a magnifier says what the text is.
