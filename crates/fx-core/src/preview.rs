@@ -30,6 +30,8 @@ pub enum PreviewKind {
     /// extension are sniffed as text too (and fall back to a thumbnail when
     /// binary).
     Text,
+    /// ZIP-based archives: their file list (T2.9).
+    Zip,
     /// Folders and everything else: the shell's large thumbnail.
     Other,
 }
@@ -119,6 +121,13 @@ pub fn preview_kind(name: &str, is_dir: bool) -> PreviewKind {
     match image {
         Some(kind) => PreviewKind::Image(kind),
         None if TEXT_EXT.contains(&ext.as_str()) => PreviewKind::Text,
+        None if matches!(
+            ext.as_str(),
+            "zip" | "jar" | "apk" | "nupkg" | "vsix" | "whl"
+        ) =>
+        {
+            PreviewKind::Zip
+        }
         None => PreviewKind::Other,
     }
 }

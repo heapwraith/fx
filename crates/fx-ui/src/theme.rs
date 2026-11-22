@@ -140,6 +140,10 @@ pub struct Theme {
     pub focus: Color,
     pub thumb: Color,
     pub thumb_hover: Color,
+    /// Code in Quick Look (T2.9): strings and numbers. Keywords use the
+    /// accent, comments the secondary text.
+    pub syntax_string: Color,
+    pub syntax_number: Color,
 }
 
 impl Theme {
@@ -158,6 +162,8 @@ impl Theme {
         focus: 0x1A1A1AFF,
         thumb: 0x0000005C,
         thumb_hover: 0x0000008A,
+        syntax_string: 0xA0461AFF,
+        syntax_number: 0x6A3FA0FF,
     };
 
     pub const DARK: Theme = Theme {
@@ -173,6 +179,8 @@ impl Theme {
         focus: 0xFFFFFFFF,
         thumb: 0xFFFFFF5C,
         thumb_hover: 0xFFFFFF8A,
+        syntax_string: 0xE8A87CFF,
+        syntax_number: 0xC6A0F6FF,
     };
 
     pub fn for_mode(mode: Mode) -> Theme {
@@ -242,6 +250,15 @@ mod tests {
                     let c = contrast(fg, bg);
                     assert!(c >= 4.5, "{:?} {name} on {bg:08X}: {c:.2}", t.mode);
                 }
+            }
+            // Code colors in Quick Look, on the panel background.
+            for (name, fg) in [
+                ("string", t.syntax_string),
+                ("number", t.syntax_number),
+                ("keyword", t.accent),
+            ] {
+                let c = contrast(fg, t.base);
+                assert!(c >= 4.5, "{:?} syntax {name}: {c:.2}", t.mode);
             }
             // The focus ring and the selection indicator must stand out (3:1, WCAG 1.4.11).
             assert!(contrast(t.focus, layer) >= 3.0, "{:?} focus", t.mode);

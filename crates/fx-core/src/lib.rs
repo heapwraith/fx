@@ -9,8 +9,10 @@ pub mod complete;
 mod entry;
 pub mod format;
 pub mod fuzzy;
+pub mod highlight;
 mod history;
 mod list;
+pub mod markdown;
 pub mod natural;
 mod pinned;
 pub mod preview;
@@ -18,6 +20,7 @@ pub mod search_filter;
 mod selection;
 mod tabs;
 mod undo;
+pub mod zip_list;
 
 pub use entry::{Attributes, Change, Entry};
 pub use history::History;

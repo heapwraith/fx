@@ -15,9 +15,12 @@ use std::sync::mpsc::channel;
 use std::time::Instant;
 
 use fx_core::format::size_short;
+use fx_core::highlight::{Kind, highlight, language_for};
+use fx_core::markdown::{self, Block, MdLine};
 use fx_core::preview::{
     IMAGE_LIMIT, ImageKind, PreviewKind, TEXT_LIMIT, preview_kind, text_preview,
 };
+use fx_core::zip_list;
 use gpui::{
     Context, Image, ImageFormat, ImageSource, MouseButton, MouseDownEvent, ObjectFit, RenderImage,
     SharedString, Window, deferred, div, img, prelude::*, px, uniform_list,
@@ -46,6 +49,11 @@ const LINE_HEIGHT: f32 = 18.0;
 /// instead of 39 for a 12 MP JPEG), which would land on the first Space.
 static PHOTO_DECODER_WARM: AtomicBool = AtomicBool::new(false);
 
+type Spans = Vec<Vec<(std::ops::Range<usize>, Kind)>>;
+
+/// Most archive entries listed.
+const ZIP_MAX: usize = 5000;
+
 /// The open preview.
 pub(super) struct QuickLook {
     entry: u32,
@@ -66,7 +74,13 @@ enum Content {
     Text {
         lines: Arc<Vec<SharedString>>,
         truncated: bool,
+        /// Syntax colors per line, for code (T2.9).
+        spans: Option<Arc<Spans>>,
     },
+    /// Markdown, rendered (T2.9).
+    Markdown(Arc<Vec<MdLine>>, bool),
+    /// An archive's file list (T2.9): (name, size) rows and a summary.
+    Zip(Arc<Vec<(SharedString, SharedString)>>, SharedString),
     Nothing(&'static str),
 }
 
@@ -227,9 +241,17 @@ impl FolderView {
                         .object_fit(ObjectFit::Contain),
                 )
                 .into_any_element(),
-            Content::Text { lines, truncated } => {
+            Content::Markdown(lines, truncated) => markdown_view(&lines, truncated, t, cx),
+            Content::Zip(rows, summary) => zip_view(rows, summary, t),
+            Content::Text {
+                lines,
+                truncated,
+                spans,
+            } => {
                 let count = lines.len();
                 let rows = lines.clone();
+                let colors = [t.accent, t.syntax_string, t.text_secondary, t.syntax_number]
+                    .map(|c| gpui::Hsla::from(rgba(c)));
                 div()
                     .size_full()
                     .flex()
@@ -238,10 +260,31 @@ impl FolderView {
                         uniform_list("quick-look-lines", count, move |range, _, _| {
                             range
                                 .map(|i| {
-                                    div()
-                                        .h(px(LINE_HEIGHT))
-                                        .whitespace_nowrap()
-                                        .child(rows[i].clone())
+                                    let line = div().h(px(LINE_HEIGHT)).whitespace_nowrap();
+                                    match spans.as_ref().and_then(|s| s.get(i)) {
+                                        Some(line_spans) if !line_spans.is_empty() => {
+                                            let styles = line_spans.iter().map(|(r, k)| {
+                                                let color = colors[match k {
+                                                    Kind::Keyword => 0,
+                                                    Kind::String => 1,
+                                                    Kind::Comment => 2,
+                                                    Kind::Number => 3,
+                                                }];
+                                                (
+                                                    r.clone(),
+                                                    gpui::HighlightStyle {
+                                                        color: Some(color),
+                                                        ..Default::default()
+                                                    },
+                                                )
+                                            });
+                                            line.child(
+                                                gpui::StyledText::new(rows[i].clone())
+                                                    .with_highlights(styles),
+                                            )
+                                        }
+                                        _ => line.child(rows[i].clone()),
+                                    }
                                 })
                                 .collect()
                         })
@@ -367,12 +410,25 @@ fn load(path: &Path, kind: PreviewKind, bytes: u64, is_dir: bool, decode: &Decod
             },
             Err(_) => Content::Nothing("Não foi possível ler este arquivo."),
         },
+        PreviewKind::Zip => zip_listing(path).unwrap_or_else(|| shell(path, decode)),
         PreviewKind::Text => match read_start(path) {
             Ok((data, more)) => match text_preview(&data, more) {
-                Some(t) => Content::Text {
-                    lines: Arc::new(t.lines.into_iter().map(SharedString::from).collect()),
-                    truncated: t.truncated,
-                },
+                Some(t) => {
+                    let ext = path
+                        .extension()
+                        .map(|e| e.to_string_lossy().to_ascii_lowercase())
+                        .unwrap_or_default();
+                    if ext == "md" || ext == "markdown" {
+                        Content::Markdown(Arc::new(markdown::render(&t.lines)), t.truncated)
+                    } else {
+                        let spans = language_for(&ext).map(|l| Arc::new(highlight(&t.lines, l)));
+                        Content::Text {
+                            lines: Arc::new(t.lines.into_iter().map(SharedString::from).collect()),
+                            truncated: t.truncated,
+                            spans,
+                        }
+                    }
+                }
                 // Binary after all (a file without extension): a thumbnail.
                 None => shell(path, decode),
             },
@@ -380,6 +436,154 @@ fn load(path: &Path, kind: PreviewKind, bytes: u64, is_dir: bool, decode: &Decod
         },
         _ => shell(path, decode),
     }
+}
+
+/// The file list of a ZIP archive, from its central directory (nothing is
+/// decompressed). `None` if it is not a readable ZIP.
+fn zip_listing(path: &Path) -> Option<Content> {
+    use std::io::{Seek, SeekFrom};
+    let mut f = std::fs::File::open(path).ok()?;
+    let len = f.metadata().ok()?.len();
+    let tail_len = len.min(66_000);
+    let tail_off = len - tail_len;
+    let mut tail = vec![0u8; tail_len as usize];
+    f.seek(SeekFrom::Start(tail_off)).ok()?;
+    f.read_exact(&mut tail).ok()?;
+    let mut read_at = |off: u64, n: usize| {
+        let mut b = vec![0u8; n];
+        f.seek(SeekFrom::Start(off)).ok()?;
+        f.read_exact(&mut b).ok()?;
+        Some(b)
+    };
+    let (dir_off, dir_len, total) = zip_list::central_directory(&tail, tail_off, &mut read_at)?;
+    // A huge central directory is cut (the listing stops at ZIP_MAX anyway).
+    let dir = read_at(dir_off, dir_len.min(32 << 20) as usize)?;
+    let listing = zip_list::parse_central(&dir, total, ZIP_MAX)?;
+    let unpacked: u64 = listing.entries.iter().map(|e| e.size).sum();
+    let rows: Vec<(SharedString, SharedString)> = listing
+        .entries
+        .iter()
+        .map(|e| {
+            let size = if e.is_dir {
+                String::new()
+            } else {
+                fx_core::format::size_kb(e.size)
+            };
+            (e.name.clone().into(), size.into())
+        })
+        .collect();
+    let mut summary = format!(
+        "{} · {} descompactado",
+        fx_core::format::items(listing.total as usize),
+        size_short(unpacked)
+    );
+    if listing.truncated {
+        summary.push_str(&format!(" · mostrando os primeiros {ZIP_MAX}"));
+    }
+    Some(Content::Zip(Arc::new(rows), summary.into()))
+}
+
+fn zip_view(
+    rows: Arc<Vec<(SharedString, SharedString)>>,
+    summary: SharedString,
+    t: crate::theme::Theme,
+) -> gpui::AnyElement {
+    let secondary = t.text_secondary;
+    let count = rows.len();
+    div()
+        .size_full()
+        .flex()
+        .flex_col()
+        .child(
+            uniform_list("quick-look-zip", count, move |range, _, _| {
+                range
+                    .map(|i| {
+                        let (name, size) = rows[i].clone();
+                        div()
+                            .h(px(LINE_HEIGHT + 4.0))
+                            .flex()
+                            .items_center()
+                            .gap(px(space(3)))
+                            .child(div().flex_1().min_w_0().truncate().child(name))
+                            .child(div().flex_none().text_color(rgba(secondary)).child(size))
+                    })
+                    .collect()
+            })
+            .flex_1()
+            .px(px(space(3))),
+        )
+        .child(
+            div()
+                .px(px(space(3)))
+                .py(px(space(1)))
+                .border_t_1()
+                .border_color(rgba(t.divider))
+                .text_size(px(CAPTION_SIZE))
+                .text_color(rgba(t.text_secondary))
+                .child(summary),
+        )
+        .into_any_element()
+}
+
+/// Rendered Markdown: headings larger and bold, code in a monospace band,
+/// quotes in secondary text. Not virtualized (at most `LINE_LIMIT` lines).
+fn markdown_view(
+    lines: &[MdLine],
+    truncated: bool,
+    t: crate::theme::Theme,
+    _cx: &mut Context<FolderView>,
+) -> gpui::AnyElement {
+    let mut body = div()
+        .id("quick-look-md")
+        .size_full()
+        .overflow_y_scroll()
+        .px(px(space(5)))
+        .py(px(space(3)))
+        .flex()
+        .flex_col();
+    for l in lines {
+        let row = div().w_full().min_w_0();
+        let row = match l.block {
+            Block::Heading(level) => row
+                .pt(px(if level <= 2 { space(3) } else { space(2) }))
+                .pb(px(space(1)))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_size(px(match level {
+                    1 => 24.0,
+                    2 => 20.0,
+                    3 => 17.0,
+                    _ => 15.0,
+                }))
+                .child(l.text.clone()),
+            Block::Code => row
+                .px(px(space(2)))
+                .bg(rgba(t.hover))
+                .font_family(MONO_FONT)
+                .text_size(px(13.0))
+                .whitespace_nowrap()
+                .child(l.text.clone()),
+            Block::Quote => row
+                .pl(px(space(3)))
+                .border_l_2()
+                .border_color(rgba(t.divider))
+                .text_color(rgba(t.text_secondary))
+                .child(l.text.clone()),
+            Block::Rule => row.my(px(space(2))).h(px(1.0)).bg(rgba(t.divider)),
+            Block::Blank => row.h(px(space(2))),
+            Block::Item | Block::Text => row.child(l.text.clone()),
+        };
+        body = body.child(row);
+    }
+    if truncated {
+        body = body.child(
+            div()
+                .pt(px(space(2)))
+                .text_size(px(CAPTION_SIZE))
+                .text_color(rgba(t.text_secondary))
+                .child("Mostrando o começo do arquivo (256 KB)."),
+        );
+    }
+    body.into_any_element()
 }
 
 /// The first `TEXT_LIMIT` bytes, and whether the file goes on.
@@ -438,7 +642,10 @@ mod tests {
         let started = Instant::now();
         let content = load(&path, PreviewKind::Text, 0, false, &*no_decoder());
         let took = started.elapsed();
-        let Content::Text { lines, truncated } = content else {
+        let Content::Text {
+            lines, truncated, ..
+        } = content
+        else {
             panic!("text expected");
         };
         assert!(truncated);
@@ -455,5 +662,60 @@ mod tests {
         let missing = dir.path().join("sumiu.txt");
         let content = load(&missing, PreviewKind::Text, 0, false, &*no_decoder());
         assert!(matches!(content, Content::Nothing(m) if m.contains("ler")));
+    }
+
+    #[test]
+    fn code_markdown_and_zip_previews() {
+        let t = tempfile::tempdir().unwrap();
+        let rs = t.path().join("main.rs");
+        std::fs::write(&rs, "fn main() { let x = \"oi\"; } // fim\n").unwrap();
+        let Content::Text {
+            spans: Some(spans), ..
+        } = load(&rs, PreviewKind::Text, 0, false, &*no_decoder())
+        else {
+            panic!("code with colors")
+        };
+        assert!(spans[0].len() >= 4);
+        let md = t.path().join("LEIA.md");
+        std::fs::write(&md, "# Título\n- item\n").unwrap();
+        let Content::Markdown(lines, false) =
+            load(&md, PreviewKind::Text, 0, false, &*no_decoder())
+        else {
+            panic!("rendered markdown")
+        };
+        assert_eq!(lines[0].block, Block::Heading(1));
+        // A stored ZIP with one file, written by hand.
+        let zip = t.path().join("a.zip");
+        let mut z = Vec::new();
+        z.extend_from_slice(&0x0403_4b50u32.to_le_bytes());
+        z.extend_from_slice(&[20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        z.extend_from_slice(&3u32.to_le_bytes());
+        z.extend_from_slice(&3u32.to_le_bytes());
+        z.extend_from_slice(&5u16.to_le_bytes());
+        z.extend_from_slice(&0u16.to_le_bytes());
+        z.extend_from_slice(b"x.txt");
+        z.extend_from_slice(b"abc");
+        let cd = z.len() as u32;
+        z.extend_from_slice(&0x0201_4b50u32.to_le_bytes());
+        z.extend_from_slice(&[20, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        z.extend_from_slice(&3u32.to_le_bytes());
+        z.extend_from_slice(&3u32.to_le_bytes());
+        z.extend_from_slice(&5u16.to_le_bytes());
+        z.extend_from_slice(&[0; 12]);
+        z.extend_from_slice(&0u32.to_le_bytes());
+        z.extend_from_slice(b"x.txt");
+        let cd_len = z.len() as u32 - cd;
+        z.extend_from_slice(&0x0605_4b50u32.to_le_bytes());
+        z.extend_from_slice(&[0, 0, 0, 0, 1, 0, 1, 0]);
+        z.extend_from_slice(&cd_len.to_le_bytes());
+        z.extend_from_slice(&cd.to_le_bytes());
+        z.extend_from_slice(&[0, 0]);
+        std::fs::write(&zip, z).unwrap();
+        let Content::Zip(rows, summary) = load(&zip, PreviewKind::Zip, 0, false, &*no_decoder())
+        else {
+            panic!("zip listing")
+        };
+        assert_eq!(rows[0].0.as_ref(), "x.txt");
+        assert!(summary.starts_with("1 item"), "{summary}");
     }
 }
