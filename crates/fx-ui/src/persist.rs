@@ -154,6 +154,7 @@ impl Persist {
             windows,
             pinned,
             settings,
+            visits: crate::visits::saved(),
         }
     }
 

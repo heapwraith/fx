@@ -39,6 +39,7 @@ mod thumbs;
 mod tooltip;
 mod trace;
 mod update;
+mod visits;
 
 use futures::StreamExt;
 use fx_core::tr;
@@ -135,6 +136,8 @@ fn main() {
     // Settings and the saved session (task T1.17), read before the event
     // loop. Benchmarks and test runs (FX_NO_STATE=1) neither read nor save.
     let persist = trace.is_none() && std::env::var_os("FX_NO_STATE").is_none_or(|v| v != "1");
+    // "Ir para" que aprende (T6.5): the folders opened, read off the UI thread.
+    visits::load(persist);
     let settings = if persist {
         store::settings_path()
             .map(|p| store::load_settings(&p))

@@ -35,7 +35,7 @@ Uma busca vira aba ou pasta virtual que se atualiza sozinha (ex.: `tipo:pdf data
 Acha arquivos repetidos no disco todo: candidatos pelo tamanho (índice), depois SHA-256 só deles; remove com desfazer. **Base:** índice com tamanhos e SHA-256 (BCrypt). **Concorrentes:** ferramentas separadas, lentas porque leem o disco inteiro.
 
 ### T6.5 — "Ir para" que aprende
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: pastas abertas lembradas com a pontuação do zoxide (frequência × recência, envelhecimento, até 500) em `fx-core/src/frecency.rs`, guardadas numa tabela `visits` do `state.db` (lidas fora da interface, gravadas com a sessão); a paleta lista as pastas pelo uso real e "proj fx" acha `…\Projetos\fx` antes de qualquer comando (8 testes novos).
 
 A paleta (Ctrl+K) ordena pastas pela frequência e recência reais de uso (como o zoxide): "proj fx" leva à pasta certa. **Base:** paleta e histórico existem. **Concorrentes:** o Explorador só tem "recentes".
 

@@ -406,6 +406,7 @@ impl FolderView {
             stale_images: Vec::new(),
             search: None,
         };
+        crate::visits::visit(&view.path);
         view.start_loading(cx);
         view
     }

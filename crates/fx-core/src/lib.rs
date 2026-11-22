@@ -9,6 +9,7 @@ pub mod complete;
 pub mod crash;
 mod entry;
 pub mod format;
+pub mod frecency;
 pub mod fuzzy;
 pub mod highlight;
 mod history;

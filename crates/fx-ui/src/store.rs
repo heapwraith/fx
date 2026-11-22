@@ -96,6 +96,9 @@ pub struct Session {
     /// Quick access; `None` before it was ever saved (use the defaults).
     pub pinned: Option<Vec<PathBuf>>,
     pub settings: Settings,
+    /// Folders opened, for "ir para" que aprende (T6.5); `None` while they
+    /// are still loading (the saved ones are then left as they are).
+    pub visits: Option<Vec<fx_core::frecency::Visit>>,
 }
 
 /// `%APPDATA%\fx` or `%LOCALAPPDATA%\fx`; `FX_DATA_DIR` replaces both (tests).
@@ -161,6 +164,9 @@ const SCHEMA: &str = "
     CREATE TABLE IF NOT EXISTS tab_view (
         win INTEGER NOT NULL, tab INTEGER NOT NULL, sort TEXT, descending INTEGER,
         size_w REAL, type_w REAL, date_w REAL);
+    -- T6.5: how often and how recently each folder was opened.
+    CREATE TABLE IF NOT EXISTS visits (
+        path TEXT PRIMARY KEY, rank REAL NOT NULL, last INTEGER NOT NULL);
 ";
 
 fn text(p: &Path) -> String {
@@ -173,6 +179,9 @@ impl Db {
             let _ = std::fs::create_dir_all(dir);
         }
         let conn = Connection::open(path)?;
+        // Several connections (the session writer, the visits loader, the
+        // last save on quit): wait a moment for a busy one instead of failing.
+        conn.busy_timeout(std::time::Duration::from_millis(500))?;
         // WAL: a killed writer leaves the last committed transaction intact.
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
@@ -248,7 +257,33 @@ impl Db {
                 [],
             )?;
         }
+        if let Some(visits) = &s.visits {
+            tx.execute("DELETE FROM visits", [])?;
+            for v in visits {
+                // Only exact paths are kept (nothing converted with loss).
+                if let Some(path) = v.path.to_str() {
+                    tx.execute(
+                        "INSERT OR REPLACE INTO visits (path, rank, last) VALUES (?1, ?2, ?3)",
+                        params![path, v.rank, v.last],
+                    )?;
+                }
+            }
+        }
         tx.commit()
+    }
+
+    /// The folders opened (T6.5), read on their own: they count even when
+    /// the session is not restored.
+    pub fn load_visits(&self) -> rusqlite::Result<Vec<fx_core::frecency::Visit>> {
+        let mut q = self.conn.prepare("SELECT path, rank, last FROM visits")?;
+        let rows = q.query_map([], |r| {
+            Ok(fx_core::frecency::Visit {
+                path: PathBuf::from(r.get::<_, String>(0)?),
+                rank: r.get(1)?,
+                last: r.get(2)?,
+            })
+        })?;
+        rows.collect()
     }
 
     pub fn load(&self) -> rusqlite::Result<Session> {
@@ -364,6 +399,7 @@ impl Db {
             windows: windows.into_iter().map(|(_, w)| w).collect(),
             pinned,
             settings: Settings::default(),
+            visits: None,
         })
     }
 
@@ -405,6 +441,37 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
+    #[test]
+    fn visits_round_trip_and_are_kept_while_loading() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let mut db = Db::open(&path).unwrap();
+        let visit = |p: &str, rank: f64, last: i64| fx_core::frecency::Visit {
+            path: PathBuf::from(p),
+            rank,
+            last,
+        };
+        let mut s = session(1);
+        s.visits = Some(vec![
+            visit(r"C:\Projetos\fx", 3.5, 100),
+            visit(r"D:\Fotos", 1.0, 50),
+        ]);
+        db.save(&s).unwrap();
+        let mut back = db.load_visits().unwrap();
+        back.sort_by(|a, b| a.path.cmp(&b.path));
+        assert_eq!(
+            back,
+            vec![
+                visit(r"C:\Projetos\fx", 3.5, 100),
+                visit(r"D:\Fotos", 1.0, 50)
+            ]
+        );
+        // Saved before the visits loaded: they stay as they were.
+        s.visits = None;
+        db.save(&s).unwrap();
+        assert_eq!(db.load_visits().unwrap().len(), 2);
+    }
+
     fn session(n: u32) -> Session {
         Session {
             windows: vec![WindowState {
@@ -430,6 +497,7 @@ mod tests {
             }],
             pinned: Some(vec![PathBuf::from(r"C:\Fotos"), PathBuf::from(r"D:\")]),
             settings: Settings::default(),
+            visits: None,
         }
     }
 

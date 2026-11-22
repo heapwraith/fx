@@ -24,6 +24,11 @@ const RECENT_MAX: usize = 15;
 const RECENT_FIRST: usize = 5;
 /// A folder matched only through its full path ranks below name matches.
 const PATH_PENALTY: i32 = 30;
+/// Folders that match the words in zoxide's way (T6.5) come before the fuzzy
+/// matches, in order of use.
+const KEYWORD_MATCH: i32 = 2_000_000;
+/// The remembered folders offered (all of them: at most 500).
+const FRECENT_MAX: usize = 500;
 
 #[derive(Debug, Clone)]
 enum Item {
@@ -33,6 +38,9 @@ enum Item {
         path: PathBuf,
         pinned: bool,
         name: String,
+        /// Position among the folders opened, most used first (T6.5);
+        /// `usize::MAX` for one never opened.
+        order: usize,
     },
 }
 
@@ -78,6 +86,14 @@ impl Palette {
             .enumerate()
             .filter_map(|(i, item)| {
                 let label = item.label();
+                // "proj fx": every word in the path, in order, the last in
+                // the folder's name; the most used first.
+                if let Item::Folder { path, order, .. } = item
+                    && fx_core::frecency::keywords_match(&self.query, path)
+                {
+                    let rank = i32::try_from((*order).min(1_000_000)).unwrap_or(1_000_000);
+                    return Some((i, KEYWORD_MATCH - rank, label.len()));
+                }
                 let score = fuzzy_score(&self.query, &label).or_else(|| match item {
                     Item::Folder { path, .. } => {
                         fuzzy_score(&self.query, &path.to_string_lossy()).map(|s| s - PATH_PENALTY)
@@ -99,12 +115,18 @@ impl TabsView {
 
     pub(super) fn open_palette(&mut self, cx: &mut Context<Self>) {
         let mut items: Vec<Item> = Vec::new();
-        // Recent folders: other tabs first, then every tab's history, newest
-        // first; no duplicates, not the current folder.
+        // The folders opened, most used first (frequency and recency, T6.5);
+        // then this session's: other tabs, every tab's history, newest first.
+        // No duplicates, not the current folder.
         let current = self.current().read(cx).path().to_path_buf();
+        let frecent = crate::visits::top(FRECENT_MAX);
         let mut recent: Vec<PathBuf> = Vec::new();
         let mut push = |p: PathBuf| {
-            if p != current && !recent.contains(&p) && recent.len() < RECENT_MAX {
+            if p != current
+                && !recent.contains(&p)
+                && !frecent.contains(&p)
+                && recent.len() < RECENT_MAX
+            {
                 recent.push(p);
             }
         };
@@ -117,19 +139,24 @@ impl TabsView {
             }
         }
         let places = self.places.read(cx);
-        let folder = |path: PathBuf, pinned: bool| Item::Folder {
+        let folder = |path: PathBuf, pinned: bool, order: usize| Item::Folder {
             name: places.label(&path).to_string(),
             path,
             pinned,
+            order,
         };
-        items.extend(recent.into_iter().map(|p| folder(p, false)));
         items.extend(
-            places
-                .pinned
-                .paths()
+            frecent
                 .iter()
-                .map(|p| folder(p.clone(), true)),
+                .enumerate()
+                .filter(|(_, p)| **p != current)
+                .map(|(k, p)| folder(p.clone(), false, k)),
         );
+        items.extend(recent.into_iter().map(|p| folder(p, false, usize::MAX)));
+        items.extend(places.pinned.paths().iter().map(|p| {
+            let order = frecent.iter().position(|f| f == p).unwrap_or(usize::MAX);
+            folder(p.clone(), true, order)
+        }));
         items.extend(COMMANDS.iter().map(Item::Command));
         let mut palette = Palette {
             query: String::new(),
@@ -548,12 +575,15 @@ mod tests {
     fn palette(folders: &[(&str, bool)]) -> Palette {
         let mut items: Vec<Item> = folders
             .iter()
-            .map(|(p, pinned)| Item::Folder {
+            .enumerate()
+            .map(|(k, (p, pinned))| Item::Folder {
                 path: PathBuf::from(p),
                 pinned: *pinned,
                 name: Path::new(p)
                     .file_name()
                     .map_or_else(|| p.to_string(), |n| n.to_string_lossy().into_owned()),
+                // In the order given: as if the first were the most used.
+                order: k,
             })
             .collect();
         items.extend(COMMANDS.iter().map(Item::Command));
@@ -596,6 +626,31 @@ mod tests {
         p.query = "zzzz".into();
         p.filter();
         assert!(p.shown.is_empty());
+    }
+
+    /// T6.5: "proj fx" takes to the folder, the most used first, before any
+    /// command or fuzzy match.
+    #[test]
+    fn words_find_the_most_used_folder() {
+        let mut p = palette(&[
+            (r"C:\Users\ana\Projetos\fx", false),
+            (r"C:\Antigo\fx", false),
+            (r"C:\Projetos\fx-site", false),
+        ]);
+        let path_of = |p: &Palette, k: usize| match &p.items[p.shown[k]] {
+            Item::Folder { path, .. } => path.clone(),
+            Item::Command(c) => PathBuf::from(c.label()),
+        };
+        p.query = "proj fx".into();
+        p.filter();
+        assert_eq!(path_of(&p, 0), PathBuf::from(r"C:\Users\ana\Projetos\fx"));
+        assert_eq!(path_of(&p, 1), PathBuf::from(r"C:\Projetos\fx-site"));
+        p.query = "fx".into();
+        p.filter();
+        assert_eq!(path_of(&p, 0), PathBuf::from(r"C:\Users\ana\Projetos\fx"));
+        assert_eq!(path_of(&p, 1), PathBuf::from(r"C:\Antigo\fx"));
+        // "Sobre o fx" (a command) comes after the folders.
+        assert!(matches!(p.items[p.shown[3]], Item::Command(_)));
     }
 
     #[test]

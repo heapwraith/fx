@@ -148,6 +148,7 @@ impl FolderView {
         self.edit = None;
         self.generation += 1;
         self.stop_dir_sizes();
+        crate::visits::visit(&path);
         self.path = path;
         self.list = Arc::new(FileList::new());
         self.filter_text.clear();
