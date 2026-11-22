@@ -9,7 +9,8 @@ O fx é construído em fases. Cada fase tem um arquivo com tarefas pequenas, em 
 | [2](phases/PHASE-2.md) | Busca no disco inteiro, Quick Look, paleta, renomear em lote, beta | ✅ 2026-11-22 | [gate-2](../bench/results/gate-2.md) |
 | [3](phases/PHASE-3.md) | Virar o padrão, painel duplo, colunas, etiquetas, terminal, ARM64, idiomas, alto contraste, nuvem, falhas | ✅ 2026-11-22 | [gate-3](../bench/results/gate-3.md) |
 | [4](phases/PHASE-4.md) | Atualizador, polimento, instalador próprio, telas "Sobre" e "Como usar" | ✅ 2026-11-22 | [gate-4](../bench/results/gate-4.md) |
-| [5](phases/PHASE-5.md) | Pendências de todas as fases e lançamento da 1.0 | ⏳ não iniciada | — |
+| [5](phases/PHASE-5.md) | Pendências de todas as fases, metas novas (D-064) e lançamento da 1.0 | ⏳ não iniciada | — |
+| [6](phases/PHASE-6.md) | Superioridade: mapa do disco, linha do tempo, buscas vivas, duplicados, compactados, painel de detalhes e mais | ⏳ não iniciada (depois da 1.0) | — |
 
 ## O que cada fase entregou
 
@@ -23,6 +24,10 @@ O fx é construído em fases. Cada fase tem um arquivo com tarefas pequenas, em 
 
 Detalhada em [`phases/PHASE-5.md`](phases/PHASE-5.md): testes manuais com o usuário ([`TESTES-FINAIS.md`](TESTES-FINAIS.md)), assinatura digital e publicação (GitHub, Microsoft Store, winget), licenças de terceiros, site e guia de uso, terminal completo, pendências de funcionalidades e robustez, e margem para a meta de memória (P8).
 
-## Depois da 1.0
+## Fase 6 — superioridade (depois da 1.0)
 
-Fora do escopo até aqui, registrados para decidir depois: porte para macOS e Linux (a interface e o instalador já usam GPUI; falta a camada do sistema, D-012), inspetor lateral de metadados, e plugins.
+Detalhada em [`phases/PHASE-6.md`](phases/PHASE-6.md): funcionalidades que nascem das vantagens que só o fx reúne (índice da MFT, diário USN, motor de operações seguro, interface nativa). Primeiro os diferenciais que nenhum concorrente tem junto — mapa do disco instantâneo, linha do tempo do disco, buscas vivas —, depois as lacunas que mais fazem alguém voltar ao Explorador (arquivos compactados como pastas, painel de detalhes), e então duplicados, "ir para" que aprende, desfazer entre sessões, busca no conteúdo e o restante.
+
+## Mais adiante
+
+Porte para macOS e Linux (a interface e o instalador já usam GPUI; falta a camada do sistema, D-012) e plugins.

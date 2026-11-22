@@ -513,3 +513,9 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Correção:** a P6 (índice de 2 milhões em ≤ 10 s) foi marcada como aprovada no portão 2 por "proporcionalidade", mas 744 mil arquivos em 7,5 s projetam ~20 s para 2 milhões: **não passa**. Corrigido em `gate-2.md` e `gate-4.md`.
 - **Plano para as que reprovam** (Fase 5, T5.7): tirar do GPUI o cliente HTTP que ele traz e o fx não usa (`reqwest`, `rustls`, `ring`; o atualizador usa WinHTTP), comprimir o programa do instalador, paralelizar a leitura da MFT por volume e reduzir alocações do índice, e criar no `fx-bench` as medições que faltam.
 
+## D-065 — Fase 6, "Superioridade"
+- **Data:** 2026-11-22 · **Status:** aceita como plano (pedido do usuário; nada implementado ainda)
+- **Critério:** funcionalidades que tornem o fx superior, não só igual, priorizando o que nasce das vantagens que só ele reúne: índice da MFT do disco inteiro, diário USN em tempo real, motor de operações seguro com desfazer, interface nativa.
+- **Ordem:** (1) mapa do disco, linha do tempo, buscas vivas; (2) arquivos compactados como pastas, painel de detalhes; (3) duplicados, "ir para" que aprende, desfazer entre sessões; (4) busca no conteúdo e demais paridades; (5) opcionais de 2026 (busca por significado com IA local, ações rápidas por tipo). Detalhes em `docs/phases/PHASE-6.md`.
+- **Condições:** depois da 1.0; metas de D-064 valem para tudo; itens com risco de memória só entram com a P8 dentro do limite.
+
