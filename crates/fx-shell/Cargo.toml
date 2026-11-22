@@ -19,3 +19,6 @@ raw-window-handle.workspace = true
 [target.'cfg(windows)'.dependencies]
 windows.workspace = true
 accesskit_windows.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

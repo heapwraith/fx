@@ -69,6 +69,8 @@ Name: "{autodesktop}\fx"; Filename: "{app}\fx.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\fx.exe"; Description: "{cm:LaunchProgram,fx}"; Flags: nowait postinstall skipifsilent
+; Update from fx itself (T4.1): silent install with /RELAUNCH opens the new fx.
+Filename: "{app}\fx.exe"; Flags: nowait; Check: WizardSilent and RelaunchAsked
 
 [UninstallRun]
 ; The optional index service (installed with consent from inside fx) lives in
@@ -77,6 +79,11 @@ Filename: "{app}\fx.exe"; Description: "{cm:LaunchProgram,fx}"; Flags: nowait po
 Filename: "{app}\fx-indexd.exe"; Parameters: "uninstall"; Verb: "runas"; Flags: shellexec waituntilterminated runhidden; Check: IndexServiceInstalled; RunOnceId: "RemoveIndexService"
 
 [Code]
+function RelaunchAsked(): Boolean;
+begin
+  Result := Pos('/RELAUNCH', Uppercase(GetCmdTail)) > 0;
+end;
+
 function IndexServiceInstalled(): Boolean;
 begin
   Result := RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\fx-indexd');

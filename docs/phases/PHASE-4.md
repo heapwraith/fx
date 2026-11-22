@@ -13,7 +13,7 @@
 ---
 
 ## T4.1 — Atualizador
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: consulta diária aos releases do GitHub (WinHTTP, thread de fundo, desligável), comparação semver e escolha do instalador da arquitetura (`fx-core::update`, leitor JSON próprio), aviso no status e "Atualizar o fx" na paleta; o instalador é baixado, conferido pelo SHA-256 (BCrypt) contra o `SHA256SUMS.txt` que o CI passa a publicar e, se o fx for assinado, pela assinatura (WinVerifyTrust); roda silencioso com `/RELAUNCH` e reabre o fx; delta descartado (instalador de 6 MB) (D-056). 9 testes; consulta real ao GitHub conferida na janela (sem instalar: ainda não há release publicado).
 
 **Fazer**
 - Uma vez por dia, fora da thread de UI, o fx consulta os releases do GitHub (`api.github.com/repos/heapwraith/fx/releases`, WinHTTP, sem dados do usuário além do IP) e compara a versão (semver, inclusive pré-versões). Se houver uma mais nova, o status avisa e a paleta oferece "Atualizar para X".

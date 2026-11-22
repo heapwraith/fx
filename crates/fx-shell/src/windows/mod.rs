@@ -12,6 +12,7 @@ mod instance;
 mod keys;
 mod launch;
 mod menu;
+pub mod net;
 mod places;
 pub mod preview_host;
 mod sheets;

@@ -428,3 +428,12 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Substitui** o log cru em `%TEMP%\fx-crash-<pid>.log` (registrado na Fase 1), que tinha caminhos completos.
 - **Teste manual:** `FX_TEST_PANIC=1` faz o fx entrar em pânico logo ao abrir (só para conferir o relatório).
 
+## D-056 — Atualizador (T4.1)
+- **Data:** 2026-11-22 · **Status:** aceita
+- **Sem crates novas:** HTTPS pelo WinHTTP (proxy e certificados do sistema, só `https://`, redirecionamentos do GitHub para o armazenamento de arquivos seguidos pelo próprio WinHTTP, limite de tamanho por resposta), SHA-256 pelo BCrypt, assinatura pelo WinVerifyTrust (`fx-shell/src/windows/net.rs`). O JSON dos releases é lido por um leitor mínimo em `fx-core::update::json` (objetos, listas, textos com escapes e pares substitutos, limite de profundidade), testado.
+- **Quando:** uma vez por dia (`update-check.txt` ao lado do `state.db`), na primeira janela, numa thread de fundo; avisa só se houver versão nova ("Versão X disponível · Ctrl+K: atualizar"). "Atualizar o fx" na paleta procura na hora se ainda não souber de nenhuma. `verificar_atualizacoes = false` (ou a paleta) desliga a consulta diária; benchmarks e testes (`FX_NO_STATE=1`) nunca acessam a rede. A consulta não manda dados do usuário (User-Agent `fx-updater`; só o IP chega ao GitHub).
+- **Qual versão:** `GET /repos/heapwraith/fx/releases`, ignorando rascunhos; a maior versão semver acima da atual (pré-versões contam: o projeto está em 0.x) que tenha o `fx-X-setup-<arq>.exe` e o `SHA256SUMS.txt`.
+- **Instalar:** baixa o instalador para `%TEMP%\fx-update`, confere o SHA-256 contra o `SHA256SUMS.txt` do mesmo release (o CI gera, junto dos zips e instaladores). Se o fx em uso for assinado (depois da SignPath), exige o instalador assinado. Roda `/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /RELAUNCH`: o Restart Manager fecha o fx (pelo `WM_CLOSE`, que salva a sessão) e uma entrada nova do `[Run]` do `fx.iss`, só com `/RELAUNCH`, abre o fx novo.
+- **Delta descartado:** o instalador tem ~6 MB; pacotes delta trariam um formato próprio, assinatura e casos de falha a mais para economizar poucos MB por versão.
+- **Limite conhecido:** sem assinatura ainda, a integridade depende do HTTPS do GitHub e do `SHA256SUMS.txt` no mesmo release (protege contra download corrompido, não contra quem controlar o release). A assinatura fecha isso.
+

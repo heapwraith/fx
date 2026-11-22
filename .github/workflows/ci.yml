@@ -145,6 +145,11 @@ jobs:
           $v = "${{ steps.version.outputs.version }}"
           $setup = (Get-ChildItem setup/*-setup-x64.exe | Select-Object -First 1).FullName
           $setupArm = (Get-ChildItem -Recurse arm64 -Filter *-setup-arm64.exe | Select-Object -First 1).FullName
-          $ghArgs = @("${{ github.ref_name }}", "fx-$v-windows-x64.zip", "fx-$v-windows-arm64.zip", $setup, $setupArm, "--draft", "--title", "fx $v", "--notes-file", "notes.md")
+          # Checksums the updater checks the installers against (T4.1).
+          $sums = foreach ($f in @("fx-$v-windows-x64.zip", "fx-$v-windows-arm64.zip", $setup, $setupArm)) {
+            "{0}  {1}" -f (Get-FileHash -Algorithm SHA256 $f).Hash.ToLower(), (Split-Path $f -Leaf)
+          }
+          $sums | Set-Content -Encoding ascii SHA256SUMS.txt
+          $ghArgs = @("${{ github.ref_name }}", "fx-$v-windows-x64.zip", "fx-$v-windows-arm64.zip", $setup, $setupArm, "SHA256SUMS.txt", "--draft", "--title", "fx $v", "--notes-file", "notes.md")
           if ($v.StartsWith('0.')) { $ghArgs += "--prerelease" }  # pre-1.0
           gh release create @ghArgs

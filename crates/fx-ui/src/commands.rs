@@ -35,6 +35,10 @@ pub enum Action {
     ReportCrash,
     /// Turns the local crash reports on or off.
     CrashReports,
+    /// Installs the update found, or checks now (T4.1).
+    Update,
+    /// Turns the daily update check on or off.
+    UpdateChecks,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -213,6 +217,20 @@ pub const COMMANDS: &[Command] = &[
             "Crash reports: turn on or off",
         ),
         Action::CrashReports,
+    ),
+    direct(
+        (
+            "Atualizar o fx (procura a versão mais nova)",
+            "Update fx (looks for the newest version)",
+        ),
+        Action::Update,
+    ),
+    direct(
+        (
+            "Verificação diária de atualizações: ligar ou desligar",
+            "Daily update check: turn on or off",
+        ),
+        Action::UpdateChecks,
     ),
 ];
 

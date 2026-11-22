@@ -5,6 +5,7 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 ## [Não lançado]
 
 ### Adicionado
+- Atualizador: aviso de versão nova e instalação pela paleta, conferida por SHA-256.
 - Relatório de falhas local e anônimo, com issue pré-preenchida (nada é enviado sozinho).
 - Estado de pastas de nuvem (OneDrive e outras) e comandos para manter ou liberar espaço.
 - Interface em português e inglês (idioma do Windows; troca na paleta).

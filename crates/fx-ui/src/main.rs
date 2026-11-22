@@ -32,6 +32,7 @@ mod tags;
 mod theme;
 mod thumbs;
 mod trace;
+mod update;
 
 #[allow(unused_imports)]
 use fx_core::{tr, trf};
@@ -76,6 +77,9 @@ struct Startup {
     sidebar: bool,
     show_hidden: bool,
 }
+
+/// The daily update check runs once per process.
+static UPDATE_CHECKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn main() {
     crash::install();
@@ -123,6 +127,8 @@ fn main() {
     };
     i18n::init(&settings.idioma);
     crash::set_enabled(settings.relatorio_falhas);
+    // Benchmarks and test runs never ask the network.
+    update::set_enabled(persist && settings.verificar_atualizacoes);
     // A report left by the last run (T3.10): offered in the status bar.
     let crashed = (persist && settings.relatorio_falhas)
         .then(crash::pending)
@@ -339,6 +345,12 @@ fn open_folder_window(
             });
             if let Some(state) = saved {
                 view.update(cx, |view, cx| view.restore_tabs(state, window, cx));
+            }
+            // Daily update check (T4.1), first window only, off the UI thread.
+            if update::enabled() && !UPDATE_CHECKED.swap(true, std::sync::atomic::Ordering::Relaxed)
+            {
+                let tab = view.read(cx).current();
+                tab.update(cx, |tab, cx| tab.check_updates(true, cx));
             }
             if crash::take_notice() {
                 let tab = view.read(cx).current();

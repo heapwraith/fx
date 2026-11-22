@@ -24,6 +24,7 @@ mod selection;
 mod tabs;
 pub mod tags;
 mod undo;
+pub mod update;
 pub mod vt;
 pub mod zip_list;
 

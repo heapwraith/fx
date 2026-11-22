@@ -1198,6 +1198,76 @@ impl FolderView {
         .detach();
     }
 
+    /// The update check (T4.1), on a worker thread. `quiet`: the daily check
+    /// at startup, which only speaks when there is a newer version.
+    pub fn check_updates(&mut self, quiet: bool, cx: &mut Context<Self>) {
+        let work = cx.background_executor().spawn(async move {
+            if quiet && !crate::update::due() {
+                return Ok(None);
+            }
+            crate::update::check()
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |view, cx| {
+                let text = match result {
+                    Ok(Some(u)) => {
+                        let v = u.version.to_string();
+                        trf!(
+                            "Versão {v} disponível · Ctrl+K: atualizar",
+                            "Version {v} available · Ctrl+K: update"
+                        )
+                    }
+                    _ if quiet => return,
+                    Ok(None) => {
+                        tr!("O fx já está na versão mais recente", "fx is up to date").to_owned()
+                    }
+                    Err(e) => trf!(
+                        "Não foi possível procurar atualizações: {e}",
+                        "Could not check for updates: {e}"
+                    ),
+                };
+                view.show_notice(text, cx);
+            });
+        })
+        .detach();
+    }
+
+    /// Palette "Atualizar o fx": installs the version found, or checks now.
+    pub fn update_command(&mut self, cx: &mut Context<Self>) {
+        let Some(update) = crate::update::available() else {
+            self.show_notice(
+                tr!("Procurando atualizações…", "Checking for updates…").to_owned(),
+                cx,
+            );
+            self.check_updates(false, cx);
+            return;
+        };
+        let v = update.version.to_string();
+        self.show_notice(
+            trf!("Baixando a versão {v}…", "Downloading version {v}…"),
+            cx,
+        );
+        let work = cx
+            .background_executor()
+            .spawn(async move { crate::update::install(&update) });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |view, cx| {
+                let text = match result {
+                    Ok(()) => tr!(
+                        "Instalando: o fx fecha e abre de novo na versão nova",
+                        "Installing: fx closes and opens again in the new version"
+                    )
+                    .to_owned(),
+                    Err(e) => trf!("Atualização cancelada: {e}", "Update canceled: {e}"),
+                };
+                view.show_notice(text, cx);
+            });
+        })
+        .detach();
+    }
+
     /// Palette: opens the issue page for the newest crash report (T3.10).
     /// Reading the small report and starting the browser run off the UI
     /// thread; the report is then marked as seen.

@@ -24,4 +24,4 @@ pub use windows::{
     window_id, windows_build,
 };
 #[cfg(windows)]
-pub use windows::{conpty, contrast::high_contrast, default_manager, preview_host};
+pub use windows::{conpty, contrast::high_contrast, default_manager, net, preview_host};

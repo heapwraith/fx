@@ -240,6 +240,21 @@ impl TabsView {
                     tab.update(cx, |view, cx| view.default_manager(on, cx));
                 }
                 Action::CloudPin(keep) => tab.update(cx, |view, cx| view.cloud_pin(keep, cx)),
+                Action::Update => tab.update(cx, |view, cx| view.update_command(cx)),
+                Action::UpdateChecks => tab.update(cx, |view, cx| {
+                    let text = if crate::update::switch() {
+                        tr!(
+                            "Verificação diária de atualizações ligada",
+                            "Daily update check on"
+                        )
+                    } else {
+                        tr!(
+                            "Verificação diária de atualizações desligada",
+                            "Daily update check off"
+                        )
+                    };
+                    view.show_notice(text.to_owned(), cx);
+                }),
                 Action::ReportCrash => tab.update(cx, |view, cx| view.report_crash(cx)),
                 Action::CrashReports => tab.update(cx, |view, cx| {
                     let text = if crate::crash::switch() {

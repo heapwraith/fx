@@ -37,6 +37,8 @@ pub struct Settings {
     pub idioma: String,
     /// Keep a local crash report (T3.10); nothing is ever sent by fx.
     pub relatorio_falhas: bool,
+    /// Ask GitHub once a day for a newer version (T4.1).
+    pub verificar_atualizacoes: bool,
 }
 
 /// The part of the settings a window changes (density, sidebar, hidden files).
@@ -56,6 +58,7 @@ impl Default for Settings {
             mostrar_ocultos: false,
             idioma: String::new(),
             relatorio_falhas: true,
+            verificar_atualizacoes: true,
         }
     }
 }
@@ -451,6 +454,7 @@ mod tests {
             mostrar_ocultos: true,
             idioma: "en".into(),
             relatorio_falhas: false,
+            verificar_atualizacoes: false,
         };
         save_settings(&path, &s).unwrap();
         assert_eq!(load_settings(&path), s);
