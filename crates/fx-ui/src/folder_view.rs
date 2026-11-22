@@ -16,6 +16,7 @@
 //! forward, restoring each folder's scroll position and selection. The path
 //! bar is in `path_bar.rs`.
 
+mod dir_sizes;
 mod dnd;
 mod edit_ops;
 mod grid;
@@ -202,6 +203,8 @@ pub struct FolderView {
     resizing: Option<Resize>,
     /// The "Exibir" menu is open (T1.21).
     view_menu: bool,
+    /// Totals of the subfolders being computed (T2.7).
+    dir_sizes: dir_sizes::DirSizes,
     /// Width of the breadcrumb area in the last frame (T2.3), and whether
     /// the menu of the collapsed leading crumbs ("…") is open.
     crumb_room: std::rc::Rc<std::cell::Cell<f32>>,
@@ -377,6 +380,7 @@ impl FolderView {
             widths: Widths::default(),
             resizing: None,
             view_menu: false,
+            dir_sizes: dir_sizes::DirSizes::default(),
             crumb_room: std::rc::Rc::default(),
             crumb_menu: false,
             quick_look: None,
@@ -522,6 +526,7 @@ impl FolderView {
     /// and scroll position.
     fn reload(&mut self, restore: Restore, cx: &mut Context<Self>) {
         self.generation += 1;
+        self.stop_dir_sizes();
         self.list = Arc::new(FileList::new());
         self.filtered = None;
         self.selection.clear();
@@ -620,6 +625,7 @@ impl FolderView {
                 }
                 let pending = std::mem::take(&mut view.pending_changes);
                 view.apply_changes(pending, cx);
+                view.start_dir_sizes(cx);
                 cx.notify();
             });
         })
@@ -674,7 +680,7 @@ impl FolderView {
                 let is_cursor = self.selection.cursor() == Some(i);
                 let dim = self.look.show_hidden && self.list.is_hidden(i);
                 let size: SharedString = if is_dir {
-                    SharedString::default()
+                    self.dir_sizes.label(i, self.list.size(i)).into()
                 } else {
                     size_kb(self.list.size(i)).into()
                 };
@@ -1422,6 +1428,7 @@ impl FolderView {
     ) {
         self.edit = None;
         self.generation += 1;
+        self.stop_dir_sizes();
         self.path = path;
         self.list = Arc::new(FileList::new());
         self.filter_text.clear();

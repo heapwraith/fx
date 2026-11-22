@@ -307,3 +307,11 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Medido:** P5 pelo serviço (pipe + busca nos volumes + filtros, até 1000 resultados) **p95 5,39 ms** em 243 teclas (`fx-bench search --service`); P4 digitando na busca p95 3,57 ms. Ativar e desativar o serviço pela paleta, com o UAC, conferidos na janela; a remoção não deixou nada.
 - **`bench/drive.ps1`:** digita qualquer caractere do layout atual (`VkKeyScanW`), inclusive ":" e ">" no ABNT2.
 
+## D-042 — Tamanho das pastas (T2.7)
+- **Data:** 2026-11-22 · **Status:** aceita (caminho pelo serviço pendente)
+- **Cálculo:** quando a pasta termina de carregar, uma thread de fundo (`fx-dir-sizes`) soma cada subpasta com `fx_fs::folder_size` (mesma enumeração da lista, sem seguir junctions e links, como a busca), na ordem em que aparecem na tela. Os totais chegam em lotes; enquanto não chegam, a coluna mostra "…". Sair da pasta ou recarregá-la cancela (flag atômica, a soma para entre pastas). O total é a soma dos tamanhos dos arquivos, o mesmo "Tamanho" das Propriedades do Windows (não o "tamanho em disco").
+- **Cache da sessão:** os totais ficam guardados por caminho enquanto o fx estiver aberto: voltar a uma pasta mostra na hora, sem recontar. Não é invalidado por mudanças dentro das subpastas (o observador só vê a pasta atual); um total pode ficar desatualizado até reabrir o fx.
+- **Ordenação:** `FileList::set_size` grava o total; com a coluna Tamanho ativa, a lista é reordenada (em segundo plano) quando todos chegam. As pastas continuam antes dos arquivos.
+- **Custo:** pastas enormes (`C:\Windows`) levam segundos para somar, em segundo plano, sem afetar a tecla (P4 medido com p95 ≤ 3,5 ms).
+- **Pendente:** com o `fx-indexd` instalado, os totais podem vir do índice (todos os tamanhos já estão nele), mas o protocolo precisa de um pedido novo para achar a pasta pelo caminho e somar seus descendentes. Fica para quando o serviço for o caminho padrão.
+

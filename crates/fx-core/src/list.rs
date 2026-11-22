@@ -215,6 +215,14 @@ impl FileList {
         self.sizes[i as usize]
     }
 
+    /// Sets the size of entry `i` (a folder's computed total, T2.7). The
+    /// current order is kept; re-sort to place it by size.
+    pub fn set_size(&mut self, i: u32, bytes: u64) {
+        if let Some(s) = self.sizes.get_mut(i as usize) {
+            *s = bytes;
+        }
+    }
+
     pub fn modified(&self, i: u32) -> SystemTime {
         self.modified[i as usize]
     }
@@ -527,6 +535,26 @@ mod tests {
         list.extend(entries);
         list.sort(key, dir);
         names(&list, list.order())
+    }
+
+    #[test]
+    fn computed_folder_sizes_take_part_in_the_size_sort() {
+        let mut list = FileList::new();
+        list.extend(vec![dir("pequena"), dir("grande"), file("x.bin", 50, 0)]);
+        list.sort(SortKey::Size, Direction::Descending);
+        let (small, big) = (
+            (0..3).find(|&i| list.name(i) == "pequena").unwrap(),
+            (0..3).find(|&i| list.name(i) == "grande").unwrap(),
+        );
+        list.set_size(small, 10);
+        list.set_size(big, 9_000);
+        list.sort(SortKey::Size, Direction::Descending);
+        assert_eq!(
+            names(&list, list.order()),
+            ["grande", "pequena", "x.bin"],
+            "folders first, by total"
+        );
+        assert_eq!(list.size(big), 9_000);
     }
 
     #[test]

@@ -247,6 +247,85 @@ mod tests {
     }
 }
 
+/// Total of a folder tree (T2.7): what Explorer's Properties sheet shows as
+/// "Size" (the sum of file lengths).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FolderSize {
+    pub bytes: u64,
+    pub files: u64,
+    pub folders: u64,
+    /// Folders that could not be listed (no access): the total is a floor.
+    pub skipped: u64,
+    pub cancelled: bool,
+}
+
+/// Sums every file under `root` (links to folders are not followed, like
+/// [`search_tree`]). Stops early when `cancel` is set.
+pub fn folder_size(root: &Path, cancel: &AtomicBool) -> FolderSize {
+    let mut total = FolderSize::default();
+    let mut queue = VecDeque::from([root.to_path_buf()]);
+    while let Some(dir) = queue.pop_front() {
+        if cancel.load(Ordering::Relaxed) {
+            total.cancelled = true;
+            break;
+        }
+        let (tx, rx) = channel();
+        if crate::enumerate(Strategy::FindFirstFileEx, &dir, &tx).is_err() {
+            total.skipped += 1;
+            continue;
+        }
+        drop(tx);
+        total.folders += 1;
+        for entry in rx.into_iter().flatten() {
+            if entry.attributes.is_dir() {
+                if !entry.attributes.contains(Attributes::LINK) {
+                    queue.push_back(dir.join(&entry.name));
+                }
+            } else {
+                total.bytes += entry.size;
+                total.files += 1;
+            }
+        }
+    }
+    total
+}
+
+#[cfg(all(test, windows))]
+mod size_tests {
+    use super::*;
+
+    fn walk(p: &Path) -> (u64, u64) {
+        let mut out = (0, 0);
+        for e in std::fs::read_dir(p).into_iter().flatten().flatten() {
+            let Ok(m) = e.metadata() else { continue };
+            if m.is_dir() {
+                let (b, f) = walk(&e.path());
+                out = (out.0 + b, out.1 + f);
+            } else {
+                out = (out.0 + m.len(), out.1 + 1);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn matches_an_independent_walk() {
+        let t = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(t.path().join("a/b/c")).unwrap();
+        std::fs::write(t.path().join("raiz.bin"), vec![1u8; 1000]).unwrap();
+        std::fs::write(t.path().join("a/um.txt"), b"12345").unwrap();
+        std::fs::write(t.path().join("a/b/c/fundo.dat"), vec![0u8; 70_000]).unwrap();
+        std::fs::write(t.path().join("a/b/vazio"), b"").unwrap();
+        let s = folder_size(t.path(), &AtomicBool::new(false));
+        assert_eq!((s.bytes, s.files), walk(t.path()));
+        assert_eq!(s.bytes, 71_005);
+        assert_eq!((s.files, s.folders), (4, 4));
+        assert!(!s.cancelled);
+        let s = folder_size(t.path(), &AtomicBool::new(true));
+        assert!(s.cancelled);
+    }
+}
+
 #[cfg(all(test, windows))]
 mod filter_tests {
     use super::*;
