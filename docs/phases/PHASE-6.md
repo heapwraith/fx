@@ -100,13 +100,45 @@ Converter/redimensionar imagens, juntar PDFs, renomear fotos pela data EXIF, dir
 
 ---
 
+## Análise de 2026-11-22 (D-068)
+
+Revisão das 16 tarefas depois da revisão de código (D-066) e da análise de interface (D-067): como cada uma sai com o que o fx já tem, o que o Windows oferece pronto e o que exigiria dependência nova (que precisa de aprovação, SAFETY.md).
+
+**Regras que valem para toda tarefa desta fase** (aprendidas nas D-066 e D-067):
+- Tela nova = teclado completo (Tab, setas, Enter, Esc), anel de foco só ao usar o teclado, alvos de pelo menos 24 px, e a camada de acessibilidade declarada (`a11y::Overlay` ou nós próprios), com "x de N" nas listas.
+- Nada de espera bloqueante no pool do GPUI: trabalho longo em thread própria (`chan`), resultados por canal.
+- Nomes e caminhos sem conversão com perda (`OsStr`); destinos montados com `fx_core::naming`.
+- Conferida nas capturas (`FX_OPEN` na build de depuração) nos dois temas, idiomas e larguras, antes de dizer que está pronta.
+
+| Tarefa | Caminho sem dependência nova | Dependência nova (pedir aprovação) | Risco principal |
+|---|---|---|---|
+| T6.1 Mapa do disco | Totais de pastas do índice (`fx-indexd`, mensagem nova no protocolo `FXQ4`) e treemap "squarified" desenhado em `canvas` do GPUI | — | Disco sem o serviço: cair para os totais do `dir_sizes` (mais lento, com progresso real) |
+| T6.2 Linha do tempo | O `fx-indexd` já lê o diário USN; guardar as últimas N mudanças num anel e responder por intervalo | — | Memória do serviço (P9): anel limitado (ex.: 200 mil entradas) |
+| T6.3 Buscas vivas | Filtros e busca existentes; buscas salvas no `settings.toml`, atualizadas pelo USN (mesma mensagem da T6.2) | — | Muitas buscas abertas: atualizar só a visível |
+| T6.4 Duplicados | Candidatos por tamanho no índice; SHA-256 com BCrypt (`fx_shell::net::sha256`) em thread própria, com progresso real e cancelamento | — | Disco inteiro: limitar por tamanho mínimo e permitir escolher a pasta |
+| T6.5 "Ir para" que aprende | Contagem de uso e recência por pasta no SQLite de estado; ordenação "frecency" na paleta | — | Nenhum relevante |
+| T6.6 Desfazer entre sessões | Histórico do `fx-ops` serializado no SQLite; o desfazer já nunca sobrescreve | — | Arquivos mudados desde então: o trabalho reverso falha com mensagem, não sobrescreve |
+| T6.7 Compactados como pastas | Navegar e extrair pelo próprio shell do Windows (pasta compactada para ZIP; 7z, RAR e tar no Windows 11 23H2+) via `fx-shell`; a listagem de ZIP já existe (`zip_list`) | Só se for preciso ler 7z/RAR no Windows 10 | Caminhos maliciosos no arquivo: extração sempre confere o destino |
+| T6.8 Busca no conteúdo | Primeiro o Windows Search (já indexa conteúdo onde o usuário ativou), com aviso quando a pasta não está indexada | Índice próprio (ex.: `tantivy`) só se o do Windows não bastar | Memória (P8) e tempo de indexação |
+| T6.9 + T6.10 Detalhes e colunas | Property System do Windows (`IPropertyStore`, `SHGetPropertyStoreFromParsingName`) no `fx-shell`, em thread própria e sob demanda: dimensões, duração, EXIF, autor | — | Leitores de propriedade de terceiros lentos: tempo limite, como no menu |
+| T6.11 Comparar pastas | Listagens que já existem, comparação por nome, tamanho e data; sincronizar pelo `fx-ops` (com desfazer) | — | Pastas enormes: comparar em lotes, com progresso real |
+| T6.12 Status do Git | `git status --porcelain=v2 -z` em thread própria quando o `git` existe; sem ele, nada aparece | — | Repositórios grandes: tempo limite e cache por pasta |
+| T6.13 Espaços de trabalho | A sessão já salva janelas e abas; espaços são sessões com nome, trocadas pela paleta | — | Nenhum relevante |
+| T6.14 Abas entre janelas | Janelas múltiplas já existem; arrastar a aba para fora cria a janela e move o estado | — | API de arrastar entre janelas do GPUI: protótipo antes |
+| T6.15 Busca por significado | — | Windows App SDK (APIs de IA do Windows) | Só em PCs Copilot+; opcional e desligada por padrão |
+| T6.16 Ações rápidas | Imagens com o WIC do Windows (converter, redimensionar, girar); renomear pela data EXIF com a T6.9 | Juntar PDFs exige uma biblioteca de PDF (ex.: `lopdf`) | Arquivos grandes: sempre gera cópias, nunca altera o original |
+
+**Mudanças no plano:** T6.9 e T6.10 viram uma entrega só (a mesma fonte de dados). T6.2 e T6.3 compartilham a mensagem de mudanças recentes do `fx-indexd`. A ordem passa a começar pelo que não depende de nada novo e tem maior retorno por esforço.
+
 ## Ordem recomendada
 
-1. T6.1 Mapa do disco, T6.2 Linha do tempo, T6.3 Buscas vivas — três diferenciais únicos que saem do índice e do USN.
-2. T6.7 Arquivos compactados, T6.9 Painel de detalhes — as lacunas que mais fazem alguém voltar ao Explorador.
-3. T6.4 Duplicados, T6.5 "Ir para" que aprende, T6.6 Desfazer entre sessões.
-4. T6.8 Busca no conteúdo e o restante do grupo B, conforme o uso pedir.
-5. Grupo C, como opcional.
+Revista na D-068 (antes: mapa, linha do tempo e buscas vivas primeiro):
+
+1. **Base rápida, sem dependência nova:** T6.5 "Ir para" que aprende, T6.13 Espaços de trabalho, T6.6 Desfazer entre sessões.
+2. **Diferenciais do índice:** T6.1 Mapa do disco, T6.2 Linha do tempo e T6.3 Buscas vivas (mensagem nova do `fx-indexd`), T6.4 Duplicados.
+3. **Lacunas que fazem voltar ao Explorador:** T6.9 + T6.10 Detalhes e colunas (Property System), T6.7 Compactados pelo shell.
+4. **Fluxos avançados:** T6.11 Comparar pastas, T6.12 Status do Git, T6.16 Ações rápidas (imagens; PDF só com aprovação da dependência), T6.14 Abas entre janelas (protótipo antes).
+5. **Opcionais com dependência nova:** T6.8 Busca no conteúdo (Windows Search antes de índice próprio), T6.15 Busca por significado.
 
 ## Portão da Fase 6
 
