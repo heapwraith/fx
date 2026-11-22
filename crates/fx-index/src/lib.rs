@@ -5,6 +5,7 @@
 //! behind `#[cfg(windows)]` (D-012).
 
 mod index;
+pub mod protocol;
 mod search;
 
 pub use index::{FileId, Index, IndexFull, Record};
@@ -14,4 +15,7 @@ pub use search::{Hit, MAX_RESULTS, search};
 mod windows;
 
 #[cfg(windows)]
-pub use windows::{JournalWatcher, NEEDS_ADMIN, ReadStats, read_volume, read_volume_with_stats};
+pub use windows::{
+    JournalWatcher, NEEDS_ADMIN, ReadStats, pipe, read_volume, read_volume_with_stats, service,
+    system,
+};

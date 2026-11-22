@@ -21,6 +21,8 @@ pub enum Action {
     Sort(SortKey),
     /// Shows the version (with the commit it was built from) in the status.
     About,
+    /// Installs (`true`) or removes the index service, with the UAC prompt.
+    IndexService(bool),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,6 +100,14 @@ pub const COMMANDS: &[Command] = &[
         Action::Sort(SortKey::Modified),
     ),
     direct("Sobre o fx (versão)", Action::About),
+    direct(
+        "Ativar a busca no disco inteiro (serviço, pede administrador)",
+        Action::IndexService(true),
+    ),
+    direct(
+        "Desativar a busca no disco inteiro (remove o serviço)",
+        Action::IndexService(false),
+    ),
 ];
 
 /// "ctrl-shift-n" → "Ctrl+Shift+N", "alt-up" → "Alt+↑", "space" → "Espaço".

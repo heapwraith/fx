@@ -7,12 +7,16 @@ use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 use std::sync::mpsc::Receiver;
 
+use windows::Win32::Foundation::CloseHandle;
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
+use windows::Win32::System::Threading::{GetExitCodeProcess, INFINITE, WaitForSingleObject};
 use windows::Win32::UI::Shell::{
-    SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW, SHOP_FILEPATH, SHObjectProperties,
-    ShellExecuteExW,
+    SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
+    SHOP_FILEPATH, SHObjectProperties, ShellExecuteExW,
 };
-use windows::Win32::UI::WindowsAndMessaging::{ASFW_ANY, AllowSetForegroundWindow, SW_SHOWNORMAL};
+use windows::Win32::UI::WindowsAndMessaging::{
+    ASFW_ANY, AllowSetForegroundWindow, SW_HIDE, SW_SHOWNORMAL,
+};
 use windows::core::PCWSTR;
 
 use super::to_io;
@@ -37,6 +41,7 @@ pub fn launch(what: Launch) -> Receiver<io::Result<()>> {
             }
             Launch::Terminal(dir) => terminal(&dir),
             Launch::Properties(items) => properties(&items),
+            Launch::Elevated { exe, args } => run_elevated(&exe, &args),
         }
     })
 }
@@ -64,6 +69,48 @@ fn properties(items: &[std::path::PathBuf]) -> io::Result<()> {
             }
         }
         many => super::sheets::multi(many.to_vec()),
+    }
+}
+
+/// Runs `exe` with the "runas" verb (UAC prompt) and waits for it; its exit
+/// code becomes the result.
+fn run_elevated(exe: &Path, args: &str) -> io::Result<()> {
+    let verb = wide_z(OsStr::new("runas"));
+    let file = wide_z(exe.as_os_str());
+    let params = wide_z(OsStr::new(args));
+    let mut info = SHELLEXECUTEINFOW {
+        cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
+        fMask: SEE_MASK_NOASYNC | SEE_MASK_NOCLOSEPROCESS,
+        lpVerb: PCWSTR(verb.as_ptr()),
+        lpFile: PCWSTR(file.as_ptr()),
+        lpParameters: PCWSTR(params.as_ptr()),
+        nShow: SW_HIDE.0,
+        ..Default::default()
+    };
+    // SAFETY: `info` is a properly sized SHELLEXECUTEINFOW whose strings live
+    // in vectors alive for the call.
+    unsafe { ShellExecuteExW(&mut info) }.map_err(|e| match e.code().0 as u32 & 0xFFFF {
+        1223 => io::Error::new(io::ErrorKind::Interrupted, "cancelado no aviso do Windows"),
+        _ => to_io(e),
+    })?;
+    let process = info.hProcess;
+    if process.is_invalid() {
+        return Ok(());
+    }
+    let mut code = 0u32;
+    // SAFETY: `process` is the handle SEE_MASK_NOCLOSEPROCESS gave us; we wait
+    // on it, read its exit code and close it once.
+    let got = unsafe {
+        WaitForSingleObject(process, INFINITE);
+        let got = GetExitCodeProcess(process, &mut code);
+        let _ = CloseHandle(process);
+        got
+    };
+    got.map_err(to_io)?;
+    if code == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::other(format!("terminou com o código {code}")))
     }
 }
 

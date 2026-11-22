@@ -997,6 +997,40 @@ impl FolderView {
             .collect()
     }
 
+    /// Installs or removes `fx-indexd` (next to `fx.exe`) as Administrator:
+    /// Windows shows its UAC prompt; the result comes back as a notice (T2.5).
+    pub fn index_service(&mut self, install: bool, cx: &mut Context<Self>) {
+        let exe = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.join("fx-indexd.exe")))
+            .filter(|p| p.exists());
+        let Some(exe) = exe else {
+            self.show_notice("fx-indexd.exe não está ao lado do fx.exe".to_owned(), cx);
+            return;
+        };
+        let args = if install { "install" } else { "uninstall" }.to_owned();
+        let rx = fx_shell::launch(Launch::Elevated { exe, args });
+        self.show_notice(
+            "Aguardando a permissão de administrador do Windows…".to_owned(),
+            cx,
+        );
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_spawn(async move { rx.recv().unwrap_or(Ok(())) })
+                .await;
+            let text = match (result, install) {
+                (Ok(()), true) => {
+                    "Busca no disco inteiro ativada: o índice fica pronto em alguns segundos"
+                        .to_owned()
+                }
+                (Ok(()), false) => "Serviço de índice removido".to_owned(),
+                (Err(e), _) => format!("serviço de índice: {e}"),
+            };
+            let _ = this.update(cx, |view, cx| view.show_notice(text, cx));
+        })
+        .detach();
+    }
+
     /// A message in the status until the next key (palette commands).
     pub fn show_notice(&mut self, text: String, cx: &mut Context<Self>) {
         self.notice = Some(text);
@@ -1291,6 +1325,7 @@ impl FolderView {
                 )
             }
             Launch::Properties(_) => "as Propriedades".to_owned(),
+            Launch::Elevated { .. } => "o serviço de índice".to_owned(),
         };
         let rx = fx_shell::launch(what);
         cx.spawn(async move |this, cx| {

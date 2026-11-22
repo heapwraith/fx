@@ -36,14 +36,16 @@ jobs:
       - name: Tests
         run: cargo test --workspace
       - name: Build release
-        run: cargo build --release -p fx-ui
+        run: cargo build --release -p fx-ui -p fx-indexd
       - name: Version of the build
         shell: pwsh
         run: (Get-Item target/x86_64-pc-windows-msvc/release/fx.exe).VersionInfo | Format-List FileVersion, ProductVersion
       - uses: actions/upload-artifact@v4
         with:
           name: fx-exe
-          path: target/x86_64-pc-windows-msvc/release/fx.exe
+          path: |
+            target/x86_64-pc-windows-msvc/release/fx.exe
+            target/x86_64-pc-windows-msvc/release/fx-indexd.exe
           retention-days: 14
 
   release:

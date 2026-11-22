@@ -16,6 +16,10 @@ use ntfs_reader::volume::Volume;
 
 use crate::{FileId, Index, Record};
 
+pub mod pipe;
+pub mod service;
+pub mod system;
+
 /// Message shown when the process is not elevated.
 pub const NEEDS_ADMIN: &str =
     "reading the NTFS MFT requires Administrator rights: execute como Administrador";

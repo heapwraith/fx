@@ -18,6 +18,9 @@ pub enum Launch {
     /// The Windows "Properties" sheet of these items (T1.21). Like the other
     /// launches it runs off the UI thread; the sheet itself is the shell's.
     Properties(Vec<PathBuf>),
+    /// A program as Administrator (the UAC prompt), waiting for it to end;
+    /// fails if the user declines or it exits with an error (T2.5).
+    Elevated { exe: PathBuf, args: String },
 }
 
 /// Runs `job` on a new thread; the result arrives on the returned channel.
