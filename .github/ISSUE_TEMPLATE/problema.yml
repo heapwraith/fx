@@ -1,0 +1,39 @@
+name: Problema
+description: Algo não funciona como deveria
+labels: [bug]
+body:
+  - type: textarea
+    id: passos
+    attributes:
+      label: O que você fez
+      description: Os passos, na ordem, para o problema acontecer.
+      placeholder: "1. Abri a pasta...\n2. Selecionei...\n3. Apertei..."
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: O que esperava e o que aconteceu
+    validations:
+      required: true
+  - type: dropdown
+    id: dados
+    attributes:
+      label: Algum arquivo foi perdido ou danificado?
+      options:
+        - Não
+        - Sim (descreva acima exatamente quais e como)
+    validations:
+      required: true
+  - type: input
+    id: versao
+    attributes:
+      label: Versão do fx
+      description: Paleta (Ctrl+K) → "Sobre o fx", por exemplo 0.2.0-beta+a1b2c3d
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows
+      placeholder: Windows 11 24H2

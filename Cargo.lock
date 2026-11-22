@@ -2007,7 +2007,7 @@ dependencies = [
 
 [[package]]
 name = "fx-bench"
-version = "0.1.0"
+version = "0.2.0-beta"
 dependencies = [
  "fx-core",
  "fx-fs",
@@ -2017,14 +2017,14 @@ dependencies = [
 
 [[package]]
 name = "fx-core"
-version = "0.1.0"
+version = "0.2.0-beta"
 dependencies = [
  "regex",
 ]
 
 [[package]]
 name = "fx-fs"
-version = "0.1.0"
+version = "0.2.0-beta"
 dependencies = [
  "fx-core",
  "tempfile",
@@ -2033,7 +2033,7 @@ dependencies = [
 
 [[package]]
 name = "fx-index"
-version = "0.1.0"
+version = "0.2.0-beta"
 dependencies = [
  "fx-core",
  "ntfs-reader",
@@ -2043,7 +2043,7 @@ dependencies = [
 
 [[package]]
 name = "fx-indexd"
-version = "0.1.0"
+version = "0.2.0-beta"
 dependencies = [
  "fx-core",
  "fx-index",
@@ -2051,7 +2051,7 @@ dependencies = [
 
 [[package]]
 name = "fx-ops"
-version = "0.1.0"
+version = "0.2.0-beta"
 dependencies = [
  "fx-core",
  "fx-fs",
@@ -2061,14 +2061,14 @@ dependencies = [
 
 [[package]]
 name = "fx-preview"
-version = "0.1.0"
+version = "0.2.0-beta"
 dependencies = [
  "fx-shell",
 ]
 
 [[package]]
 name = "fx-shell"
-version = "0.1.0"
+version = "0.2.0-beta"
 dependencies = [
  "accesskit",
  "accesskit_windows",
@@ -2079,7 +2079,7 @@ dependencies = [
 
 [[package]]
 name = "fx-ui"
-version = "0.1.0"
+version = "0.2.0-beta"
 dependencies = [
  "accesskit",
  "embed-resource",

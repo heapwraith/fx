@@ -114,7 +114,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 - Instalar, abrir, desinstalar num Windows limpo sem deixar nada; ambos anexados ao release da tag.
 
 ## T2.11 — Beta pública
-- [ ] Concluída em: ____ · Resumo:
+- [ ] Concluída em: ____ · Resumo: parte do agente feita em 2026-11-22: README com instalação, atalhos, busca, serviço e como relatar problemas; modelos de issue (problema, com a pergunta de perda de dados, e ideia); assinatura documentada em `docs/SIGNING.md`; versão 0.2.0-beta e seção no CHANGELOG; tag `v0.2.0-beta` gera o rascunho do release. **Falta (usuário, `docs/TESTES-FINAIS.md`):** inscrição na SignPath, testes manuais e publicar o rascunho.
 
 **Fazer**
 - Assinatura do executável e do instalador (SignPath Foundation, depois que o usuário se inscrever); README com instalação, atalhos e como relatar problemas; modelo de issue.

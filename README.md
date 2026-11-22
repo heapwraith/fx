@@ -4,9 +4,40 @@ Gerenciador de arquivos para Windows 10/11: abre qualquer pasta na hora, acha qu
 
 > Status: **Fase 2 — busca, prévias e beta pública.** A Fase 1 (navegação) está pronta, mas ainda é pré-beta: use com cuidado.
 
-## Baixar
+## Instalar
 
-Cada versão publicada fica em [Releases](../../releases), como zip portátil (`fx.exe`, sem instalar). Até a beta os releases são marcados como pré-lançamento, e o Windows pode avisar "editor desconhecido" (a assinatura vem na beta). O que mudou em cada versão está no [`CHANGELOG.md`](CHANGELOG.md); a versão e o commit de um `fx.exe` aparecem nas Propriedades do arquivo e no comando "Sobre o fx" da paleta (Ctrl+K).
+Cada versão fica em [Releases](../../releases) de duas formas:
+
+- **Instalador** (`fx-X.Y.Z-setup-x64.exe`): instala só para o seu usuário, sem pedir administrador, e cria o atalho no Menu Iniciar. Desinstala por Configurações → Aplicativos, sem deixar nada (pergunta se você quer apagar também as configurações).
+- **Portátil** (`fx-X.Y.Z-windows-x64.zip`): descompacte e rode `fx.exe`.
+
+Até a 1.0 as versões são pré-lançamento. Enquanto a assinatura digital não estiver ativa, o Windows pode avisar "editor desconhecido": clique em "Mais informações" → "Executar assim mesmo". O que mudou em cada versão está no [`CHANGELOG.md`](CHANGELOG.md). A versão e o commit de um `fx.exe` aparecem nas Propriedades do arquivo e no comando "Sobre o fx" da paleta.
+
+## Usar
+
+**Ctrl+K abre a paleta**: todos os comandos, com o atalho ao lado, mais as pastas recentes e o Acesso rápido. Os principais atalhos:
+
+| Atalho | Ação | Atalho | Ação |
+|---|---|---|---|
+| Ctrl+K | Paleta de comandos | Ctrl+F | Buscar (pasta ou disco inteiro) |
+| Espaço | Pré-visualizar (Quick Look) | F2 | Renomear (vários itens: em lote) |
+| Ctrl+C / X / V | Copiar, recortar, colar | Ctrl+Shift+C | Copiar caminho |
+| Delete | Lixeira | Shift+Delete | Excluir permanentemente |
+| Ctrl+Z / Ctrl+Y | Desfazer, refazer | Ctrl+Shift+H | Histórico de operações |
+| Ctrl+Shift+N | Nova pasta | Alt+Enter | Propriedades |
+| Ctrl+T / Ctrl+W | Nova aba, fechar aba | Ctrl+Tab | Próxima aba |
+| Alt+← / Alt+→ / Alt+↑ | Voltar, avançar, subir | Ctrl+L | Editar o caminho |
+| Ctrl+H | Itens ocultos | Ctrl+B | Barra lateral |
+| Ctrl+1 / 2 / 3 | Densidade | Ctrl+Shift+2 / 6 | Grade / lista |
+| Ctrl+` | Terminal na pasta | Shift+F10 | Menu de contexto |
+
+Digitar na lista filtra a pasta na hora. Na busca (Ctrl+F), Tab alterna entre a pasta atual e o disco inteiro, e dá para filtrar digitando junto com o nome: `tipo:imagem`, `ext:pdf,docx`, `tamanho:>100mb`, `data:semana` (ou `>2026-01-01`).
+
+**Busca no disco inteiro:** pela paleta, "Ativar a busca no disco inteiro" instala o serviço opcional `fx-indexd` (pede administrador uma vez). Ele indexa os discos NTFS e se mantém atualizado; a busca responde em milissegundos e a coluna Tamanho das pastas vem pronta. "Desativar…" remove tudo.
+
+## Relatar problemas
+
+Abra uma [issue](../../issues/new/choose) com o que você fez, o que esperava e o que aconteceu, e a versão (paleta → "Sobre o fx"). Problemas de perda de dados têm prioridade máxima: descreva os passos exatos.
 
 ## Benchmarks
 

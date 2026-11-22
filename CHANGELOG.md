@@ -4,6 +4,10 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 
 ## [Não lançado]
 
+## [0.2.0-beta] — 2026-11-22
+
+Fase 2 — busca no disco inteiro, prévias e instalador. Primeira beta pública.
+
 ### Adicionado
 - Ícone do fx e versão nas Propriedades do executável (T2.1).
 - Pipeline no GitHub: verificação a cada push e `.exe` portátil a cada versão (T2.2).
