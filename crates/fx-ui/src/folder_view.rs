@@ -1255,11 +1255,10 @@ impl FolderView {
             let result = work.await;
             let _ = this.update(cx, |view, cx| {
                 let text = match result {
-                    Ok(()) => tr!(
-                        "Instalando: o fx fecha e abre de novo na versão nova",
-                        "Installing: fx closes and opens again in the new version"
-                    )
-                    .to_owned(),
+                    Ok(()) => trf!(
+                        "Versão {v} instalada: feche e abra o fx para usá-la",
+                        "Version {v} installed: close and reopen fx to use it"
+                    ),
                     Err(e) => trf!("Atualização cancelada: {e}", "Update canceled: {e}"),
                 };
                 view.show_notice(text, cx);
@@ -1586,6 +1585,11 @@ impl FolderView {
     }
 
     /// Starts a launch off the UI thread; a failure shows in the status bar.
+    /// Opens a web page in the default browser (off the UI thread).
+    pub fn open_url(&mut self, url: &str, cx: &mut Context<Self>) {
+        self.launch(Launch::Open(PathBuf::from(url)), cx);
+    }
+
     fn launch(&mut self, what: Launch, cx: &mut Context<Self>) {
         let label = match &what {
             Launch::Open(p) | Launch::OpenWith(p) | Launch::Terminal(p) => {

@@ -112,6 +112,9 @@ impl Persist {
             settings.barra_lateral = ui.sidebar;
             settings.mostrar_ocultos = ui.show_hidden;
         }
+        if crate::tabs_view::guide_seen() {
+            settings.guia_visto = true;
+        }
         if let Some(on) = crate::update::chosen() {
             settings.verificar_atualizacoes = on;
         }

@@ -1,5 +1,7 @@
 # fx
 
+**Pastas abrem na hora. Arquivos aparecem enquanto você digita.**
+
 Gerenciador de arquivos para Windows 10/11: abre qualquer pasta na hora, acha qualquer arquivo do disco em milissegundos e pode substituir o Explorador. Open source, escrito em Rust.
 
 > Status: **Fase 2 — busca, prévias e beta pública.** A Fase 1 (navegação) está pronta, mas ainda é pré-beta: use com cuidado.

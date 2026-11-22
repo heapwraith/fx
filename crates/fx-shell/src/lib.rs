@@ -24,4 +24,4 @@ pub use windows::{
     system_language_is_portuguese, utc_offset_at, watch_drives, window_id, windows_build,
 };
 #[cfg(windows)]
-pub use windows::{conpty, contrast::high_contrast, default_manager, net, preview_host};
+pub use windows::{conpty, contrast::high_contrast, default_manager, install, net, preview_host};

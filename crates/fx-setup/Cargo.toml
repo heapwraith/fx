@@ -1,0 +1,30 @@
+[package]
+name = "fx-setup"
+description = "fx's own installer, updater helper and uninstaller (T4.3)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "fx-setup"
+path = "src/main.rs"
+
+[dependencies]
+fx-core.workspace = true
+fx-shell.workspace = true
+gpui.workspace = true
+
+[build-dependencies]
+embed-resource.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

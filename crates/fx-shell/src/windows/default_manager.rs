@@ -15,13 +15,7 @@
 
 use std::io;
 
-use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, WIN32_ERROR};
-use windows::Win32::System::Registry::{
-    HKEY, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ, RRF_RT_REG_SZ,
-    RegCloseKey, RegCreateKeyExW, RegDeleteTreeW, RegDeleteValueW, RegGetValueW, RegOpenKeyExW,
-    RegSetValueExW,
-};
-use windows::core::{HSTRING, PCWSTR};
+use super::registry::{delete_tree, delete_value, exists, get, set};
 
 /// Where the real setting lives (under `HKCU`).
 pub const CLASSES: &str = r"Software\Classes";
@@ -39,115 +33,6 @@ const KEYS: [&str; 4] = [
 const VALUES: [&str; 2] = ["", "DelegateExecute"];
 /// Marks a value that did not exist before (in the backup).
 const ABSENT: &str = "\u{1}absent";
-
-fn check(e: WIN32_ERROR) -> io::Result<()> {
-    if e.is_ok() {
-        Ok(())
-    } else {
-        Err(io::Error::from_raw_os_error(e.0 as i32))
-    }
-}
-
-struct Key(HKEY);
-
-impl Drop for Key {
-    fn drop(&mut self) {
-        // SAFETY: we own the handle and close it once.
-        let _ = unsafe { RegCloseKey(self.0) };
-    }
-}
-
-fn create(path: &str) -> io::Result<Key> {
-    let mut key = HKEY::default();
-    // SAFETY: NUL-terminated path (HSTRING); `key` receives a handle we close.
-    check(unsafe {
-        RegCreateKeyExW(
-            HKEY_CURRENT_USER,
-            &HSTRING::from(path),
-            None,
-            PCWSTR::null(),
-            REG_OPTION_NON_VOLATILE,
-            KEY_WRITE | KEY_READ,
-            None,
-            &mut key,
-            None,
-        )
-    })?;
-    Ok(Key(key))
-}
-
-fn exists(path: &str) -> bool {
-    let mut key = HKEY::default();
-    // SAFETY: NUL-terminated path; the handle is closed by `Key`.
-    let ok = unsafe {
-        RegOpenKeyExW(
-            HKEY_CURRENT_USER,
-            &HSTRING::from(path),
-            None,
-            KEY_READ,
-            &mut key,
-        )
-    }
-    .is_ok();
-    if ok {
-        drop(Key(key));
-    }
-    ok
-}
-
-fn get(path: &str, name: &str) -> Option<String> {
-    let mut buf = vec![0u16; 2048];
-    let mut size = (buf.len() * 2) as u32;
-    // SAFETY: NUL-terminated strings; `buf` is writable for `size` bytes.
-    let r = unsafe {
-        RegGetValueW(
-            HKEY_CURRENT_USER,
-            &HSTRING::from(path),
-            &HSTRING::from(name),
-            RRF_RT_REG_SZ,
-            None,
-            Some(buf.as_mut_ptr().cast()),
-            Some(&mut size),
-        )
-    };
-    if r.is_err() {
-        return None;
-    }
-    let units = (size as usize / 2).saturating_sub(1);
-    Some(String::from_utf16_lossy(&buf[..units]))
-}
-
-fn set(path: &str, name: &str, value: &str) -> io::Result<()> {
-    let key = create(path)?;
-    let data: Vec<u8> = value
-        .encode_utf16()
-        .chain([0])
-        .flat_map(u16::to_le_bytes)
-        .collect();
-    // SAFETY: valid key; `data` is a NUL-terminated UTF-16 string.
-    check(unsafe { RegSetValueExW(key.0, &HSTRING::from(name), None, REG_SZ, Some(&data)) })
-}
-
-fn delete_value(path: &str, name: &str) -> io::Result<()> {
-    let key = create(path)?;
-    // SAFETY: valid key; NUL-terminated name.
-    let r = unsafe { RegDeleteValueW(key.0, &HSTRING::from(name)) };
-    if r == ERROR_FILE_NOT_FOUND {
-        Ok(())
-    } else {
-        check(r)
-    }
-}
-
-fn delete_tree(path: &str) -> io::Result<()> {
-    // SAFETY: NUL-terminated path under HKCU.
-    let r = unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, &HSTRING::from(path)) };
-    if r == ERROR_FILE_NOT_FOUND {
-        Ok(())
-    } else {
-        check(r)
-    }
-}
 
 /// The command fx registers for `key`: with the folder for the open verbs,
 /// alone for Win+E (it opens no particular folder).
@@ -265,7 +150,7 @@ mod tests {
     #[test]
     fn enable_then_revert_on_an_empty_root_leaves_nothing() {
         let r = Root::new("empty");
-        std::mem::drop(create(&r.classes()).unwrap());
+        std::mem::drop(super::super::registry::create(&r.classes()).unwrap());
         assert!(!is_default(&r.classes(), EXE));
         enable(&r.classes(), &r.backup(), EXE).unwrap();
         assert!(is_default(&r.classes(), EXE));

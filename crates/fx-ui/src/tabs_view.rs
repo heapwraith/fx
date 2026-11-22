@@ -10,6 +10,7 @@
 //! active tab; ☰ or Ctrl+B collapses it.
 
 mod dual;
+mod guide;
 mod history;
 mod palette;
 mod queue;
@@ -72,6 +73,8 @@ pub struct TabsView {
     shown_active: Option<usize>,
     /// Operation history panel (Ctrl+Shift+H or the clock button).
     history_open: bool,
+    /// "Sobre" or "Como usar" (T4.6).
+    guide: Option<guide::Guide>,
     /// Command palette (Ctrl+K, Ctrl+Shift+P; T1.24).
     palette: Option<palette::Palette>,
     /// Second panes (F3, T3.2), by the tab's own view.
@@ -151,6 +154,7 @@ impl TabsView {
             tab_scroll: ScrollHandle::new(),
             shown_active: None,
             history_open: false,
+            guide: None,
             palette: None,
             seconds: std::collections::HashMap::new(),
         };
@@ -382,6 +386,22 @@ impl TabsView {
         }
         let ks = &event.keystroke;
         let m = ks.modifiers;
+        if self.guide.is_some() && ks.key == "escape" {
+            self.guide = None;
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
+        if ks.key == "f1" && !m.control && !m.alt && !m.shift {
+            if self.guide == Some(guide::Guide::HowTo) {
+                self.guide = None;
+                cx.notify();
+            } else {
+                self.open_guide(guide::Guide::HowTo, cx);
+            }
+            cx.stop_propagation();
+            return;
+        }
         if self.history_open && ks.key == "escape" {
             self.history_open = false;
             cx.stop_propagation();
@@ -645,7 +665,27 @@ impl Render for TabsView {
             )
             .children(self.render_queue(cx))
             .children(self.render_history(cx))
+            .children(self.render_guide(cx))
             .children(self.render_palette(cx))
             .children(self.render_conflict(cx))
+    }
+}
+
+/// "Como usar o fx" on the first run (T4.6): set at startup.
+pub fn guide_first_run(first: bool) {
+    guide::set_first_run(first);
+}
+
+pub fn guide_take_first_run() -> bool {
+    guide::take_first_run()
+}
+
+pub fn guide_seen() -> bool {
+    guide::seen()
+}
+
+impl TabsView {
+    pub fn open_howto(&mut self, cx: &mut Context<Self>) {
+        self.open_guide(guide::Guide::HowTo, cx);
     }
 }

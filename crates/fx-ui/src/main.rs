@@ -137,6 +137,8 @@ fn main() {
         .flatten()
         .is_some();
     crash::set_notice(crashed);
+    // "Como usar o fx" opens by itself the first time (T4.6).
+    tabs_view::guide_first_run(persist && !settings.guia_visto);
     // Test hook for the crash report (T3.10).
     if std::env::var_os("FX_TEST_PANIC").is_some_and(|v| v == "1") {
         panic!("crash report test at C:\\Users\\example\\x.txt");
@@ -353,6 +355,9 @@ fn open_folder_window(
             {
                 let tab = view.read(cx).current();
                 tab.update(cx, |tab, cx| tab.check_updates(true, cx));
+            }
+            if tabs_view::guide_take_first_run() {
+                view.update(cx, |v, cx| v.open_howto(cx));
             }
             if crash::take_notice() {
                 let tab = view.read(cx).current();

@@ -274,9 +274,7 @@ impl TabsView {
                     crate::i18n::switch();
                     cx.refresh_windows();
                 }
-                Action::About => tab.update(cx, |view, cx| {
-                    view.show_notice(format!("fx {} · MIT OR Apache-2.0", crate::VERSION), cx);
-                }),
+                Action::About => self.open_guide(super::guide::Guide::About, cx),
             },
         }
     }

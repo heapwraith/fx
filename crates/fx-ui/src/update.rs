@@ -3,8 +3,8 @@
 //! palette's "Atualizar o fx" installs it: the installer for this
 //! architecture is downloaded to `%TEMP%`, checked against the release's
 //! `SHA256SUMS.txt` (and its signature, when this fx is signed), then run
-//! silently; it closes fx (Restart Manager, so the session is saved) and
-//! starts the new one. Nothing is downloaded or installed without the user
+//! silently (`fx-setup --silent`, T4.3): the files are replaced next to the
+//! running fx and the new version starts with the next fx. Nothing is downloaded or installed without the user
 //! asking; `verificar_atualizacoes = false` turns the daily check off.
 
 use std::io;
@@ -133,17 +133,18 @@ pub fn install(update: &Update) -> io::Result<()> {
             "the downloaded installer is not signed"
         )));
     }
-    std::process::Command::new(&path)
-        .args([
-            "/SILENT",
-            "/SUPPRESSMSGBOXES",
-            "/NORESTART",
-            "/CLOSEAPPLICATIONS",
-            "/NORESTARTAPPLICATIONS",
-            "/RELAUNCH",
-        ])
-        .spawn()?;
-    Ok(())
+    // fx-setup (T4.3) installs next to the running fx (its exe is renamed
+    // aside, not deleted): the new version starts with the next fx.
+    let status = std::process::Command::new(&path).arg("--silent").status()?;
+    let _ = std::fs::remove_file(&path);
+    if status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other(fx_core::tr!(
+            "o instalador não terminou",
+            "the installer did not finish"
+        )))
+    }
 }
 
 #[cfg(test)]

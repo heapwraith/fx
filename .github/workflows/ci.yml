@@ -36,18 +36,22 @@ jobs:
       - name: Tests
         run: cargo test --workspace
       - name: Build release
-        run: cargo build --release -p fx-ui -p fx-indexd -p fx-preview
+        run: cargo build --release -p fx-ui -p fx-indexd -p fx-preview -p fx-setup
       - name: Version of the build
         shell: pwsh
         run: (Get-Item target/x86_64-pc-windows-msvc/release/fx.exe).VersionInfo | Format-List FileVersion, ProductVersion
-      - name: Installer (Inno Setup)
+      - name: Installer (fx-setup, T4.3)
         shell: pwsh
         run: |
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
           $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
-          & $iscc /Q "/DAppVersion=$v" "/DSourceDir=$PWD\target\x86_64-pc-windows-msvc\release" installer\fx.iss
-          if ($LASTEXITCODE -ne 0) { throw "iscc failed" }
+          $rel = "$PWD\target\x86_64-pc-windows-msvc\release"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          & "$rel\fx-setup.exe" --pack "$rel\fx-setup.exe" $rel $PWD "$PWD\dist\fx-$v-setup-x64.exe" | Out-Host
+          if (-not (Test-Path "dist\fx-$v-setup-x64.exe")) { throw "fx-setup --pack failed" }
+          # The package must install and uninstall cleanly (test folder and key).
+          $env:FX_SETUP_TEST_ROOT = "$env:RUNNER_TEMP\fx-setup-ci"
+          Start-Process -Wait -FilePath "dist\fx-$v-setup-x64.exe" -ArgumentList "--silent"
+          if (-not (Test-Path "$env:FX_SETUP_TEST_ROOT\Programs\fx\fx.exe")) { throw "silent install failed" }
           Get-ChildItem dist
       - uses: actions/upload-artifact@v4
         with:
@@ -74,15 +78,17 @@ jobs:
         with:
           key: arm64
       - name: Build release (aarch64)
-        run: cargo build --release --target aarch64-pc-windows-msvc -p fx-ui -p fx-indexd -p fx-preview
-      - name: Installer (Inno Setup, ARM64)
+        run: cargo build --release --target aarch64-pc-windows-msvc -p fx-ui -p fx-indexd -p fx-preview -p fx-setup
+      - name: Packer (x64 fx-setup, packs the ARM64 one)
+        run: cargo build --release --target x86_64-pc-windows-msvc -p fx-setup
+      - name: Installer (fx-setup, ARM64)
         shell: pwsh
         run: |
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
           $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
-          & $iscc /Q "/DAppVersion=$v" "/DArch=arm64" "/DSourceDir=$PWD\target\aarch64-pc-windows-msvc\release" installer\fx.iss
-          if ($LASTEXITCODE -ne 0) { throw "iscc failed" }
+          $arm = "$PWD\target\aarch64-pc-windows-msvc\release"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          & "$PWD\target\x86_64-pc-windows-msvc\release\fx-setup.exe" --pack "$arm\fx-setup.exe" $arm $PWD "$PWD\dist\fx-$v-setup-arm64.exe" | Out-Host
+          if (-not (Test-Path "dist\fx-$v-setup-arm64.exe")) { throw "fx-setup --pack failed" }
       - uses: actions/upload-artifact@v4
         with:
           name: fx-arm64

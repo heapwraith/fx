@@ -39,6 +39,8 @@ pub struct Settings {
     pub relatorio_falhas: bool,
     /// Ask GitHub once a day for a newer version (T4.1).
     pub verificar_atualizacoes: bool,
+    /// "Como usar o fx" was already shown once (T4.6).
+    pub guia_visto: bool,
 }
 
 /// The part of the settings a window changes (density, sidebar, hidden files).
@@ -59,6 +61,7 @@ impl Default for Settings {
             idioma: String::new(),
             relatorio_falhas: true,
             verificar_atualizacoes: true,
+            guia_visto: false,
         }
     }
 }
@@ -455,6 +458,7 @@ mod tests {
             idioma: "en".into(),
             relatorio_falhas: false,
             verificar_atualizacoes: false,
+            guia_visto: true,
         };
         save_settings(&path, &s).unwrap();
         assert_eq!(load_settings(&path), s);

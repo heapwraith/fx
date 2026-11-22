@@ -163,7 +163,7 @@ pub const COMMANDS: &[Command] = &[
         ("Ordenar por data de modificação", "Sort by date modified"),
         Action::Sort(SortKey::Modified),
     ),
-    direct(("Sobre o fx (versão)", "About fx (version)"), Action::About),
+    direct(("Sobre o fx", "About fx"), Action::About),
     direct(
         (
             "Ativar a busca no disco inteiro (serviço, pede administrador)",
@@ -232,6 +232,7 @@ pub const COMMANDS: &[Command] = &[
         ),
         Action::UpdateChecks,
     ),
+    window(("Como usar o fx", "How to use fx"), "f1"),
 ];
 
 /// "ctrl-shift-n" → "Ctrl+Shift+N", "alt-up" → "Alt+↑", "space" → "Espaço".

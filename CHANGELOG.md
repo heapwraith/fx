@@ -5,6 +5,8 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 ## [Não lançado]
 
 ### Adicionado
+- Instalador próprio (fx-setup), com a cara do fx, desinstalação limpa e atualização sem fechar o app.
+- Telas "Sobre o fx" e "Como usar o fx" (F1; abre sozinha na primeira vez).
 - Transições curtas nas sobreposições (respeitam "Efeitos de animação" do Windows) e mensagens para busca e paleta sem resultado.
 - Atualizador: aviso de versão nova e instalação pela paleta, conferida por SHA-256.
 - Relatório de falhas local e anônimo, com issue pré-preenchida (nada é enviado sozinho).

@@ -36,7 +36,7 @@
 - P4 e P8 sem regressão; teste de que nenhuma animação passa de 150 ms e de que com animações desligadas nada anima; varredura de textos (T3.7) estendida a `fx-ops` e `fx-shell`; capturas conferidas.
 
 ## T4.3 — Instalador próprio (fx-setup)
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: `fx-setup` em Rust + GPUI com os tokens do fx (claro/escuro, pt/en): boas-vindas com slogan, opções, progresso animado, pronto, erro, desinstalação; pacote próprio anexado ao executável (`fx-core::package`, LZMS do Windows, SHA-256 por arquivo); instala por usuário com troca de arquivos tudo-ou-nada (o fx aberto é renomeado, não apagado), atalhos, registro em Configurações › Aplicativos, adoção da instalação antiga do Inno; desinstala só o que instalou; CI empacota x64 e ARM64 e testa a instalação silenciosa; Inno Setup removido (D-058). Testes: 3 do pacote, 3 do empacotador, 3 da transação (com processo em execução de verdade), 3 do Windows; fluxo completo e desinstalação conferidos na janela (pt e en). Instalador: 15,2 MB (Inno: 5,8 MB).
 
 **Fazer**
 - Novo binário `fx-setup` em Rust + GPUI, com os tokens visuais do fx (Fluent, claro/escuro, português/inglês): um executável só, com o fx comprimido dentro (Compression API do Windows, LZMS; sem crates novas). Substitui o Inno Setup.
@@ -48,6 +48,9 @@
 
 **Aceite**
 - Testes: pacote (empacotar, ler, arquivo corrompido falha), instalação e desinstalação numa pasta temporária e numa chave de registro temporária (`HKCU\Software\fx-test-*`), troca com volta em caso de falha, arquivo em uso (o fx aberto é renomeado, não apagado). Telas conferidas na janela nos dois temas e idiomas.
+
+## T4.6 — Telas "Sobre" e "Como usar"
+- [x] Concluída em: 2026-11-22 · Resumo: pedido do usuário. "Sobre o fx" (logo, slogan, versão e compilação, licença, créditos, Procurar atualizações, Novidades, Código) e "Como usar o fx" (seis grupos de atalhos, abre sozinha na primeira vez, F1 e paleta), sobreposições com a transição da T4.2; slogan novo também no instalador (D-059). Teste do conteúdo; conferidas em claro e escuro.
 
 ## T4.4 — Atualização ao reiniciar (como o Zed)
 - [ ] Concluída em: ____ · Resumo:

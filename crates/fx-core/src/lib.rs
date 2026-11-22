@@ -17,6 +17,7 @@ pub mod locale;
 pub mod markdown;
 pub mod miller;
 pub mod natural;
+pub mod package;
 mod pinned;
 pub mod preview;
 pub mod search_filter;
