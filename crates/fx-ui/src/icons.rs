@@ -6,6 +6,7 @@
 //! size, so nothing moves when it does. `FX_ICONS=0` turns icons off (to
 //! compare benchmarks).
 
+use futures::StreamExt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::mpsc::channel;
@@ -56,18 +57,8 @@ impl Icons {
         let (tx, rx) = channel();
         let service = fx_shell::start_icon_service(tx).ok()?;
         cx.spawn(async move |this, cx| {
-            let background = cx.background_executor().clone();
-            let mut rx = rx;
-            loop {
-                // Wait on a background thread, never on the UI thread.
-                let (back, ready) = background
-                    .spawn(async move {
-                        let r = rx.recv();
-                        (rx, r)
-                    })
-                    .await;
-                rx = back;
-                let Ok(ready) = ready else { break };
+            let mut rx = crate::chan::stream(rx);
+            while let Some(ready) = rx.next().await {
                 let alive = this.update(cx, |icons, cx| {
                     let slot = match ready.png {
                         Some(png) => {

@@ -21,6 +21,8 @@ path = "src/main.rs"
 [dependencies]
 fx-core.workspace = true
 fx-shell.workspace = true
+fx-theme.workspace = true
+futures.workspace = true
 gpui.workspace = true
 thiserror.workspace = true
 

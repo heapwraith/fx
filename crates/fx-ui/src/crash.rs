@@ -6,12 +6,8 @@
 //! `settings.toml` (or the palette) turns it off: nothing is written.
 
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock};
-
-static ENABLED: AtomicBool = AtomicBool::new(true);
-/// Set when the user switches it in the palette this session, to be saved.
-static CHOSEN: Mutex<Option<bool>> = Mutex::new(None);
 
 const ISSUES: &str = "https://github.com/heapwraith/fx/issues/new";
 /// Browsers and GitHub accept long URLs, but not unbounded ones.
@@ -51,7 +47,7 @@ pub fn install() {
                 backtrace: &trace,
                 user: user.as_deref(),
             });
-            let _ = write(&dir, enabled(), &report);
+            let _ = write(&dir, crate::prefs::CRASH_REPORTS.get(), &report);
         }
         previous(info);
     }));
@@ -67,30 +63,6 @@ pub fn set_notice(on: bool) {
 /// The first window shows the notice; later ones don't.
 pub fn take_notice() -> bool {
     NOTICE.swap(false, Ordering::Relaxed)
-}
-
-pub fn enabled() -> bool {
-    ENABLED.load(Ordering::Relaxed)
-}
-
-/// From `settings.toml`, at startup.
-pub fn set_enabled(on: bool) {
-    ENABLED.store(on, Ordering::Relaxed);
-}
-
-/// Palette: turns the reports on or off. Returns the new state.
-pub fn switch() -> bool {
-    let on = !enabled();
-    set_enabled(on);
-    if let Ok(mut c) = CHOSEN.lock() {
-        *c = Some(on);
-    }
-    on
-}
-
-/// What to save in `relatorio_falhas`, if switched this session.
-pub fn chosen() -> Option<bool> {
-    CHOSEN.lock().ok().and_then(|c| *c)
 }
 
 /// Writes `report` as a new file in `dir`, unless turned off.

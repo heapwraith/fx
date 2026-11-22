@@ -4,7 +4,7 @@
 //! the shell (Esc too), except Ctrl+J, which closes it. Clicking the list
 //! gives the focus back to the list; clicking the panel, to the shell.
 
-#[allow(unused_imports)]
+use futures::StreamExt;
 use fx_core::{tr, trf};
 use std::io::Read;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -60,7 +60,7 @@ impl FolderView {
             }
         };
         let screen = Arc::new(Mutex::new(Screen::new(cols as usize, rows as usize)));
-        let (tx, rx) = std::sync::mpsc::channel::<()>();
+        let (tx, mut rx) = futures::channel::mpsc::unbounded::<()>();
         let feeding = screen.clone();
         let _ = std::thread::Builder::new()
             .name("fx-terminal".into())
@@ -74,25 +74,14 @@ impl FolderView {
                         .lock()
                         .unwrap_or_else(PoisonError::into_inner)
                         .feed(&buf[..n]);
-                    let _ = tx.send(());
+                    let _ = tx.unbounded_send(());
                 }
             });
         // Repaint when output arrives (bursts are coalesced into one frame).
         cx.spawn(async move |this, cx| {
-            let background = cx.background_executor().clone();
-            let mut rx = rx;
-            loop {
-                let (back, got) = background
-                    .spawn(async move {
-                        let r = rx.recv();
-                        while rx.try_recv().is_ok() {}
-                        (rx, r)
-                    })
-                    .await;
-                rx = back;
-                if got.is_err() {
-                    break;
-                }
+            while rx.next().await.is_some() {
+                // A burst becomes one frame.
+                while rx.try_recv().is_ok() {}
                 if this.update(cx, |_, cx| cx.notify()).is_err() {
                     break;
                 }

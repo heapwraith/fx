@@ -6,8 +6,7 @@
 //! worker thread and drawn as a virtualized list, so a folder of 100,000
 //! items does not block anything.
 
-#[allow(unused_imports)]
-use fx_core::{tr, trf};
+use fx_core::tr;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -111,7 +110,7 @@ impl FolderView {
             .collect();
         for dir in wanted {
             c.loading.insert(dir.clone());
-            let (tx, rx) = channel();
+            let (tx, rx) = futures::channel::oneshot::channel();
             let reading = dir.clone();
             let _ = std::thread::Builder::new()
                 .name("fx-column".into())
@@ -119,8 +118,7 @@ impl FolderView {
                     let _ = tx.send(read_column(&reading, show_hidden));
                 });
             cx.spawn(async move |this, cx| {
-                let entries = cx.background_spawn(async move { rx.recv() }).await;
-                let Ok(entries) = entries else { return };
+                let Ok(entries) = rx.await else { return };
                 let _ = this.update(cx, |view, cx| {
                     if let Some(c) = view.miller.as_mut() {
                         c.loading.remove(&dir);

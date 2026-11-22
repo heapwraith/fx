@@ -9,7 +9,6 @@
 //! files from fx or any app through the operations queue (conflicts asked,
 //! undo recorded), and empties the clipboard after a successful cut-paste.
 
-#[allow(unused_imports)]
 use fx_core::{tr, trf};
 use std::path::PathBuf;
 
@@ -307,7 +306,7 @@ impl FolderView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !crate::prefs::confirm_recycle() {
+        if !crate::prefs::CONFIRM_RECYCLE.get() {
             self.submit_job(Job::recycle(items), window, cx);
             return;
         }
@@ -418,8 +417,8 @@ impl FolderView {
         };
         let rx = fx_shell::show_context_menu(request);
         cx.spawn_in(window, async move |this, cx| {
-            let reply = cx.background_spawn(async move { rx.recv() }).await;
-            let Ok(reply) = reply else { return };
+            let reply = crate::chan::next(rx).await;
+            let Some(reply) = reply else { return };
             let _ = this.update_in(cx, |view, window, cx| {
                 view.on_menu(reply, items, window, cx)
             });

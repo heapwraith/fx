@@ -13,7 +13,23 @@ pub use fx_core::{Attributes, Change, Entry};
 mod windows;
 
 #[cfg(windows)]
+pub use windows::ops::{com_init, copy_file, is_aborted, is_cross_device, rename_no_replace};
+#[cfg(windows)]
+pub use windows::recycle;
+#[cfg(windows)]
 pub use windows::{Watcher, enumerate, set_cloud_pin, watch};
+
+/// A recycled item: where it was and where the Recycle Bin keeps it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Recycled {
+    pub original: std::path::PathBuf,
+    /// The `$I` file (metadata).
+    pub info: std::path::PathBuf,
+    /// The `$R` file or folder (data).
+    pub data: std::path::PathBuf,
+    /// Deletion time (FILETIME ticks).
+    pub deleted_at: u64,
+}
 
 // Uses `enumerate`, which only exists on Windows for now (D-012).
 #[cfg(windows)]

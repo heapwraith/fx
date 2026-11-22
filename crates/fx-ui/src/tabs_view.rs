@@ -17,8 +17,7 @@ mod queue;
 mod settings;
 mod sidebar;
 
-#[allow(unused_imports)]
-use fx_core::{tr, trf};
+use futures::StreamExt;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -75,7 +74,8 @@ pub struct TabsView {
     /// Operation history panel (Ctrl+Shift+H or the clock button).
     history_open: bool,
     /// "Sobre" or "Como usar" (T4.6).
-    guide: Option<guide::Guide>,
+    /// "Como usar o fx" is open.
+    guide: bool,
     /// The settings dialog and its section (Ctrl+, or the sidebar gear).
     settings: Option<settings::Section>,
     /// Command palette (Ctrl+K, Ctrl+Shift+P; T1.24).
@@ -157,7 +157,7 @@ impl TabsView {
             tab_scroll: ScrollHandle::new(),
             shown_active: None,
             history_open: false,
-            guide: None,
+            guide: false,
             settings: None,
             palette: None,
             seconds: std::collections::HashMap::new(),
@@ -252,18 +252,8 @@ impl TabsView {
     /// Focus and click requests from screen readers go to the active tab.
     fn listen_a11y(rx: Receiver<ActionRequest>, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
-            let background = cx.background_executor().clone();
-            let mut rx = rx;
-            loop {
-                // Wait on a background thread, never on the UI thread.
-                let (back, request) = background
-                    .spawn(async move {
-                        let r = rx.recv();
-                        (rx, r)
-                    })
-                    .await;
-                rx = back;
-                let Ok(request) = request else { break };
+            let mut rx = crate::chan::stream(rx);
+            while let Some(request) = rx.next().await {
                 let alive = this.update(cx, |view, cx| {
                     let wanted = matches!(request.action, Action::Focus | Action::Click);
                     if let (true, Some(entry)) = (wanted, row_entry(request.target_node)) {
@@ -443,8 +433,8 @@ impl TabsView {
             cx.stop_propagation();
             return;
         }
-        if self.guide.is_some() && ks.key == "escape" {
-            self.guide = None;
+        if self.guide && ks.key == "escape" {
+            self.guide = false;
             cx.stop_propagation();
             cx.notify();
             return;
@@ -452,11 +442,11 @@ impl TabsView {
         if ks.key == "f1" && !m.control && !m.alt && !m.shift {
             // Never behind another dialog.
             self.settings = None;
-            if self.guide == Some(guide::Guide::HowTo) {
-                self.guide = None;
+            if self.guide {
+                self.guide = false;
                 cx.notify();
             } else {
-                self.open_guide(guide::Guide::HowTo, cx);
+                self.open_guide(cx);
             }
             cx.stop_propagation();
             return;
@@ -746,7 +736,7 @@ pub fn guide_seen() -> bool {
 
 impl TabsView {
     pub fn open_howto(&mut self, cx: &mut Context<Self>) {
-        self.open_guide(guide::Guide::HowTo, cx);
+        self.open_guide(cx);
     }
 }
 

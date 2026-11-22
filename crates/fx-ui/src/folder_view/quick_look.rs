@@ -7,7 +7,6 @@
 //! `IMAGE_LIMIT`; text and code: the first 256 KB in a virtualized list;
 //! everything else: the shell's large thumbnail (or its big icon).
 
-#[allow(unused_imports)]
 use fx_core::{tr, trf};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -17,7 +16,6 @@ use std::time::Duration;
 use fx_shell::preview::{PreviewProcess, ScreenRect};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::channel;
 use std::time::Instant;
 
 use fx_core::format::size_short;
@@ -292,7 +290,7 @@ impl FolderView {
         // publicly): the closure carries it to the worker.
         let svg = cx.svg_renderer();
         let decode = move |image: Image| image.to_image_data(svg.clone()).ok();
-        let (tx, rx) = channel();
+        let (tx, rx) = futures::channel::oneshot::channel();
         let spawned = std::thread::Builder::new()
             .name("fx-preview".into())
             .spawn(move || {
@@ -309,8 +307,7 @@ impl FolderView {
         }
         cx.spawn(async move |this, cx| {
             // A stuck thumbnail handler only leaves its worker behind.
-            let content = cx.background_spawn(async move { rx.recv() }).await;
-            let Ok(content) = content else { return };
+            let Ok(content) = rx.await else { return };
             let _ = this.update(cx, |view, cx| {
                 let Some(q) = view.quick_look.as_mut().filter(|q| q.ticket == ticket) else {
                     if let Content::Image(image) | Content::Icon(image, _) = content {

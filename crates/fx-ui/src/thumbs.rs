@@ -7,6 +7,7 @@
 //! cache, and fetched again (usually from Windows' cache) if they come back
 //! on screen.
 
+use futures::StreamExt;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -50,18 +51,8 @@ impl Thumbs {
         let (tx, rx) = channel();
         let service = fx_shell::start_thumb_service(tx).ok()?;
         cx.spawn(async move |this, cx| {
-            let background = cx.background_executor().clone();
-            let mut rx = rx;
-            loop {
-                // Wait on a background thread, never on the UI thread.
-                let (back, ready) = background
-                    .spawn(async move {
-                        let r = rx.recv();
-                        (rx, r)
-                    })
-                    .await;
-                rx = back;
-                let Ok(ready) = ready else { break };
+            let mut rx = crate::chan::stream(rx);
+            while let Some(ready) = rx.next().await {
                 let alive = this.update(cx, |thumbs, cx| {
                     let slot = match ready.png {
                         Some(png) => {

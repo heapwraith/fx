@@ -14,6 +14,7 @@
 #![windows_subsystem = "windows"]
 
 mod a11y;
+mod chan;
 /// `0.1.0+d49b858` (`-dirty` when built with local changes): the version
 /// and the commit it was built from (crates/fx-ui/build.rs).
 pub(crate) const VERSION: &str = env!("FX_VERSION");
@@ -23,6 +24,7 @@ mod crash;
 mod folder_view;
 mod i18n;
 mod icons;
+mod logging;
 mod motion;
 mod ops;
 mod persist;
@@ -37,8 +39,8 @@ mod thumbs;
 mod trace;
 mod update;
 
-#[allow(unused_imports)]
-use fx_core::{tr, trf};
+use futures::StreamExt;
+use fx_core::tr;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -86,6 +88,7 @@ static UPDATE_CHECKED: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 
 fn main() {
     crash::install();
+    logging::init();
     tags::init();
     // An empty argument counts as none (a shell command with "%1" and no item).
     let arg = std::env::args_os().nth(1).filter(|a| !a.is_empty());
@@ -140,11 +143,11 @@ fn main() {
     };
     i18n::init(&settings.idioma);
     motion::init();
-    crash::set_enabled(settings.relatorio_falhas);
-    prefs::set_confirm_recycle(settings.confirmar_lixeira);
-    prefs::set_restore_session(settings.restaurar_sessao);
+    prefs::CRASH_REPORTS.set(settings.relatorio_falhas);
+    prefs::CONFIRM_RECYCLE.set(settings.confirmar_lixeira);
+    prefs::RESTORE_SESSION.set(settings.restaurar_sessao);
     // Benchmarks and test runs never ask the network.
-    update::set_enabled(persist && settings.verificar_atualizacoes);
+    prefs::UPDATES.set(persist && settings.verificar_atualizacoes);
     // A report left by the last run (T3.10): offered in the status bar.
     let crashed = (persist && settings.relatorio_falhas)
         .then(crash::pending)
@@ -267,18 +270,8 @@ fn bench_copy(shared: &Shared, cx: &mut App) {
 /// Opens a window for every folder another fx process hands over.
 fn listen(rx: Receiver<PathBuf>, startup: Startup, shared: Shared, cx: &mut App) {
     cx.spawn(async move |cx| {
-        let background = cx.background_executor().clone();
-        let mut rx = rx;
-        loop {
-            // Wait on a background thread, never on the UI thread.
-            let (back, folder) = background
-                .spawn(async move {
-                    let folder = rx.recv();
-                    (rx, folder)
-                })
-                .await;
-            rx = back;
-            let Ok(folder) = folder else { break };
+        let mut rx = crate::chan::stream(rx);
+        while let Some(folder) = rx.next().await {
             if cx
                 .update(|cx| open_folder_window(folder, startup, None, shared.clone(), None, cx))
                 .is_err()
@@ -376,7 +369,8 @@ fn open_folder_window(
                 view.update(cx, |view, cx| view.restore_tabs(state, window, cx));
             }
             // Daily update check (T4.1), first window only, off the UI thread.
-            if update::enabled() && !UPDATE_CHECKED.swap(true, std::sync::atomic::Ordering::Relaxed)
+            if prefs::UPDATES.get()
+                && !UPDATE_CHECKED.swap(true, std::sync::atomic::Ordering::Relaxed)
             {
                 let tab = view.read(cx).current();
                 tab.update(cx, |tab, cx| tab.check_updates(true, cx));

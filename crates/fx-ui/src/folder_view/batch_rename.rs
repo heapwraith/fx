@@ -7,7 +7,6 @@
 //! repeated, already in the folder); Enter applies only when nothing is
 //! wrong, as one operation that a single Ctrl+Z reverts (`Job::batch_rename`).
 
-#[allow(unused_imports)]
 use fx_core::{tr, trf};
 use std::collections::HashSet;
 use std::sync::Arc;

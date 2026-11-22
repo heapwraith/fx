@@ -7,7 +7,7 @@
 //! runs the original job again and records its new reversal. A reversal that
 //! fails keeps its entry where it was, so nothing is silently lost.
 
-#[allow(unused_imports)]
+use futures::StreamExt;
 use fx_core::{tr, trf};
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
@@ -155,18 +155,8 @@ impl Ops {
             None => Engine::start(tx).ok()?,
         };
         cx.spawn(async move |this, cx| {
-            let background = cx.background_executor().clone();
-            let mut rx = rx;
-            loop {
-                // Wait on a background thread, never on the UI thread.
-                let (back, event) = background
-                    .spawn(async move {
-                        let e = rx.recv();
-                        (rx, e)
-                    })
-                    .await;
-                rx = back;
-                let Ok(event) = event else { break };
+            let mut rx = crate::chan::stream(rx);
+            while let Some(event) = rx.next().await {
                 let alive = this.update(cx, |ops, cx| ops.on_event(event, cx));
                 if alive.is_err() {
                     break;

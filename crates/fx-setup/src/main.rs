@@ -18,7 +18,9 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
-use std::sync::mpsc::{Receiver, channel};
+
+use futures::StreamExt;
+use futures::channel::mpsc::{UnboundedReceiver, unbounded};
 use std::time::Duration;
 
 use fx_core::{tr, trf};
@@ -30,9 +32,7 @@ use gpui::{
     div, img, prelude::*, px, size,
 };
 
-#[allow(dead_code)]
-#[path = "../../fx-ui/src/theme.rs"]
-mod theme;
+use fx_theme as theme;
 
 use theme::{BODY_SIZE, CAPTION_SIZE, Mode, RADIUS, Theme, rgba, space};
 
@@ -295,14 +295,14 @@ impl Setup {
         let opts = Options {
             desktop_shortcut: self.desktop_shortcut,
         };
-        let (tx, rx) = channel::<Result<Step, String>>();
+        let (tx, rx) = unbounded::<Result<Step, String>>();
         std::thread::spawn(move || {
             let progress_tx = tx.clone();
             let result = transaction::install(&pkg, &target, opts, &mut |s| {
-                let _ = progress_tx.send(Ok(s));
+                let _ = progress_tx.unbounded_send(Ok(s));
             });
             if let Err(e) = result {
-                let _ = tx.send(Err(install_failure_text(&e)));
+                let _ = tx.unbounded_send(Err(install_failure_text(&e)));
             }
         });
         self.begin(false, rx, cx);
@@ -310,7 +310,7 @@ impl Setup {
 
     fn start_uninstall(&mut self, remove_data: bool, cx: &mut Context<Self>) {
         let target = self.target.clone();
-        let (tx, rx) = channel::<Result<Step, String>>();
+        let (tx, rx) = unbounded::<Result<Step, String>>();
         std::thread::spawn(move || {
             let data = if remove_data {
                 transaction::data_dirs()
@@ -318,9 +318,9 @@ impl Setup {
                 Vec::new()
             };
             let progress_tx = tx.clone();
-            let _ = tx.send(
+            let _ = tx.unbounded_send(
                 match transaction::uninstall(&target, &data, &mut |s| {
-                    let _ = progress_tx.send(Ok(s));
+                    let _ = progress_tx.unbounded_send(Ok(s));
                 }) {
                     Ok(()) => Ok(Step::Done),
                     Err(e) => Err(trf!(
@@ -337,7 +337,7 @@ impl Setup {
     fn begin(
         &mut self,
         uninstall: bool,
-        rx: Receiver<Result<Step, String>>,
+        rx: UnboundedReceiver<Result<Step, String>>,
         cx: &mut Context<Self>,
     ) {
         self.screen = Screen::Working { uninstall };
@@ -353,20 +353,15 @@ impl Setup {
         // (request_animation_frame only works while drawing).
         cx.notify();
         cx.spawn(async move |this, cx| {
-            let background = cx.background_executor().clone();
             let mut rx = rx;
             loop {
-                let (back, msg) = background
-                    .spawn(async move {
-                        let m = rx.recv_timeout(Duration::from_millis(50));
-                        (rx, m)
-                    })
-                    .await;
-                rx = back;
-                let message = match msg {
-                    Ok(m) => Some(m),
-                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => None,
-                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                // A message, or a 50 ms tick that keeps the bar moving; no
+                // thread waits for either (review, D-066).
+                let tick = cx.background_executor().timer(Duration::from_millis(50));
+                let message = match futures::future::select(rx.next(), tick).await {
+                    futures::future::Either::Left((Some(m), _)) => Some(m),
+                    futures::future::Either::Left((None, _)) => break,
+                    futures::future::Either::Right(_) => None,
                 };
                 let finished = this
                     .update(cx, |v, cx| {
@@ -489,11 +484,10 @@ fn install_failure_text(e: &transaction::InstallError) -> String {
 }
 
 impl Render for Setup {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = self.theme;
         // The bar shows exactly the work done (no animation between steps).
         self.shown = self.goal;
-        let _ = window;
         let new = transaction::display_version(VERSION);
         let slogan = tr!(
             "Pastas abrem na hora. Arquivos aparecem enquanto você digita.",

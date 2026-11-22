@@ -36,17 +36,22 @@ Regra central: **a interface só desenha.** Tudo que pode demorar roda em thread
 | Crate | Tipo | Responsabilidade | Depende de |
 |---|---|---|---|
 | `fx-core` | lib | Tipos de domínio, lista em colunas (struct of arrays), ordenação natural, filtro, filtros de busca (`tipo:`, `ext:`…), desfazer, abas, colunas Miller, etiquetas, tela VT, Markdown, realce de sintaxe, pacote do instalador, versões e JSON do atualizador, relatório de falhas, idioma (`tr!`/`trf!`) | nada do projeto |
-| `fx-fs` | lib | Enumeração de pastas em lote, observador de mudanças, busca recursiva em pasta, tamanho de pastas, marcar arquivos de nuvem | `fx-core` |
+| `fx-fs` | lib | Enumeração de pastas em lote, observador de mudanças, busca recursiva em pasta, tamanho de pastas, marcar arquivos de nuvem, e as chamadas ao sistema do motor de operações (`CopyFile2` com progresso, renomear sem substituir, Lixeira com `IFileOperation`) | `fx-core` |
 | `fx-index` | lib | Leitura da MFT e do diário USN, índice em memória, busca difusa, protocolo do pipe (`FXQ3`) | `fx-core` |
 | `fx-indexd` | bin | Serviço do Windows (LocalSystem) que mantém o índice e responde por pipe com ACL do usuário | `fx-index` |
 | `fx-shell` | lib | Tudo do shell e do sistema: menu de contexto, ícones e miniaturas, arrastar e soltar, área de transferência, Propriedades, abrir com, elevação, UI Automation, instância única, ConPTY, alto contraste, gerenciador padrão, rede/hash/assinatura do atualizador, compressão, atalhos e registro do instalador | `fx-core` |
-| `fx-ops` | lib | Motor de operações (`CopyFile2` com progresso, mover, renomear, Lixeira), fila, conflitos, diário de temporários, desfazer | `fx-core`, `fx-fs` |
+| `fx-ops` | lib | Motor de operações (copiar, mover, renomear, Lixeira, sobre as primitivas do `fx-fs`), fila, conflitos, diário de temporários, desfazer | `fx-core`, `fx-fs` |
+| `fx-theme` | lib | Tokens visuais (Fluent 2): cores dos temas e do alto contraste, espaçamento, tipografia, densidades, ícones | `fx-shell`, `gpui` |
 | `fx-ui` | bin `fx` | A interface GPUI | todos os acima |
 | `fx-preview` | bin | Hospeda um preview handler do Windows por vez, isolado: um handler de terceiros que trava ou cai só encerra esse processo | `fx-shell` |
-| `fx-setup` | lib + bin | Instalador, desinstalador e ajudante de atualização, em GPUI com os tokens do `fx-ui` | `fx-core`, `fx-shell` |
+| `fx-setup` | lib + bin | Instalador, desinstalador e ajudante de atualização, em GPUI com os tokens do `fx-theme` | `fx-core`, `fx-shell`, `fx-theme` |
 | `fx-bench` | bin | Fixtures e benchmarks (P1–P9) | `fx-core`, `fx-fs`, `fx-index` |
 
-`unsafe` só existe em `fx-shell`, `fx-fs` e `fx-index`, em funções pequenas com comentário `// SAFETY:`. `fx-core`, `fx-ui` e `fx-setup` proíbem `unsafe`.
+`unsafe` só existe em `fx-shell`, `fx-fs` e `fx-index`, em funções pequenas com comentário `// SAFETY:`. `fx-core`, `fx-ops`, `fx-theme`, `fx-ui` e `fx-setup` proíbem `unsafe` (`#![forbid(unsafe_code)]`).
+
+**Esperas na interface (D-066):** o GPUI roda as tarefas de fundo no pool de threads do Windows, cujos itens devem ser curtos. Nada espera canal com `recv()` dentro delas: quem espera é uma thread própria (`fx-ui/src/chan.rs`) ou um canal do `futures`, aguardado sem bloquear. Rede e downloads (atualização) também rodam em thread própria.
+
+**Registro (D-066):** avisos e erros do fx e do GPUI vão para `%LOCALAPPDATA%\fx\logs\fx.log` (máx. 1 MB, mais `fx.old.log`), escritos por uma thread própria; `FX_LOG=info|debug|trace` registra mais.
 
 ## Plataformas (D-012)
 

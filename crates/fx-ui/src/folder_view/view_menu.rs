@@ -3,9 +3,8 @@
 //! items are window-wide: the tab asks `TabsView` through a [`ViewEvent`].
 //! Also the Properties sheet (Alt+Enter and the context menu).
 
+use fx_core::tr;
 use fx_core::{Direction, SortKey};
-#[allow(unused_imports)]
-use fx_core::{tr, trf};
 use fx_shell::launch::Launch;
 use gpui::{
     ClickEvent, Context, EventEmitter, MouseButton, MouseDownEvent, SharedString, deferred, div,

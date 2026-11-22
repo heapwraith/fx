@@ -6,6 +6,7 @@
 //! cancels it. Self-computed totals are kept for the session (by path), so
 //! coming back is instant; a folder being summed shows "…".
 
+use futures::StreamExt;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -113,19 +114,12 @@ impl FolderView {
             return;
         }
         cx.spawn(async move |this, cx| {
-            let background = cx.background_executor().clone();
-            let mut rx = rx;
-            loop {
-                let (back, first) = background
-                    .spawn(async move {
-                        let r = rx.recv();
-                        (rx, r)
-                    })
-                    .await;
-                rx = back;
-                let Ok(first) = first else { break };
+            let mut rx = crate::chan::stream(rx);
+            while let Some(first) = rx.next().await {
                 // Apply everything already waiting in one update.
-                let batch: Vec<_> = std::iter::once(first).chain(rx.try_iter()).collect();
+                let batch: Vec<_> = std::iter::once(first)
+                    .chain(std::iter::from_fn(|| rx.try_recv().ok()))
+                    .collect();
                 let alive = this.update(cx, |view, cx| {
                     if view.generation != generation {
                         return false;

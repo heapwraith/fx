@@ -3,7 +3,6 @@
 //! Enter runs the choice. A command runs its own shortcut on the window or
 //! the active tab (`crate::commands`), so both paths behave the same.
 
-#[allow(unused_imports)]
 use fx_core::{tr, trf};
 use std::path::PathBuf;
 use std::time::Instant;
@@ -242,7 +241,7 @@ impl TabsView {
                 Action::CloudPin(keep) => tab.update(cx, |view, cx| view.cloud_pin(keep, cx)),
                 Action::Update => tab.update(cx, |view, cx| view.update_command(cx)),
                 Action::UpdateChecks => tab.update(cx, |view, cx| {
-                    let text = if crate::update::switch() {
+                    let text = if crate::prefs::UPDATES.switch() {
                         tr!("Atualizações automáticas ligadas", "Automatic updates on")
                     } else {
                         tr!(
@@ -253,7 +252,7 @@ impl TabsView {
                     view.show_notice(text.to_owned(), cx);
                 }),
                 Action::ConfirmRecycle => tab.update(cx, |view, cx| {
-                    let text = if crate::prefs::switch_confirm_recycle() {
+                    let text = if crate::prefs::CONFIRM_RECYCLE.switch() {
                         tr!(
                             "O fx vai perguntar antes de enviar para a Lixeira",
                             "fx will ask before sending to the Recycle Bin"
@@ -268,7 +267,7 @@ impl TabsView {
                 }),
                 Action::ReportCrash => tab.update(cx, |view, cx| view.report_crash(cx)),
                 Action::CrashReports => tab.update(cx, |view, cx| {
-                    let text = if crate::crash::switch() {
+                    let text = if crate::prefs::CRASH_REPORTS.switch() {
                         tr!(
                             "Relatórios de falha ligados (ficam só neste computador)",
                             "Crash reports on (kept on this computer only)"

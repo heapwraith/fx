@@ -7,9 +7,10 @@
 //! deletion time. Restoring renames `$R` back (never replacing anything) and
 //! removes `$I`, which is what the Recycle Bin's own "Restore" does.
 
+use std::ffi::OsString;
 use std::io;
-use std::os::windows::ffi::OsStrExt;
-use std::path::{Component, Path, PathBuf};
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
+use std::path::{Component, Path, PathBuf, Prefix};
 
 use windows::Win32::System::Com::{CLSCTX_ALL, CoCreateInstance};
 use windows::Win32::UI::Shell::{
@@ -19,7 +20,7 @@ use windows::Win32::UI::Shell::{
 };
 use windows::core::PCWSTR;
 
-use super::{rename_no_replace, to_io};
+use super::ops::{rename_no_replace, to_io};
 use crate::Recycled;
 
 /// Root (`C:\`, `\\server\share\`) of an absolute path.
@@ -36,7 +37,7 @@ fn root_of(path: &Path) -> Option<PathBuf> {
 
 /// Whether the volume at `root` has a Recycle Bin (`subst` drives and most
 /// network shares do not: the shell would delete for good there).
-pub(crate) fn has_recycle_bin(root: &Path) -> bool {
+pub fn has_recycle_bin(root: &Path) -> bool {
     let wide: Vec<u16> = root.as_os_str().encode_wide().chain([0]).collect();
     let mut info = SHQUERYRBINFO {
         cbSize: std::mem::size_of::<SHQUERYRBINFO>() as u32,
@@ -49,7 +50,7 @@ pub(crate) fn has_recycle_bin(root: &Path) -> bool {
 /// Sends `paths` to the Recycle Bin, by their canonical paths (so a `subst`
 /// drive uses the real volume's Recycle Bin). Refuses, deleting nothing, when
 /// a volume has no Recycle Bin: the shell would delete those items for good.
-pub(crate) fn recycle(paths: &[PathBuf]) -> io::Result<()> {
+pub fn recycle(paths: &[PathBuf]) -> io::Result<()> {
     let real: Vec<PathBuf> = paths.iter().map(|p| canonical(p)).collect();
     for p in &real {
         let ok = root_of(p).is_some_and(|root| has_recycle_bin(&root));
@@ -138,31 +139,49 @@ fn parse_info(bytes: &[u8]) -> Option<(PathBuf, u64)> {
     Some((PathBuf::from(std::ffi::OsString::from_wide(&wide)), deleted))
 }
 
+/// The same path, ignoring case. A path that is not valid Unicode is only
+/// the same as itself (no lossy conversion that could match another).
 fn same_path(a: &Path, b: &Path) -> bool {
-    a.as_os_str().to_string_lossy().to_lowercase() == b.as_os_str().to_string_lossy().to_lowercase()
+    match (a.to_str(), b.to_str()) {
+        (Some(x), Some(y)) => x.to_lowercase() == y.to_lowercase(),
+        _ => a == b,
+    }
 }
 
-/// `C:\x` from `\\?\C:\x` and `\\server\share` from `\\?\UNC\server\share`.
+/// `C:\x` from `\\?\C:\x` and `\\server\share\x` from
+/// `\\?\UNC\server\share\x`, by components (exact for any name).
 fn strip_verbatim(p: &Path) -> PathBuf {
-    let s = p.as_os_str().to_string_lossy();
-    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
-        PathBuf::from(format!(r"\\{rest}"))
-    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
-        PathBuf::from(rest)
-    } else {
-        p.to_path_buf()
+    let mut parts = p.components();
+    let Some(Component::Prefix(prefix)) = parts.next() else {
+        return p.to_path_buf();
+    };
+    let mut out = match prefix.kind() {
+        Prefix::VerbatimDisk(drive) => PathBuf::from(format!("{}:\\", drive as char)),
+        Prefix::VerbatimUNC(server, share) => {
+            let mut root = OsString::from(r"\\");
+            root.push(server);
+            root.push(r"\");
+            root.push(share);
+            root.push(r"\");
+            PathBuf::from(root)
+        }
+        _ => return p.to_path_buf(),
+    };
+    for part in parts.filter(|c| !matches!(c, Component::RootDir)) {
+        out.push(part.as_os_str());
     }
+    out
 }
 
 /// The path the Recycle Bin will record for `item`: its canonical form,
 /// through `subst` drives, junctions and links. Call it before recycling.
-pub(crate) fn canonical(item: &Path) -> PathBuf {
+pub fn canonical(item: &Path) -> PathBuf {
     std::fs::canonicalize(item).map_or_else(|_| item.to_path_buf(), |c| strip_verbatim(&c))
 }
 
 /// The most recent recycled item that came from `original` (or from its
 /// canonical form `real`, which decides the volume's Recycle Bin).
-pub(crate) fn find_recycled(original: &Path, real: &Path) -> Option<Recycled> {
+pub fn find_recycled(original: &Path, real: &Path) -> Option<Recycled> {
     let original = std::path::absolute(original).ok()?;
     let bin = bin_of(real).or_else(|| bin_of(&original))?;
     let mut best: Option<Recycled> = None;
@@ -172,10 +191,14 @@ pub(crate) fn find_recycled(original: &Path, real: &Path) -> Option<Recycled> {
             continue;
         };
         for item in items.flatten() {
-            let name = item.file_name().to_string_lossy().into_owned();
-            let Some(suffix) = name.strip_prefix("$I") else {
+            // `$I<id><ext>` → `$R<id><ext>`, exact (the extension is the
+            // original's, which may not be valid Unicode).
+            let name: Vec<u16> = item.file_name().encode_wide().collect();
+            let Some(suffix) = name.strip_prefix(&[u16::from(b'$'), u16::from(b'I')]) else {
                 continue;
             };
+            let data_name =
+                OsString::from_wide(&[&[u16::from(b'$'), u16::from(b'R')], suffix].concat());
             let Ok(bytes) = std::fs::read(item.path()) else {
                 continue;
             };
@@ -185,7 +208,7 @@ pub(crate) fn find_recycled(original: &Path, real: &Path) -> Option<Recycled> {
             if !same_path(&from, &original) && !same_path(&from, real) {
                 continue;
             }
-            let data = user.path().join(format!("$R{suffix}"));
+            let data = user.path().join(&data_name);
             if !data.exists() || best.as_ref().is_some_and(|b| b.deleted_at >= deleted_at) {
                 continue;
             }
@@ -202,7 +225,7 @@ pub(crate) fn find_recycled(original: &Path, real: &Path) -> Option<Recycled> {
 
 /// Puts a recycled item back. If its original name is taken now, it comes
 /// back under a "keep both" name; returns where it went.
-pub(crate) fn restore(item: &Recycled) -> io::Result<PathBuf> {
+pub fn restore(item: &Recycled) -> io::Result<PathBuf> {
     let dir = item.original.parent().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -212,10 +235,9 @@ pub(crate) fn restore(item: &Recycled) -> io::Result<PathBuf> {
     std::fs::create_dir_all(dir)?;
     let mut target = item.original.clone();
     if std::fs::symlink_metadata(&target).is_ok() {
-        let name = target
-            .file_name()
-            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-        target = crate::keep_both_name(dir, &name, |p| std::fs::symlink_metadata(p).is_ok());
+        let name = target.file_name().unwrap_or_default().to_os_string();
+        target =
+            fx_core::naming::keep_both_name(dir, &name, |p| std::fs::symlink_metadata(p).is_ok());
     }
     rename_no_replace(&item.data, &target)?;
     std::fs::remove_file(&item.info)?;
@@ -225,6 +247,30 @@ pub(crate) fn restore(item: &Recycled) -> io::Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn verbatim_prefixes_come_off_exactly() {
+        assert_eq!(
+            strip_verbatim(Path::new(r"\\?\C:\a\b")),
+            Path::new(r"C:\a\b")
+        );
+        assert_eq!(
+            strip_verbatim(Path::new(r"\\?\UNC\srv\share\x")),
+            Path::new(r"\\srv\share\x")
+        );
+        assert_eq!(strip_verbatim(Path::new(r"C:\a")), Path::new(r"C:\a"));
+        let odd = PathBuf::from(OsString::from_wide(&[
+            0x5C, 0x5C, 0x3F, 0x5C, 0x43, 0x3A, 0x5C, 0x61, 0xD800,
+        ]));
+        let plain: Vec<u16> = strip_verbatim(&odd).as_os_str().encode_wide().collect();
+        assert_eq!(
+            plain,
+            [0x43, 0x3A, 0x5C, 0x61, 0xD800],
+            "not Unicode: kept exactly"
+        );
+        assert!(same_path(Path::new(r"C:\A"), Path::new(r"c:\a")));
+        assert!(!same_path(&odd, Path::new(r"\\?\C:\a\u{FFFD}")));
+    }
 
     fn info_v2(path: &str, deleted: u64) -> Vec<u8> {
         let wide: Vec<u16> = path.encode_utf16().chain([0]).collect();

@@ -16,6 +16,7 @@ mod list;
 pub mod locale;
 pub mod markdown;
 pub mod miller;
+pub mod naming;
 pub mod natural;
 pub mod package;
 mod pinned;

@@ -5,8 +5,8 @@
 //! executor, drives on fx-shell's watcher thread, which sends a new list within
 //! ~250 ms of a drive letter appearing or disappearing.
 
-#[allow(unused_imports)]
-use fx_core::{tr, trf};
+use futures::StreamExt;
+use fx_core::tr;
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -114,18 +114,8 @@ impl Places {
             return;
         }
         cx.spawn(async move |this, cx| {
-            let background = cx.background_executor().clone();
-            let mut rx = rx;
-            loop {
-                // Wait on a background thread, never on the UI thread.
-                let (back, drives) = background
-                    .spawn(async move {
-                        let d = rx.recv();
-                        (rx, d)
-                    })
-                    .await;
-                rx = back;
-                let Ok(drives) = drives else { break };
+            let mut rx = crate::chan::stream(rx);
+            while let Some(drives) = rx.next().await {
                 let alive = this.update(cx, |places, cx| {
                     if places.drives != drives {
                         if let Some(t) = &places.trace {

@@ -154,8 +154,12 @@ fn spawn_worker(db: PathBuf) -> std::io::Result<Sender<Write>> {
             if let Some(dir) = db.parent() {
                 let _ = std::fs::create_dir_all(dir);
             }
-            let Ok(conn) = Connection::open(&db) else {
-                return;
+            let conn = match Connection::open(&db) {
+                Ok(conn) => conn,
+                Err(e) => {
+                    log::warn!("tags database could not open: {e}");
+                    return;
+                }
             };
             let _ = conn.execute_batch(
                 "CREATE TABLE IF NOT EXISTS tags \

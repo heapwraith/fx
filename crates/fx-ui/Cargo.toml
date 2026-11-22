@@ -17,9 +17,12 @@ workspace = true
 
 [dependencies]
 fx-core.workspace = true
+futures.workspace = true
+log.workspace = true
 fx-fs.workspace = true
 fx-index.workspace = true
 fx-shell.workspace = true
+fx-theme.workspace = true
 fx-ops.workspace = true
 gpui.workspace = true
 accesskit.workspace = true

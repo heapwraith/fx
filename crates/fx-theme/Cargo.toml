@@ -1,0 +1,16 @@
+[package]
+name = "fx-theme"
+description = "fx's visual tokens (Fluent 2): colors, spacing, type, densities; shared by the app and the installer."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fx-shell.workspace = true
+gpui.workspace = true

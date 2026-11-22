@@ -7,8 +7,7 @@
 //! filters that cache in memory, so it never waits for the disk; while the
 //! listing runs, the field simply shows no suggestions yet.
 
-#[allow(unused_imports)]
-use fx_core::{tr, trf};
+use fx_core::tr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::channel;

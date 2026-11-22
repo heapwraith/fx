@@ -128,19 +128,19 @@ impl Persist {
             settings.barra_lateral = ui.sidebar;
             settings.mostrar_ocultos = ui.show_hidden;
         }
-        if let Some(on) = crate::prefs::chosen_restore_session() {
+        if let Some(on) = crate::prefs::RESTORE_SESSION.chosen() {
             settings.restaurar_sessao = on;
         }
-        if let Some(on) = crate::prefs::chosen_confirm_recycle() {
+        if let Some(on) = crate::prefs::CONFIRM_RECYCLE.chosen() {
             settings.confirmar_lixeira = on;
         }
         if crate::tabs_view::guide_seen() {
             settings.guia_visto = true;
         }
-        if let Some(on) = crate::update::chosen() {
+        if let Some(on) = crate::prefs::UPDATES.chosen() {
             settings.verificar_atualizacoes = on;
         }
-        if let Some(on) = crate::crash::chosen() {
+        if let Some(on) = crate::prefs::CRASH_REPORTS.chosen() {
             settings.relatorio_falhas = on;
         }
         if let Some(lang) = crate::i18n::chosen() {

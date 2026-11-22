@@ -5,11 +5,10 @@
 
 use std::sync::{Arc, OnceLock};
 
-#[allow(unused_imports)]
 use fx_core::{tr, trf};
 use gpui::{
-    Context, Image, ImageFormat, MouseButton, MouseDownEvent, SharedString, Window, deferred, div,
-    img, prelude::*, px,
+    Context, Image, ImageFormat, MouseButton, MouseDownEvent, SharedString, deferred, div, img,
+    prelude::*, px,
 };
 
 use super::TabsView;
@@ -93,7 +92,7 @@ impl TabsView {
         cx.notify();
     }
 
-    fn act(&mut self, act: Act, window: &mut Window, cx: &mut Context<Self>) {
+    fn act(&mut self, act: Act, cx: &mut Context<Self>) {
         let tab = self.current();
         match act {
             Act::Language(english) => {
@@ -103,30 +102,29 @@ impl TabsView {
                 }
             }
             Act::ConfirmRecycle => {
-                crate::prefs::switch_confirm_recycle();
+                crate::prefs::CONFIRM_RECYCLE.switch();
             }
             Act::RestoreSession => {
-                crate::prefs::switch_restore_session();
+                crate::prefs::RESTORE_SESSION.switch();
             }
             Act::Density(d) => self.set_density(d, cx),
             Act::Hidden => self.toggle_hidden(cx),
             Act::Sidebar => self.sidebar_open = !self.sidebar_open,
             Act::AutoUpdate => {
-                crate::update::switch();
+                crate::prefs::UPDATES.switch();
             }
             Act::CheckNow => tab.update(cx, |view, cx| view.check_updates(false, cx)),
             Act::CrashReports => {
-                crate::crash::switch();
+                crate::prefs::CRASH_REPORTS.switch();
             }
             Act::DefaultManager(on) => tab.update(cx, |view, cx| view.default_manager(on, cx)),
             Act::IndexService(on) => tab.update(cx, |view, cx| view.index_service(on, cx)),
             Act::HowTo => {
                 self.settings = None;
-                self.open_guide(super::guide::Guide::HowTo, cx);
+                self.open_guide(cx);
             }
             Act::Link(url) => tab.update(cx, |view, cx| view.open_url(url, cx)),
         }
-        let _ = window;
         cx.notify();
     }
 
@@ -207,7 +205,7 @@ impl TabsView {
                 } else {
                     t.text_secondary
                 })))
-                .on_click(cx.listener(move |view, _, window, cx| view.act(act, window, cx)))
+                .on_click(cx.listener(move |view, _, _, cx| view.act(act, cx)))
                 .into_any_element()
         };
         let button = |id: &'static str, label: &'static str, act: Act, cx: &mut Context<Self>| {
@@ -224,7 +222,7 @@ impl TabsView {
                 .cursor_pointer()
                 .hover(|h| h.bg(rgba(t.hover)))
                 .child(label)
-                .on_click(cx.listener(move |view, _, window, cx| view.act(act, window, cx)))
+                .on_click(cx.listener(move |view, _, _, cx| view.act(act, cx)))
         };
         // Segmented choice: (label, selected, action).
         let segmented =
@@ -255,9 +253,7 @@ impl TabsView {
                                             .hover(|h| h.bg(rgba(t.hover)))
                                     })
                                     .child(label)
-                                    .on_click(cx.listener(move |view, _, window, cx| {
-                                        view.act(act, window, cx)
-                                    }))
+                                    .on_click(cx.listener(move |view, _, _, cx| view.act(act, cx)))
                             }),
                     )
                     .into_any_element()
@@ -295,7 +291,7 @@ impl TabsView {
                         ),
                         switch(
                             "confirm-recycle",
-                            crate::prefs::confirm_recycle(),
+                            crate::prefs::CONFIRM_RECYCLE.get(),
                             Act::ConfirmRecycle,
                             cx,
                         ),
@@ -311,7 +307,7 @@ impl TabsView {
                         ),
                         switch(
                             "restore",
-                            crate::prefs::restore_session(),
+                            crate::prefs::RESTORE_SESSION.get(),
                             Act::RestoreSession,
                             cx,
                         ),
@@ -381,7 +377,7 @@ impl TabsView {
                             "Baixa a versão nova em segundo plano, confere e instala quando você fecha o fx.",
                             "Downloads the new version in the background, checks it and installs it when you close fx."
                         ),
-                        switch("auto-update", crate::update::enabled(), Act::AutoUpdate, cx),
+                        switch("auto-update", crate::prefs::UPDATES.get(), Act::AutoUpdate, cx),
                     ))
                     .child(row(
                         tr!("Versão instalada", "Installed version"),
@@ -403,7 +399,7 @@ impl TabsView {
                             "Se o fx fechar com uma falha, guarda um relatório sem caminhos nem nomes neste computador. Nada é enviado sem você.",
                             "If fx closes with a crash, it keeps a report with no paths or names on this computer. Nothing is sent without you."
                         ),
-                        switch("crash", crate::crash::enabled(), Act::CrashReports, cx),
+                        switch("crash", crate::prefs::CRASH_REPORTS.get(), Act::CrashReports, cx),
                     ))
                     .child(row(
                         tr!("Dados que o fx envia", "Data fx sends"),

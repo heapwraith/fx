@@ -6,7 +6,6 @@
 //! "apply to all" for the rest of that job.
 
 use fx_core::format::size_short;
-#[allow(unused_imports)]
 use fx_core::{tr, trf};
 use fx_ops::Resolution;
 use gpui::{ClickEvent, Context, SharedString, deferred, div, prelude::*, px, relative};

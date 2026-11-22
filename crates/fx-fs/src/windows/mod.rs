@@ -2,6 +2,8 @@
 
 mod find;
 mod handle_info;
+pub mod ops;
+pub mod recycle;
 mod watch;
 
 pub use watch::{Watcher, watch};

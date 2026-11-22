@@ -7,7 +7,6 @@
 //! (a few dozen nodes, microseconds) and sent to the adapter only when a
 //! screen reader is listening.
 
-#[allow(unused_imports)]
 use fx_core::{tr, trf};
 use std::cell::RefCell;
 use std::rc::Rc;

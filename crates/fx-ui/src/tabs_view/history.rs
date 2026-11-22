@@ -4,8 +4,7 @@
 //! job, so it never overwrites anything (SAFETY.md §2.3).
 
 use fx_core::format::date_time;
-#[allow(unused_imports)]
-use fx_core::{tr, trf};
+use fx_core::tr;
 use gpui::{ClickEvent, Context, MouseButton, MouseDownEvent, deferred, div, prelude::*, px};
 
 use super::TabsView;

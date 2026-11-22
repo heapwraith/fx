@@ -1,57 +1,70 @@
-//! Small preferences read on the UI thread (atomics, set at startup from
-//! `settings.toml` and switched from the palette; saved with the session).
+//! Small on/off preferences read on the UI thread: set at startup from
+//! `settings.toml`, switched from the palette or Settings, and saved with the
+//! session only when switched. One type for all of them (review, D-066: the
+//! same atomics and lock were copied four times).
 
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// Ask before sending items to the Recycle Bin (Delete).
-static CONFIRM_RECYCLE: AtomicBool = AtomicBool::new(true);
-static CHOSEN_RECYCLE: Mutex<Option<bool>> = Mutex::new(None);
-
-pub fn set_confirm_recycle(on: bool) {
-    CONFIRM_RECYCLE.store(on, Ordering::Relaxed);
+/// One preference.
+pub struct Toggle {
+    on: AtomicBool,
+    chosen: Mutex<Option<bool>>,
 }
 
-pub fn confirm_recycle() -> bool {
-    CONFIRM_RECYCLE.load(Ordering::Relaxed)
-}
-
-/// Palette: on/off. Returns the new state.
-pub fn switch_confirm_recycle() -> bool {
-    let on = !confirm_recycle();
-    set_confirm_recycle(on);
-    if let Ok(mut c) = CHOSEN_RECYCLE.lock() {
-        *c = Some(on);
+impl Toggle {
+    pub const fn new(default: bool) -> Self {
+        Self {
+            on: AtomicBool::new(default),
+            chosen: Mutex::new(None),
+        }
     }
-    on
+
+    pub fn get(&self) -> bool {
+        self.on.load(Ordering::Relaxed)
+    }
+
+    /// From `settings.toml`, at startup (not saved again).
+    pub fn set(&self, on: bool) {
+        self.on.store(on, Ordering::Relaxed);
+    }
+
+    /// On/off by the user. Returns the new state.
+    pub fn switch(&self) -> bool {
+        let on = !self.get();
+        self.set(on);
+        if let Ok(mut c) = self.chosen.lock() {
+            *c = Some(on);
+        }
+        on
+    }
+
+    /// What to save, if the user switched it this session.
+    pub fn chosen(&self) -> Option<bool> {
+        self.chosen.lock().ok().and_then(|c| *c)
+    }
 }
 
-/// What to save in `confirmar_lixeira`, if switched this session.
-pub fn chosen_confirm_recycle() -> Option<bool> {
-    CHOSEN_RECYCLE.lock().ok().and_then(|c| *c)
-}
-
+/// Ask before sending items to the Recycle Bin (`confirmar_lixeira`).
+pub static CONFIRM_RECYCLE: Toggle = Toggle::new(true);
 /// Reopen the last windows and tabs when fx starts (`restaurar_sessao`).
-static RESTORE_SESSION: AtomicBool = AtomicBool::new(true);
-static CHOSEN_RESTORE: Mutex<Option<bool>> = Mutex::new(None);
+pub static RESTORE_SESSION: Toggle = Toggle::new(true);
+/// Check for updates once a day and download them (`verificar_atualizacoes`).
+pub static UPDATES: Toggle = Toggle::new(true);
+/// Write crash reports (`relatorio_falhas`).
+pub static CRASH_REPORTS: Toggle = Toggle::new(true);
 
-pub fn set_restore_session(on: bool) {
-    RESTORE_SESSION.store(on, Ordering::Relaxed);
-}
+#[cfg(test)]
+mod tests {
+    use super::Toggle;
 
-pub fn restore_session() -> bool {
-    RESTORE_SESSION.load(Ordering::Relaxed)
-}
-
-pub fn switch_restore_session() -> bool {
-    let on = !restore_session();
-    set_restore_session(on);
-    if let Ok(mut c) = CHOSEN_RESTORE.lock() {
-        *c = Some(on);
+    #[test]
+    fn only_a_switch_is_saved() {
+        let t = Toggle::new(true);
+        t.set(false);
+        assert!(!t.get());
+        assert_eq!(t.chosen(), None, "from settings: nothing to save");
+        assert!(t.switch());
+        assert_eq!(t.chosen(), Some(true));
     }
-    on
-}
-
-pub fn chosen_restore_session() -> Option<bool> {
-    CHOSEN_RESTORE.lock().ok().and_then(|c| *c)
 }

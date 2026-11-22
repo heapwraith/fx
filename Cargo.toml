@@ -23,6 +23,7 @@ fx-fs = { path = "crates/fx-fs" }
 fx-index = { path = "crates/fx-index" }
 fx-shell = { path = "crates/fx-shell" }
 fx-ops = { path = "crates/fx-ops" }
+fx-theme = { path = "crates/fx-theme" }
 
 ntfs-reader = "=0.4.6"
 tempfile = "=3.27.0"

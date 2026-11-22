@@ -9,8 +9,6 @@
 
 use std::io;
 use std::path::PathBuf;
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use fx_core::update::{Update, Version};
 
@@ -18,32 +16,6 @@ const RELEASES: &str = "https://api.github.com/repos/heapwraith/fx/releases?per_
 const MAX_JSON: usize = 4 << 20;
 const MAX_SUMS: usize = 64 << 10;
 const MAX_SETUP: usize = 200 << 20;
-
-static ENABLED: AtomicBool = AtomicBool::new(true);
-static CHOSEN: Mutex<Option<bool>> = Mutex::new(None);
-
-pub fn set_enabled(on: bool) {
-    ENABLED.store(on, Ordering::Relaxed);
-}
-
-pub fn enabled() -> bool {
-    ENABLED.load(Ordering::Relaxed)
-}
-
-/// Palette: daily check on/off. Returns the new state.
-pub fn switch() -> bool {
-    let on = !enabled();
-    set_enabled(on);
-    if let Ok(mut c) = CHOSEN.lock() {
-        *c = Some(on);
-    }
-    on
-}
-
-/// What to save in `verificar_atualizacoes`, if switched this session.
-pub fn chosen() -> Option<bool> {
-    CHOSEN.lock().ok().and_then(|c| *c)
-}
 
 fn current() -> Option<Version> {
     Version::parse(crate::VERSION)
@@ -73,7 +45,7 @@ pub fn due() -> bool {
     let last = stamp_file()
         .and_then(|f| std::fs::read_to_string(f).ok())
         .and_then(|t| t.trim().parse().ok());
-    enabled() && fx_core::update::due(last, now_secs())
+    crate::prefs::UPDATES.get() && fx_core::update::due(last, now_secs())
 }
 
 /// Asks GitHub for a newer version (blocking; worker thread) and records
@@ -217,7 +189,7 @@ fn checked(setup: &std::path::Path, hash: &[u8; 32]) -> Option<std::fs::File> {
 
 /// Whether to download updates by themselves (`verificar_atualizacoes`).
 pub fn automatic() -> bool {
-    enabled()
+    crate::prefs::UPDATES.get()
 }
 
 #[cfg(test)]
@@ -226,9 +198,9 @@ mod tests {
 
     #[test]
     fn turned_off_never_checks() {
-        set_enabled(false);
+        crate::prefs::UPDATES.set(false);
         assert!(!due(), "off: the daily check never runs");
-        set_enabled(true);
+        crate::prefs::UPDATES.set(true);
         assert_eq!(arch(), "x64");
         assert!(
             current().is_some(),

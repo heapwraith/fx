@@ -6,7 +6,6 @@
 //! data object to the target (Explorer, desktop, a browser upload...), which
 //! performs the operation itself.
 
-#[allow(unused_imports)]
 use fx_core::{tr, trf};
 use std::path::PathBuf;
 

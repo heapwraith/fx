@@ -2,7 +2,6 @@
 //! pin or unpin the current folder and × to unpin) and drives with free space.
 //! Clicking an item opens it in the active tab.
 
-#[allow(unused_imports)]
 use fx_core::{tr, trf};
 use std::path::{Path, PathBuf};
 

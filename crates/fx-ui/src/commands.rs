@@ -4,8 +4,7 @@
 //! no key and act directly.
 
 use fx_core::SortKey;
-#[allow(unused_imports)]
-use fx_core::{tr, trf};
+use fx_core::tr;
 
 /// Who handles a command's keystroke.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

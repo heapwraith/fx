@@ -20,7 +20,10 @@
 //! [`undo_of`]: the job that reverts a finished job. Jobs touching a drive
 //! root or a system folder are refused unless confirmed ([`system_guard`]).
 //!
-//! See docs/ARCHITECTURE.md. Every `unsafe` block needs a `// SAFETY:` comment.
+//! See docs/ARCHITECTURE.md. No `unsafe` here: the system calls live in
+//! fx-fs (review, D-066).
+
+#![forbid(unsafe_code)]
 
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
@@ -30,9 +33,6 @@ use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
-
-#[cfg(windows)]
-mod windows;
 
 pub type JobId = u64;
 
@@ -54,16 +54,7 @@ pub enum OpKind {
 }
 
 /// A recycled item: where it was and where the Recycle Bin keeps it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Recycled {
-    pub original: PathBuf,
-    /// The `$I` file (metadata).
-    pub info: PathBuf,
-    /// The `$R` file or folder (data).
-    pub data: PathBuf,
-    /// Deletion time (FILETIME ticks).
-    pub deleted_at: u64,
-}
+pub use fx_fs::Recycled;
 
 /// What to do when the destination name exists.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -346,8 +337,11 @@ pub fn system_dirs() -> Vec<PathBuf> {
     .collect()
 }
 
+/// `p` in lower case, for comparing paths as NTFS does. One that is not
+/// valid Unicode stays as it is (no lossy conversion that could match another).
 fn lower(p: &Path) -> PathBuf {
-    PathBuf::from(p.as_os_str().to_string_lossy().to_lowercase())
+    p.to_str()
+        .map_or_else(|| p.to_path_buf(), |s| PathBuf::from(s.to_lowercase()))
 }
 
 /// Why `job` needs an extra confirmation, if it does (SAFETY.md §2.7): it
@@ -609,7 +603,7 @@ fn schedule(rx: &Receiver<Work>, events: &Sender<Event>, controls: &Controls) {
                 .name(format!("fx-ops {key}"))
                 .spawn(move || {
                     #[cfg(windows)]
-                    windows::com_init();
+                    fx_fs::com_init();
                     for w in wrx {
                         let id = w.id;
                         run_job(&w, &events);
@@ -624,17 +618,8 @@ fn schedule(rx: &Receiver<Work>, events: &Sender<Event>, controls: &Controls) {
     }
 }
 
-/// Free name in `dir` for `name`: `a.txt`, `a (2).txt`, `a (3).txt`...
-pub fn keep_both_name(dir: &Path, name: &str, exists: impl Fn(&Path) -> bool) -> PathBuf {
-    let (stem, ext) = match name.rfind('.') {
-        Some(i) if i > 0 => (&name[..i], &name[i..]),
-        _ => (name, ""),
-    };
-    (2..)
-        .map(|n| dir.join(format!("{stem} ({n}){ext}")))
-        .find(|p| !exists(p))
-        .unwrap_or_else(|| dir.join(name))
-}
+/// Free name in `dir` for `name` (the rule is in fx-core, without loss).
+pub use fx_core::naming::keep_both_name;
 
 fn exists(p: &Path) -> bool {
     std::fs::symlink_metadata(p).is_ok()
@@ -690,7 +675,7 @@ enum Stop {
 impl From<io::Error> for Stop {
     fn from(e: io::Error) -> Self {
         #[cfg(windows)]
-        if e.raw_os_error() == Some(windows::REQUEST_ABORTED) {
+        if fx_fs::is_aborted(&e) {
             return Stop::Cancelled;
         }
         Stop::Failed(e)
@@ -776,10 +761,7 @@ impl Run<'_> {
         let mut target = to.to_path_buf();
         if exists(&target) {
             let dir = to.parent().unwrap_or(Path::new("."));
-            let name = to
-                .file_name()
-                .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-            target = keep_both_name(dir, &name, exists);
+            target = keep_both_name(dir, to.file_name().unwrap_or_default(), exists);
         }
         if let Some(dir) = target.parent() {
             std::fs::create_dir_all(dir)?;
@@ -1036,11 +1018,12 @@ impl Run<'_> {
         self.checkpoint()?;
         let src = std::path::absolute(src)?;
         let meta = std::fs::symlink_metadata(&src)?;
+        // Exact: a copy keeps every unit of the name (review, D-066: a name
+        // that was not valid Unicode used to arrive changed).
         let name = src
             .file_name()
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no file name"))?
-            .to_string_lossy()
-            .into_owned();
+            .to_os_string();
         let dest_dir = std::path::absolute(&self.job.dest)?;
         if meta.is_dir() && dest_dir.starts_with(&src) {
             return Err(Stop::Failed(io::Error::new(
@@ -1131,8 +1114,7 @@ impl Run<'_> {
                 let replace_child = replace && exists(&child);
                 if exists(&child) && !replace_child {
                     // Only possible when merging: keep both.
-                    let name = entry.file_name().to_string_lossy().into_owned();
-                    let placed = keep_both_name(target, &name, exists);
+                    let placed = keep_both_name(target, entry.file_name(), exists);
                     self.copy_tree(&entry.path(), &placed, false)?;
                 } else {
                     self.copy_tree(&entry.path(), &child, replace_child)?;
@@ -1246,10 +1228,7 @@ fn place(temp: &Path, target: &Path) -> io::Result<()> {
     match rename(temp, target) {
         Err(e) if exists(target) => {
             let dir = target.parent().unwrap_or(Path::new("."));
-            let name = target
-                .file_name()
-                .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-            let other = keep_both_name(dir, &name, exists);
+            let other = keep_both_name(dir, target.file_name().unwrap_or_default(), exists);
             rename(temp, &other).map_err(|_| e)
         }
         r => r,
@@ -1263,32 +1242,32 @@ fn same_file_name(a: &Path, b: &Path) -> bool {
 
 #[cfg(windows)]
 fn recycle_items(items: &[PathBuf]) -> io::Result<()> {
-    windows::recycle::recycle(items)
+    fx_fs::recycle::recycle(items)
 }
 
 #[cfg(windows)]
 fn find_recycled(item: &Path, real: &Path) -> Option<Recycled> {
-    windows::recycle::find_recycled(item, real)
+    fx_fs::recycle::find_recycled(item, real)
 }
 
 #[cfg(windows)]
 fn canonical_path(item: &Path) -> PathBuf {
-    windows::recycle::canonical(item)
+    fx_fs::recycle::canonical(item)
 }
 
 #[cfg(windows)]
 fn restore_item(item: &Recycled) -> io::Result<PathBuf> {
-    windows::recycle::restore(item)
+    fx_fs::recycle::restore(item)
 }
 
 #[cfg(windows)]
 fn rename(from: &Path, to: &Path) -> io::Result<()> {
-    windows::rename_no_replace(from, to)
+    fx_fs::rename_no_replace(from, to)
 }
 
 #[cfg(windows)]
 fn is_not_same_device(e: &io::Error) -> bool {
-    e.raw_os_error() == Some(windows::NOT_SAME_DEVICE)
+    fx_fs::is_cross_device(e)
 }
 
 #[cfg(windows)]
@@ -1298,7 +1277,7 @@ fn copy_file(
     cancel: &AtomicI32,
     report: &mut dyn FnMut(u64),
 ) -> io::Result<()> {
-    windows::copy_file(src, dst, cancel, report)
+    fx_fs::copy_file(src, dst, cancel, report)
 }
 
 mod journal;

@@ -1,7 +1,7 @@
 //! Windows primitives of the operations engine (task T1.11): `CopyFile2`
-//! with progress and cancellation, and a rename that never replaces.
-
-pub(crate) mod recycle;
+//! with progress and cancellation, and a rename that never replaces. They
+//! live here, not in fx-ops, so `unsafe` stays in the crates allowed to have
+//! it (CLAUDE.md; review, D-066).
 
 use std::ffi::c_void;
 use std::io;
@@ -37,7 +37,7 @@ fn verbatim(path: &Path) -> io::Result<Vec<u16>> {
 }
 
 /// COM for a worker thread (`IFileOperation` needs an STA).
-pub(crate) fn com_init() {
+pub fn com_init() {
     // SAFETY: first COM call of a fresh worker thread, never uninitialized.
     let _ = unsafe {
         windows::Win32::System::Com::CoInitializeEx(
@@ -80,7 +80,7 @@ unsafe extern "system" fn on_progress(
 /// Copies `src` to the new file `dst` (fails if it exists). `cancel` is read
 /// by the system while copying: set it to 1 to abort, which also deletes the
 /// partial `dst`. `report` gets the bytes copied so far.
-pub(crate) fn copy_file(
+pub fn copy_file(
     src: &Path,
     dst: &Path,
     cancel: &AtomicI32,
@@ -104,7 +104,7 @@ pub(crate) fn copy_file(
 
 /// Renames `from` to `to` on the same volume; fails (never replaces) if `to`
 /// exists, and with `ERROR_NOT_SAME_DEVICE` across volumes.
-pub(crate) fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
+pub fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
     let a = verbatim(from)?;
     let b = verbatim(to)?;
     // SAFETY: both paths are NUL-terminated and outlive the call. Without
@@ -121,6 +121,16 @@ pub(crate) fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 /// Win32 error code for "different volume" (rename impossible).
-pub(crate) const NOT_SAME_DEVICE: i32 = 17;
+const NOT_SAME_DEVICE: i32 = 17;
 /// Win32 error code of a copy aborted through the cancel flag.
-pub(crate) const REQUEST_ABORTED: i32 = 1235;
+const REQUEST_ABORTED: i32 = 1235;
+
+/// A move across volumes, which a rename cannot do (copy, then delete).
+pub fn is_cross_device(e: &io::Error) -> bool {
+    e.raw_os_error() == Some(NOT_SAME_DEVICE)
+}
+
+/// A copy stopped by its cancel flag.
+pub fn is_aborted(e: &io::Error) -> bool {
+    e.raw_os_error() == Some(REQUEST_ABORTED)
+}

@@ -508,6 +508,36 @@ fn rename_undo_and_redo() {
     );
 }
 
+/// A copy keeps every unit of the name, even one that is not valid Unicode
+/// (it used to arrive with U+FFFD in place of the odd unit).
+#[cfg(windows)]
+#[test]
+fn copies_keep_names_that_are_not_unicode() {
+    use std::os::windows::ffi::OsStringExt;
+    let t = tempfile::tempdir().unwrap();
+    let odd = std::ffi::OsString::from_wide(&[0x66, 0xD800, 0x2E, 0x74, 0x78, 0x74]);
+    let src = t.path().join(&odd);
+    write(&src, b"dados");
+    let dest = t.path().join("destino");
+    std::fs::create_dir(&dest).unwrap();
+    let (e, rx) = engine();
+    run_ok(&e, &rx, Job::copy(vec![src], dest.clone()));
+    let names: Vec<_> = std::fs::read_dir(&dest)
+        .unwrap()
+        .map(|d| d.unwrap().file_name())
+        .collect();
+    assert_eq!(names, vec![odd.clone()]);
+    // A second copy beside it gets a "keep both" name with the same units.
+    run_ok(
+        &e,
+        &rx,
+        Job::copy(vec![dest.join(&odd)], dest.clone()).on_conflict(Resolution::KeepBoth),
+    );
+    let mut expected = odd.clone();
+    expected.push(" (2)");
+    assert!(dest.join(&expected).exists());
+}
+
 /// Undo puts back the exact old name, even one that is not valid Unicode
 /// (NTFS allows a lone surrogate) or that starts with a space.
 #[cfg(windows)]

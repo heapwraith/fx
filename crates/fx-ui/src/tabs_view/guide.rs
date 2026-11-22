@@ -5,17 +5,11 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-#[allow(unused_imports)]
-use fx_core::{tr, trf};
+use fx_core::tr;
 use gpui::{Context, MouseButton, MouseDownEvent, SharedString, deferred, div, prelude::*, px};
 
 use super::TabsView;
 use crate::theme::{CAPTION_SIZE, RADIUS, rgba, space};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Guide {
-    HowTo,
-}
 
 /// Set at startup when fx runs for the first time.
 static FIRST_RUN: AtomicBool = AtomicBool::new(false);
@@ -170,20 +164,18 @@ pub fn sections() -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
 }
 
 impl TabsView {
-    pub(super) fn open_guide(&mut self, guide: Guide, cx: &mut Context<Self>) {
-        if guide == Guide::HowTo {
-            SEEN.store(true, Ordering::Relaxed);
-        }
-        self.guide = Some(guide);
+    pub(super) fn open_guide(&mut self, cx: &mut Context<Self>) {
+        SEEN.store(true, Ordering::Relaxed);
+        self.guide = true;
         cx.notify();
     }
 
     pub(super) fn render_guide(&self, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
-        let guide = self.guide?;
+        if !self.guide {
+            return None;
+        }
         let t = self.look.theme;
-        let card = match guide {
-            Guide::HowTo => self.howto_card().into_any_element(),
-        };
+        let card = self.howto_card().into_any_element();
         Some(
             deferred(crate::motion::enter(
                 "guide-in",
@@ -206,7 +198,7 @@ impl TabsView {
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|view, _: &MouseDownEvent, _, cx| {
-                            view.guide = None;
+                            view.guide = false;
                             cx.notify();
                         }),
                     )

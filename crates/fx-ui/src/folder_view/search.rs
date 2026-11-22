@@ -16,7 +16,7 @@
 //! with Enter or a double click, show in their folder with Ctrl+Enter, drag
 //! out, and have the Windows context menu.
 
-#[allow(unused_imports)]
+use futures::StreamExt;
 use fx_core::{tr, trf};
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -417,17 +417,8 @@ impl FolderView {
             return;
         }
         cx.spawn(async move |this, cx| {
-            let background = cx.background_executor().clone();
-            let mut rx = rx;
-            loop {
-                let (back, batch) = background
-                    .spawn(async move {
-                        let b = rx.recv();
-                        (rx, b)
-                    })
-                    .await;
-                rx = back;
-                let Ok(batch) = batch else { break };
+            let mut rx = crate::chan::stream(rx);
+            while let Some(batch) = rx.next().await {
                 let current = this.update(cx, |view, cx| {
                     let Some(s) = view.search.as_mut().filter(|s| s.ticket == ticket) else {
                         return false;
@@ -446,11 +437,11 @@ impl FolderView {
                     return;
                 }
             }
-            let summary = background.spawn(async move { done_rx.recv() }).await;
+            let summary = crate::chan::next(done_rx).await;
             let _ = this.update(cx, |view, cx| {
                 if let Some(s) = view.search.as_mut().filter(|s| s.ticket == ticket) {
                     s.running = false;
-                    s.summary = summary.ok();
+                    s.summary = summary;
                     cx.notify();
                 }
             });
