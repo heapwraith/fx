@@ -2018,6 +2018,9 @@ dependencies = [
 [[package]]
 name = "fx-core"
 version = "0.1.0"
+dependencies = [
+ "regex",
+]
 
 [[package]]
 name = "fx-fs"

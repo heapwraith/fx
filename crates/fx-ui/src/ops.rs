@@ -422,6 +422,7 @@ fn history_label(job: &Job, report: &Report) -> String {
             Some(new) => format!("Renomeou {what} para \"{new}\""),
             None => format!("Renomeou {what}"),
         },
+        OpKind::BatchRename => format!("Renomeou {} em lote", count(job.source_count())),
         OpKind::NewFolder => match report.created.as_ref().and_then(|p| p.file_name()) {
             Some(n) => format!("Criou a pasta \"{}\"", n.to_string_lossy()),
             None => "Criou uma pasta".to_owned(),
@@ -451,6 +452,7 @@ fn describe(job: &Job, outcome: &Outcome, report: &Report, prefix: &str) -> Stri
             format!("excluído permanentemente: {}", count(report.deleted.len()))
         }
         OpKind::Rename => "renomeado".into(),
+        OpKind::BatchRename => format!("renomeado: {}", count(report.batch_renamed.len())),
         OpKind::NewFolder => "pasta criada".into(),
         OpKind::Restore => format!("restaurado da Lixeira: {}", count(report.restored.len())),
     };

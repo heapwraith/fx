@@ -951,3 +951,80 @@ fn larger_than_4_gib() {
     assert_eq!(&end, b"fim");
     assert_no_temp(&dest);
 }
+
+// ---- Batch rename (task T2.8) ----
+
+#[test]
+fn batch_rename_swaps_cycles_and_undoes_in_one_step() {
+    let t = tempfile::tempdir().unwrap();
+    let d = t.path();
+    for (n, c) in [
+        ("a.txt", "A"),
+        ("b.txt", "B"),
+        ("c.txt", "C"),
+        ("Caixa.txt", "K"),
+    ] {
+        write(&d.join(n), c.as_bytes());
+    }
+    let (e, rx) = engine();
+    // a -> b, b -> c, c -> a (a cycle), plus a case-only rename.
+    let job = Job::batch_rename(vec![
+        (d.join("a.txt"), "b.txt".into()),
+        (d.join("b.txt"), "c.txt".into()),
+        (d.join("c.txt"), "a.txt".into()),
+        (d.join("Caixa.txt"), "caixa.txt".into()),
+    ]);
+    let (_, outcome, report) = run(&e, &rx, job.clone());
+    assert_eq!(outcome, Outcome::Done);
+    assert_eq!(std::fs::read(d.join("b.txt")).unwrap(), b"A");
+    assert_eq!(std::fs::read(d.join("c.txt")).unwrap(), b"B");
+    assert_eq!(std::fs::read(d.join("a.txt")).unwrap(), b"C");
+    let names: Vec<String> = std::fs::read_dir(d)
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(names.contains(&"caixa.txt".to_owned()), "{names:?}");
+    assert_no_temp(d);
+    // One undo puts every name back.
+    let undo = undo_of(&job, &report).unwrap();
+    let (_, outcome, _) = run(&e, &rx, undo);
+    assert_eq!(outcome, Outcome::Done);
+    assert_eq!(std::fs::read(d.join("a.txt")).unwrap(), b"A");
+    assert_eq!(std::fs::read(d.join("b.txt")).unwrap(), b"B");
+    assert_eq!(std::fs::read(d.join("c.txt")).unwrap(), b"C");
+    assert!(
+        std::fs::read_dir(d)
+            .unwrap()
+            .flatten()
+            .any(|e| e.file_name() == "Caixa.txt")
+    );
+}
+
+#[test]
+fn batch_rename_onto_an_outside_name_changes_nothing() {
+    let t = tempfile::tempdir().unwrap();
+    let d = t.path();
+    write(&d.join("um.txt"), b"1");
+    write(&d.join("dois.txt"), b"2");
+    write(&d.join("fora.txt"), b"F"); // not in the batch
+    let (e, rx) = engine();
+    let job = Job::batch_rename(vec![
+        (d.join("um.txt"), "novo.txt".into()),
+        (d.join("dois.txt"), "fora.txt".into()),
+    ]);
+    let (_, outcome, report) = run(&e, &rx, job);
+    assert!(matches!(outcome, Outcome::Failed(_)), "{outcome:?}");
+    assert!(report.batch_renamed.is_empty());
+    // Everything is back where it was; the outside file is untouched.
+    assert_eq!(std::fs::read(d.join("um.txt")).unwrap(), b"1");
+    assert_eq!(std::fs::read(d.join("dois.txt")).unwrap(), b"2");
+    assert_eq!(std::fs::read(d.join("fora.txt")).unwrap(), b"F");
+    assert!(!d.join("novo.txt").exists());
+    let leftovers: Vec<_> = std::fs::read_dir(d)
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().contains(".fx-ren-"))
+        .collect();
+    assert!(leftovers.is_empty());
+}

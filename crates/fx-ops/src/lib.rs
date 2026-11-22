@@ -45,6 +45,8 @@ pub enum OpKind {
     /// Permanent deletion: only on explicit request with confirmation.
     DeletePermanent,
     Rename,
+    /// Several renames in one folder, as one operation (T2.8).
+    BatchRename,
     NewFolder,
     /// Puts recycled items back (undo of a deletion).
     Restore,
@@ -117,6 +119,22 @@ impl Job {
     /// Deletes items for good (Shift+Delete, after the user confirmed).
     pub fn delete_permanently(items: Vec<PathBuf>) -> Self {
         Self::new(OpKind::DeletePermanent, items, PathBuf::new())
+    }
+
+    /// Renames each `(item, new name)` in place, as one operation that undo
+    /// reverts at once (T2.8). Two phases (all to temporary names, then to
+    /// the final ones), so swaps and cycles (a→b, b→a) work; if a step
+    /// fails, what was done is put back.
+    pub fn batch_rename(pairs: Vec<(PathBuf, String)>) -> Self {
+        let mut job = Self::new(OpKind::BatchRename, Vec::new(), PathBuf::new());
+        job.pairs = pairs
+            .into_iter()
+            .map(|(item, name)| {
+                let to = item.with_file_name(name);
+                (item, to)
+            })
+            .collect();
+        job
     }
 
     /// Renames `item` to `new_name` in the same folder (never replacing).
@@ -237,6 +255,8 @@ pub struct Report {
     pub untracked: Vec<PathBuf>,
     /// `(old, new)` path of a rename.
     pub renamed: Option<(PathBuf, PathBuf)>,
+    /// `(old, new)` paths of a batch rename.
+    pub batch_renamed: Vec<(PathBuf, PathBuf)>,
     /// Folder created by a "new folder" job.
     pub created: Option<PathBuf>,
     /// Where restored items went.
@@ -269,6 +289,17 @@ pub fn undo_of(job: &Job, report: &Report) -> Option<Job> {
         OpKind::Rename => report.renamed.as_ref().and_then(|(old, new)| {
             let name = old.file_name()?.to_string_lossy().into_owned();
             Some(Job::rename(new.clone(), name))
+        }),
+        OpKind::BatchRename => (!report.batch_renamed.is_empty()).then(|| {
+            Job::batch_rename(
+                report
+                    .batch_renamed
+                    .iter()
+                    .filter_map(|(old, new)| {
+                        Some((new.clone(), old.file_name()?.to_string_lossy().into_owned()))
+                    })
+                    .collect(),
+            )
         }),
         OpKind::NewFolder => report.created.clone().map(|c| Job::recycle(vec![c])),
         OpKind::DeletePermanent => None,
@@ -703,6 +734,7 @@ fn run_job(work: &Work, events: &Sender<Event>) {
         OpKind::Recycle => run.recycle(),
         OpKind::DeletePermanent => run.delete_permanently(),
         OpKind::Rename => run.rename_item(),
+        OpKind::BatchRename => run.batch_rename(),
         OpKind::NewFolder => run.new_folder(),
         OpKind::Restore => run.restore_items(),
     };
@@ -814,6 +846,86 @@ impl Run<'_> {
             }
         })?;
         self.report.renamed = Some((from, to));
+        Ok(())
+    }
+
+    fn batch_rename(&mut self) -> Result<(), Stop> {
+        let pairs: Vec<(PathBuf, PathBuf)> = self
+            .job
+            .pairs
+            .iter()
+            .filter(|(from, to)| from != to)
+            .map(|(from, to)| Ok((std::path::absolute(from)?, std::path::absolute(to)?)))
+            .collect::<io::Result<_>>()?;
+        for (_, to) in &pairs {
+            let name = to
+                .file_name()
+                .map(|n| n.to_string_lossy())
+                .unwrap_or_default();
+            if name.trim().is_empty() || name == "." || name == ".." {
+                return Err(Stop::Failed(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "nome inválido",
+                )));
+            }
+        }
+        // Phase 1: every item to a temporary name next to it.
+        let mut temps: Vec<PathBuf> = Vec::with_capacity(pairs.len());
+        let mut failure = None;
+        for (k, (from, _)) in pairs.iter().enumerate() {
+            let temp = from.with_file_name(format!(
+                ".fx-ren-{}-{}-{k}.tmp",
+                std::process::id(),
+                self.id
+            ));
+            match rename(from, &temp) {
+                Ok(()) => temps.push(temp),
+                Err(e) => {
+                    failure = Some(e);
+                    break;
+                }
+            }
+        }
+        // Phase 2: temporary names to the final ones (never replacing).
+        let mut placed = 0;
+        if failure.is_none() {
+            for ((_, to), temp) in pairs.iter().zip(&temps) {
+                match rename(temp, to) {
+                    Ok(()) => placed += 1,
+                    Err(e) => {
+                        failure = Some(if exists(to) {
+                            io::Error::new(
+                                io::ErrorKind::AlreadyExists,
+                                format!(
+                                    "já existe um item chamado {}",
+                                    to.file_name()
+                                        .map(|n| n.to_string_lossy())
+                                        .unwrap_or_default()
+                                ),
+                            )
+                        } else {
+                            e
+                        });
+                        break;
+                    }
+                }
+            }
+        }
+        if let Some(e) = failure {
+            // Put everything back: final names first, then temporary ones.
+            for (k, (from, to)) in pairs.iter().enumerate() {
+                let current = if k < placed {
+                    to
+                } else if k < temps.len() {
+                    &temps[k]
+                } else {
+                    continue;
+                };
+                let _ = rename(current, from);
+            }
+            return Err(Stop::Failed(e));
+        }
+        self.report.batch_renamed = pairs;
         Ok(())
     }
 

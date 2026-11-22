@@ -16,6 +16,7 @@ publish = false
 # Bibliotecas de uso geral (thiserror, anyhow, crossbeam-channel, tempfile, serde...) entram
 # com `cargo add <crate> --workspace`-style na tarefa que precisar, fixando a versão com "=".
 [workspace.dependencies]
+regex = "=1.13.2"
 embed-resource = "=3.0.12"
 fx-core = { path = "crates/fx-core" }
 fx-fs = { path = "crates/fx-fs" }
