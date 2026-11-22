@@ -8,7 +8,7 @@
 
 **Já adiantado na Fase 1:** Ctrl+F sem filtros (T1.23), Quick Look de imagem e texto (T1.22), paleta de comandos (T1.24).
 
-**Dependências novas previstas** (cada uma registrada em `docs/DECISIONS.md` na tarefa que a introduzir, e **pedida ao usuário antes**): `embed-resource` (T2.1, feito: já vinha pelo GPUI); `zip` (T2.8); `pulldown-cmark` (T2.8); `tree-sitter` e gramáticas (T2.8, avaliar o peso no executável); Inno Setup no CI (T2.9).
+**Dependências novas previstas** (cada uma registrada em `docs/DECISIONS.md` na tarefa que a introduzir, e **pedida ao usuário antes**): `embed-resource` (T2.1, feito: já vinha pelo GPUI); `regex` (T2.8, feito: já vinha no `Cargo.lock`); `zip`, `pulldown-cmark`, `tree-sitter` e gramáticas (T2.9, avaliar o peso no executável); Inno Setup no CI (T2.9).
 
 **Ações que pedem o usuário** (SAFETY.md §1): instalar e testar o serviço elevado (T2.4); pedir a assinatura gratuita à SignPath Foundation (T2.10, só o usuário pode se inscrever).
 
@@ -86,7 +86,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 - Igual ao total das Propriedades do Windows nas fixtures (teste); P4 sem regressão.
 
 ## T2.8 — Renomear em lote
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: F2 com vários itens abre o renomear em lote (D-043): Buscar/Substituir (texto ou regex, Alt+R; maiúsculas Alt+M), Modelo com `{nome}` e `{n:3}`, letras (Alt+C), prévia ao vivo com problemas marcados (inválido, reservado, repetido, já existe) e Enter só sem problemas; job em duas fases (ciclos a→b→c→a e troca só de maiúscula funcionam; falha desfaz o feito) e um Ctrl+Z reverte tudo. Testes: 6 das regras, 2 do motor; conferido na janela (6 itens renomeados e desfeitos).
 
 **Fazer**
 - Com vários itens selecionados, F2 abre o renomear em lote: buscar e substituir (texto ou regex), numeração, maiúsculas e minúsculas, extensão; prévia ao vivo; conflitos e nomes inválidos marcados antes de aplicar; uma única operação para desfazer.

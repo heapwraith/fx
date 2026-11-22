@@ -196,7 +196,10 @@ impl FolderView {
                 true
             }
             "f2" if plain => {
-                if let Some(c) = self.selection.cursor() {
+                // Several items: the batch rename panel (T2.8).
+                if !self.open_batch_rename()
+                    && let Some(c) = self.selection.cursor()
+                {
                     self.begin_rename(c);
                 }
                 true

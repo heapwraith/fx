@@ -16,6 +16,7 @@
 //! forward, restoring each folder's scroll position and selection. The path
 //! bar is in `path_bar.rs`.
 
+mod batch_rename;
 mod dir_sizes;
 mod dnd;
 mod edit_ops;
@@ -205,6 +206,8 @@ pub struct FolderView {
     view_menu: bool,
     /// Totals of the subfolders being computed (T2.7).
     dir_sizes: dir_sizes::DirSizes,
+    /// The batch rename panel (F2 with several items, T2.8).
+    batch_rename: Option<batch_rename::BatchRename>,
     /// Width of the breadcrumb area in the last frame (T2.3), and whether
     /// the menu of the collapsed leading crumbs ("…") is open.
     crumb_room: std::rc::Rc<std::cell::Cell<f32>>,
@@ -381,6 +384,7 @@ impl FolderView {
             resizing: None,
             view_menu: false,
             dir_sizes: dir_sizes::DirSizes::default(),
+            batch_rename: None,
             crumb_room: std::rc::Rc::default(),
             crumb_menu: false,
             quick_look: None,
@@ -1579,6 +1583,9 @@ impl FolderView {
         if self.notice.take().is_some() {
             cx.notify();
         }
+        if self.batch_rename_key(ks, window, cx) {
+            return;
+        }
         if self.search_key(ks, started, window, cx) {
             cx.notify();
             return;
@@ -2217,6 +2224,7 @@ impl Render for FolderView {
             )
             .children(self.render_quick_look(cx))
             .children(self.render_search(cx))
+            .children(self.render_batch_rename(cx))
             .children(self.render_view_menu(cx))
     }
 }
