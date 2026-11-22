@@ -62,7 +62,7 @@
 - Teste de ponta a ponta numa pasta temporária: versão "nova" preparada, aplicada ao fechar, versão anterior restaurada se a troca falhar.
 
 ## T4.5 — Relatório do portão e instalação no PC do usuário
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: `bench/results/gate-4.md` (P1 430 ms, P2 72/10 ms, P4 p95 ≤ 4,4 ms, P7 0,02%, P8 87,2–88,1 MB no limite, Quick Look 49 ms; atualizador testado de ponta a ponta); WinHTTP/WinTrust/BCrypt carregadas só quando usadas (*delay-load*); fx instalado no PC do usuário pelo instalador do CI (commit 50f354f), aberto pelo próprio instalador, "Como usar" apareceu na primeira abertura.
 
 **Fazer**
 - `bench/results/gate-4.md` com as metas e os riscos.

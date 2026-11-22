@@ -1,6 +1,6 @@
 # Portão da Fase 4 — relatório
 
-**Data:** 2026-11-22 · **Versão:** 0.2.0-beta (commit f383f66) · **Build:** release, compilado no WSL com `cargo xwin`, executado no Windows; CI no GitHub (`check` e `arm64`, agora gerando os instaladores com o `fx-setup`).
+**Data:** 2026-11-22 · **Versão:** 0.2.0-beta (commit 50f354f) · **Build:** release, compilado no WSL com `cargo xwin`, executado no Windows; CI no GitHub (`check` e `arm64`, agora gerando os instaladores com o `fx-setup`).
 
 ## Máquina
 
@@ -23,7 +23,7 @@ A mesma das fases anteriores: AMD Ryzen 7 5700X, 32 GB, RTX 5070, monitor 1920×
 |---|---|---|
 | **1. Atualizador testado** (versão, hash, assinatura quando houver) e verificado contra o GitHub | 9 testes da lógica (versões, JSON, escolha do instalador, hash certo/alterado/ausente, uma vez por dia), 3 do Windows (SHA-256, só HTTPS, assinatura); consulta real à API do GitHub; ponta a ponta numa pasta de teste: 0.2.0 → 9.9.9 ao fechar o fx e 9.9.9 → 9.9.10 pela paleta, com o fx reaberto sozinho | ✅ |
 | **2. P1–P9 mantidas** | todas dentro da meta (tabela abaixo); P8 no limite | ✅ (P8 justo) |
-| **3. fx instalado e em uso no PC do usuário** | instalado pelo `fx-setup` (ver o fim) | ✅ |
+| **3. fx instalado e em uso no PC do usuário** | instalado pelo `fx-0.2.0-beta-setup-x64.exe` gerado pelo CI (commit 50f354f, sem assinatura): boas-vindas → Instalar → "Tudo pronto" → Abrir o fx; arquivos em `%LOCALAPPDATA%\Programs\fx`, atalho no Menu Iniciar, entrada em Configurações › Aplicativos (0.2.0-beta); a primeira abertura mostrou "Como usar" | ✅ |
 
 ## Metas (medidas hoje)
 

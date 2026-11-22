@@ -82,18 +82,18 @@ pub fn sections() -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
                     tr!("na busca: o disco inteiro", "in search: the whole disk"),
                 ),
                 (
-                    "tipo:",
+                    tr!("tipo:", "type:"),
                     tr!("imagem, vídeo, documento…", "image, video, document…"),
                 ),
                 (
-                    "tamanho:",
+                    tr!("tamanho:", "size:"),
                     tr!(">10mb, data:semana, ext:pdf", ">10mb, date:week, ext:pdf"),
                 ),
                 (
                     "Ctrl+K",
                     tr!(
                         "paleta: todo comando e pasta",
-                        "palette: every command and folder"
+                        "palette: commands and folders"
                     ),
                 ),
             ],
@@ -111,7 +111,7 @@ pub fn sections() -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
                     "Delete",
                     tr!(
                         "Lixeira (Shift: excluir de vez)",
-                        "Recycle Bin (Shift: delete for good)"
+                        "Recycle Bin (Shift: for good)"
                     ),
                 ),
                 (
@@ -165,7 +165,10 @@ pub fn sections() -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
                     "Alt+1…7",
                     tr!("etiqueta colorida (Alt+0 tira)", "color tag (Alt+0 clears)"),
                 ),
-                ("etiqueta:", tr!("buscar por etiqueta", "search by tag")),
+                (
+                    tr!("etiqueta:", "tag:"),
+                    tr!("buscar por etiqueta", "search by tag"),
+                ),
                 (
                     "Ctrl+Shift+H",
                     tr!("histórico de operações", "operation history"),
