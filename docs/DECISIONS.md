@@ -251,3 +251,8 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Não é defeito:** "comentÃ¡rio" numa prévia veio do arquivo de teste (o PowerShell 5 leu o script como ANSI); UTF-8 com e sem BOM aparecem certos. Com a caixa de renomear aberta, ela fica com as teclas (Ctrl+Shift+H não abre o histórico), como no Explorador.
 - **Fica para depois:** a primeira migalha cortada no meio quando o caminho não cabe (ex.: "ixtures"); o Explorador recolhe as do início num botão "…".
 
+## D-035 — Portão da Fase 1 sem as 2 semanas de uso
+- **Data:** 2026-11-21 · **Status:** aceita (decisão do usuário)
+- **Decisão:** o critério "2 semanas como gerenciador principal" fica dispensado. O usuário quer o fx completo primeiro; vai usá-lo e melhorá-lo depois. Os outros critérios passaram (P1–P4, P7, nenhuma perda de dados; `bench/results/gate-1.md`).
+- **Consequência:** a Fase 2 está em `docs/phases/PHASE-2.md`, aprovada pelo usuário em 2026-11-21. Problemas que só o uso diário mostraria podem aparecer mais tarde; os testes de falha do motor de operações (T2.4) vêm antes da beta pública para compensar.
+
