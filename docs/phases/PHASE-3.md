@@ -12,7 +12,7 @@
 ---
 
 ## T3.1 — Gerenciador de arquivos padrão (com reverter)
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: `fx-shell::default_manager` (D-046): ativar grava em `HKCU\Software\Classes` o abrir de Pasta/Diretório/Unidade e o Win+E (CLSID do Computador, "nova janela"), com `DelegateExecute` vazio, depois de guardar o que havia; reverter restaura os valores e apaga só as chaves criadas pelo fx. Comandos na paleta. Sem argumento (Win+E, Menu Iniciar) o fx abre a pasta do usuário, não a System32. 3 testes numa raiz temporária (`HKCU\Software\fx-test-*`, apagada no fim); **não aplicado no PC do usuário** (aguarda pedido, `docs/TESTES-FINAIS.md`).
 
 **Fazer**
 - Em `fx-shell`: estado, ativar e reverter. Ativar faz pastas, unidades e Win+E abrirem no fx, por chaves em `HKCU\Software\Classes` (verbo `open` de `Folder`/`Directory`/`Drive` e o comando de Win+E). Antes de gravar, faz uma cópia do que havia. Reverter apaga só o que o fx criou e restaura a cópia.

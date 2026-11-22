@@ -86,10 +86,14 @@ fn log_panics() {
 
 fn main() {
     log_panics();
-    let arg = std::env::args_os().nth(1);
+    // An empty argument counts as none (a shell command with "%1" and no item).
+    let arg = std::env::args_os().nth(1).filter(|a| !a.is_empty());
+    // No folder (Win+E, the Start Menu): the user's home, not the working
+    // directory, which for those launches is System32.
     let path = arg
         .clone()
         .map(PathBuf::from)
+        .or_else(|| std::env::var_os("USERPROFILE").map(PathBuf::from))
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_else(|| PathBuf::from("."));
     // Absolute, so "go up" works from a relative argument such as ".".

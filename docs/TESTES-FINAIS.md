@@ -11,3 +11,8 @@ O usuário pediu para terminar todas as funcionalidades primeiro (2026-11-22) e 
 - [ ] **T2.10 Instalador:** num Windows limpo (ou máquina virtual): instalar pelo `fx-…-setup-x64.exe` sem administrador, abrir pelo Menu Iniciar, desinstalar pelas Configurações e conferir que `%LOCALAPPDATA%\Programs\fx` sumiu; repetir respondendo "Sim" para apagar as configurações e conferir que `%APPDATA%\fx` e `%LOCALAPPDATA%\fx` sumiram.
 - [ ] **T2.11 Assinatura:** inscrição do projeto na SignPath Foundation (só o usuário pode); depois, conferir que o SmartScreen não mostra "editor desconhecido".
 - [ ] **T2.11 Beta:** publicar o rascunho do release `v0.2.0-beta` no GitHub.
+
+## Fase 3
+
+- [ ] **T3.1 Gerenciador padrão:** paleta → "Tornar o fx o gerenciador de arquivos padrão"; conferir que abrir uma pasta pela área de trabalho, uma unidade em "Este Computador" e o Win+E abrem o fx; depois "Voltar ao Explorador como gerenciador padrão" e conferir que tudo volta ao Explorador. (Altera `HKCU\Software\Classes`; o reverter restaura o que havia.)
+

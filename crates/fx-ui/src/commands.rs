@@ -23,6 +23,8 @@ pub enum Action {
     About,
     /// Installs (`true`) or removes the index service, with the UAC prompt.
     IndexService(bool),
+    /// Makes fx the default file manager (`true`) or goes back to Explorer.
+    DefaultManager(bool),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,6 +109,14 @@ pub const COMMANDS: &[Command] = &[
     direct(
         "Desativar a busca no disco inteiro (remove o serviço)",
         Action::IndexService(false),
+    ),
+    direct(
+        "Tornar o fx o gerenciador de arquivos padrão (pastas e Win+E)",
+        Action::DefaultManager(true),
+    ),
+    direct(
+        "Voltar ao Explorador como gerenciador padrão",
+        Action::DefaultManager(false),
     ),
 ];
 

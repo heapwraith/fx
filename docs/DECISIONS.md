@@ -349,3 +349,11 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **CI:** o job `check` compila o instalador a cada push (artefato `fx-setup`, falha se o script não compilar); a tag anexa `fx-X.Y.Z-setup-x64.exe` ao release ao lado do zip portátil.
 - **Pendente:** o teste num Windows limpo ficou para a rodada final (`docs/TESTES-FINAIS.md`), a pedido do usuário.
 
+## D-046 — fx como gerenciador padrão, com reverter (T3.1)
+- **Data:** 2026-11-22 · **Status:** aceita (código e testes; aplicar no PC do usuário só quando ele pedir, SAFETY.md §1)
+- **Onde:** só `HKCU\Software\Classes` (sem administrador, só o usuário atual): `Folder`, `Directory` e `Drive` → `shell\open\command` = `"fx.exe" "%1"`, e `CLSID\{52205fd8-5dfb-447d-801a-d0b52f2e83e1}\shell\opennewwindow\command` = `"fx.exe"` (o verbo que o Win+E executa). Em todas, `DelegateExecute` vazio, para o Explorador usar o comando em vez do seu manipulador COM. Mesma técnica usada por outros gerenciadores (Files, Directory Opus).
+- **Reverter:** antes da primeira ativação, o fx guarda em `HKCU\Software\fx\DefaultManager` os valores que vai substituir (ou "ausente") e, por chave, o primeiro componente do caminho que não existia. Reverter restaura os valores, apaga só essas chaves criadas e por fim a cópia. Ativar de novo mantém a primeira cópia, então o reverter sempre volta ao estado de antes do fx. Um item de outro programa sob as mesmas chaves não é tocado (teste).
+- **Testes:** todas as funções recebem a raiz; os testes usam `HKCU\Software\fx-test-<pid>-<nome>` e apagam a raiz no fim (confirmado: nenhuma chave de teste sobra). Nenhum teste toca as chaves reais.
+- **Sem argumento:** o fx agora abre a pasta do usuário (`USERPROFILE`) quando não recebe pasta (Win+E, Menu Iniciar); antes abria a pasta de trabalho, que nesses casos é a System32. Argumento vazio conta como ausente.
+- **No app:** paleta → "Tornar o fx o gerenciador de arquivos padrão (pastas e Win+E)" e "Voltar ao Explorador como gerenciador padrão", numa thread de lançamento, com aviso do resultado.
+

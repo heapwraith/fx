@@ -2,6 +2,7 @@
 
 mod a11y;
 mod clipboard;
+pub mod default_manager;
 mod dragdrop;
 mod elevation;
 mod icons;

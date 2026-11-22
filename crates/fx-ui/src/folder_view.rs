@@ -1041,6 +1041,37 @@ impl FolderView {
         .detach();
     }
 
+    /// Makes fx the default file manager, or goes back to Explorer (T3.1):
+    /// keys under `HKCU` only, on a background thread, with a full revert.
+    pub fn default_manager(&mut self, enable: bool, cx: &mut Context<Self>) {
+        let Some(exe) = std::env::current_exe().ok() else {
+            return;
+        };
+        let rx = fx_shell::launch::spawn_launch(move || {
+            use fx_shell::default_manager::{BACKUP, CLASSES, enable as on, revert};
+            if enable {
+                on(CLASSES, BACKUP, &exe.to_string_lossy())
+            } else {
+                revert(CLASSES, BACKUP)
+            }
+        });
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_spawn(async move { rx.recv().unwrap_or(Ok(())) })
+                .await;
+            let text = match (result, enable) {
+                (Ok(()), true) => {
+                    "O fx agora abre pastas, unidades e o Win+E. \"Voltar ao Explorador\" desfaz"
+                        .to_owned()
+                }
+                (Ok(()), false) => "O Explorador voltou a ser o gerenciador padrão".to_owned(),
+                (Err(e), _) => format!("gerenciador padrão: {e}"),
+            };
+            let _ = this.update(cx, |view, cx| view.show_notice(text, cx));
+        })
+        .detach();
+    }
+
     /// A message in the status until the next key (palette commands).
     pub fn show_notice(&mut self, text: String, cx: &mut Context<Self>) {
         self.notice = Some(text);

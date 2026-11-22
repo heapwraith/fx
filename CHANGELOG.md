@@ -4,6 +4,9 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 
 ## [Não lançado]
 
+### Adicionado
+- Tornar o fx o gerenciador de arquivos padrão (pastas, unidades e Win+E) pela paleta, com "Voltar ao Explorador" que restaura tudo.
+
 ## [0.2.0-beta] — 2026-11-22
 
 Fase 2 — busca no disco inteiro, prévias e instalador. Primeira beta pública.
