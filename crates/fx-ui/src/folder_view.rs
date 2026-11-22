@@ -48,7 +48,7 @@ use fx_core::{
     type_label,
 };
 use fx_fs::Strategy;
-use fx_shell::icons::icon_key;
+use fx_shell::icons::{IconKey, icon_key_cloud};
 use fx_shell::launch::Launch;
 use gpui::{
     Context, Entity, ExternalPaths, FocusHandle, Image, KeyDownEvent, MouseButton, MouseDownEvent,
@@ -676,11 +676,7 @@ impl FolderView {
                 if !show_icons {
                     return (i, None);
                 }
-                let key = icon_key(
-                    &self.path,
-                    self.list.name(i),
-                    self.list.attributes(i).is_dir(),
-                );
+                let key = self.icon_key_of(i);
                 let image = icons.get(&key);
                 if image.is_none() && icons.is_unknown(&key) {
                     missing.push(key);
@@ -780,6 +776,20 @@ impl FolderView {
                                                 .rounded_full()
                                                 .bg(rgba(c))
                                         }))
+                                        .children(cloud_glyph(self.list.attributes(i)).map(
+                                            |(glyph, strong)| {
+                                                div()
+                                                    .flex_none()
+                                                    .font_family(self.look.icon_font)
+                                                    .text_size(px(12.0))
+                                                    .text_color(rgba(if strong {
+                                                        t.accent
+                                                    } else {
+                                                        t.text_secondary
+                                                    }))
+                                                    .child(glyph)
+                                            },
+                                        ))
                                         .into_any_element()
                                 }
                             })
@@ -1147,6 +1157,47 @@ impl FolderView {
     }
 
     /// A message in the status until the next key (palette commands).
+    /// "Always keep on this device" (`keep`) or "Free up space" for the
+    /// selection (T3.9), on a worker thread: only attributes change, the
+    /// cloud provider downloads or frees the data.
+    pub fn cloud_pin(&mut self, keep: bool, cx: &mut Context<Self>) {
+        let paths = self.selected_paths();
+        if paths.is_empty() {
+            self.show_notice(tr!("nada selecionado", "nothing selected").to_owned(), cx);
+            return;
+        }
+        let work = cx.background_executor().spawn(async move {
+            let mut done = 0usize;
+            let mut error = None;
+            for p in &paths {
+                match fx_fs::set_cloud_pin(p, keep) {
+                    Ok(n) => done += n,
+                    Err(e) => error = Some(e),
+                }
+            }
+            (done, error)
+        });
+        cx.spawn(async move |this, cx| {
+            let (done, error) = work.await;
+            let _ = this.update(cx, |view, cx| {
+                let n = fx_core::format::items(done);
+                let text = match (error, keep) {
+                    (Some(e), _) => trf!("nuvem: {e}", "cloud: {e}"),
+                    (None, true) => trf!(
+                        "{n} marcados para manter neste dispositivo",
+                        "{n} marked to always keep on this device"
+                    ),
+                    (None, false) => trf!(
+                        "{n} marcados para liberar espaço",
+                        "{n} marked to free up space"
+                    ),
+                };
+                view.show_notice(text, cx);
+            });
+        })
+        .detach();
+    }
+
     pub fn show_notice(&mut self, text: String, cx: &mut Context<Self>) {
         self.notice = Some(text);
         cx.notify();
@@ -2413,10 +2464,60 @@ impl Render for FolderView {
     }
 }
 
+/// The cloud state glyph next to a name (T3.9): a cloud for items only in
+/// the cloud, a check for those on this device, a filled check for the ones
+/// always kept. `true`: drawn in the accent color.
+fn cloud_glyph(a: fx_core::Attributes) -> Option<(&'static str, bool)> {
+    match fx_core::CloudState::of(a) {
+        fx_core::CloudState::None => None,
+        fx_core::CloudState::CloudOnly => Some((crate::theme::ICON_CLOUD, false)),
+        fx_core::CloudState::Available => Some((crate::theme::ICON_CLOUD_LOCAL, true)),
+        fx_core::CloudState::AlwaysKept => Some((crate::theme::ICON_CLOUD_KEPT, true)),
+    }
+}
+
+/// Whether the list may read an item's content (thumbnail, per-file icon):
+/// never for one only in the cloud, which would download it (T3.9).
+pub(crate) fn may_read_content(a: fx_core::Attributes) -> bool {
+    !fx_core::CloudState::of(a).is_cloud_only()
+}
+
+impl FolderView {
+    /// The icon of entry `i`; never one that reads a cloud-only file.
+    fn icon_key_of(&self, i: u32) -> IconKey {
+        let a = self.list.attributes(i);
+        icon_key_cloud(
+            &self.path,
+            self.list.name(i),
+            a.is_dir(),
+            !may_read_content(a),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{COL_MAX, COL_MIN, Col, Columns, Widths, elapsed_text, read_failure};
     use std::time::Duration;
+
+    #[test]
+    fn cloud_only_items_are_never_read() {
+        use fx_core::Attributes as A;
+        assert!(super::may_read_content(A::empty()));
+        assert!(super::may_read_content(A::PINNED));
+        assert!(super::may_read_content(A::UNPINNED));
+        assert!(!super::may_read_content(A::RECALL));
+        assert!(!super::may_read_content(A::OFFLINE.with(A::UNPINNED)));
+        assert_eq!(super::cloud_glyph(A::empty()), None);
+        assert_eq!(
+            super::cloud_glyph(A::RECALL),
+            Some((crate::theme::ICON_CLOUD, false))
+        );
+        assert_eq!(
+            super::cloud_glyph(A::PINNED),
+            Some((crate::theme::ICON_CLOUD_KEPT, true))
+        );
+    }
 
     #[test]
     fn read_failures_are_in_words() {

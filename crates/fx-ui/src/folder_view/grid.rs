@@ -6,7 +6,6 @@
 use std::ops::Range;
 use std::path::PathBuf;
 
-use fx_shell::icons::icon_key;
 use gpui::{Context, MouseButton, MouseDownEvent, SharedString, div, img, prelude::*, px};
 
 use super::{FolderView, ICON_SIZE, SCROLLBAR_WIDTH};
@@ -48,8 +47,15 @@ impl FolderView {
             .iter()
             .map(|&i| self.path.join(self.list.os_name(i)))
             .collect();
+        // Never the content of an item only in the cloud (T3.9).
+        let readable: Vec<PathBuf> = entries
+            .iter()
+            .zip(&paths)
+            .filter(|(i, _)| super::may_read_content(self.list.attributes(**i)))
+            .map(|(_, p)| p.clone())
+            .collect();
         self.thumbs
-            .update(cx, |thumbs, cx| thumbs.want(paths.clone(), cx));
+            .update(cx, |thumbs, cx| thumbs.want(readable, cx));
         let thumbs = self.thumbs.read(cx);
         let icons = self.icons.read(cx);
         let mut missing_icons = Vec::new();
@@ -59,11 +65,7 @@ impl FolderView {
             .map(|(&i, path)| {
                 let thumb = thumbs.get(path);
                 let icon = if thumb.is_none() && icons.enabled() {
-                    let key = icon_key(
-                        &self.path,
-                        self.list.name(i),
-                        self.list.attributes(i).is_dir(),
-                    );
+                    let key = self.icon_key_of(i);
                     let icon = icons.get(&key);
                     if icon.is_none() && icons.is_unknown(&key) {
                         missing_icons.push(key);

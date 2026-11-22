@@ -26,7 +26,7 @@ mod undo;
 pub mod vt;
 pub mod zip_list;
 
-pub use entry::{Attributes, Change, Entry};
+pub use entry::{Attributes, Change, CloudState, Entry};
 pub use history::History;
 pub use list::{Applied, Direction, FileList, SortKey, next_sort, type_label};
 pub use pinned::Pinned;

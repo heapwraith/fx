@@ -85,7 +85,7 @@
 - Teste dos tokens de alto contraste a partir das cores do sistema; conferência visual vai para os testes finais.
 
 ## T3.9 — Pastas de nuvem (OneDrive e outras)
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: estado de nuvem pelos atributos (`fx-core::CloudState`: OFFLINE/RECALL → só na nuvem, UNPINNED → disponível, PINNED → sempre neste dispositivo), ícone ao lado do nome (nuvem, visto, visto cheio); item só na nuvem nunca tem miniatura nem ícone por arquivo pedidos; "Manter sempre neste dispositivo" e "Liberar espaço" na paleta (atributos PINNED/UNPINNED via `fx_fs::set_cloud_pin`, em thread, recursivo em pastas); abrir já era assíncrono (D-054). Testes do mapeamento, do ícone sem leitura e dos atributos em pasta temporária; conferido na janela com atributos simulados.
 
 **Fazer**
 - Estado de cada item de pastas sincronizadas (só na nuvem, disponível, sempre neste dispositivo) a partir dos atributos (`RECALL_ON_DATA_ACCESS`, `PINNED`, `UNPINNED`, `OFFLINE`), com ícone na lista; abrir um arquivo só na nuvem não trava a UI; "Liberar espaço" e "Manter sempre neste dispositivo" no menu.

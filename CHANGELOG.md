@@ -5,6 +5,7 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 ## [Não lançado]
 
 ### Adicionado
+- Estado de pastas de nuvem (OneDrive e outras) e comandos para manter ou liberar espaço.
 - Interface em português e inglês (idioma do Windows; troca na paleta).
 - Build e instalador para Windows ARM64.
 - Alto contraste do Windows: o fx usa as cores do sistema e troca ao vivo.

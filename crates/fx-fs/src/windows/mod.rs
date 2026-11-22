@@ -14,9 +14,12 @@ use std::sync::mpsc::Sender;
 use std::time::{Duration, SystemTime};
 
 use windows::Win32::Storage::FileSystem::{
-    FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_READONLY,
-    FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_SYSTEM,
+    FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_OFFLINE, FILE_ATTRIBUTE_PINNED,
+    FILE_ATTRIBUTE_READONLY, FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS, FILE_ATTRIBUTE_RECALL_ON_OPEN,
+    FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_SYSTEM, FILE_ATTRIBUTE_UNPINNED,
+    FILE_FLAGS_AND_ATTRIBUTES, GetFileAttributesW, INVALID_FILE_ATTRIBUTES, SetFileAttributesW,
 };
+use windows::core::PCWSTR;
 
 use crate::{Attributes, Batcher, Entry, Strategy};
 
@@ -67,6 +70,50 @@ fn make_entry(name: &[u16], size: u64, last_write: u64, attributes: u32) -> Opti
     })
 }
 
+/// "Always keep on this device" (`keep`) or "Free up space" for `path` and,
+/// for a folder, everything below it (T3.9): sets the PINNED or UNPINNED
+/// attribute, which the cloud provider acts on (download or dehydrate).
+/// Only attributes change; the content is never read here. Returns how many
+/// items were marked. Runs on a worker thread (may take a while).
+pub fn set_cloud_pin(path: &Path, keep: bool) -> io::Result<usize> {
+    let wide = verbatim_wide(path)?;
+    let mut z = wide.clone();
+    z.push(0);
+    // SAFETY: `z` is a NUL-terminated path that outlives the calls.
+    let raw = unsafe { GetFileAttributesW(PCWSTR(z.as_ptr())) };
+    if raw == INVALID_FILE_ATTRIBUTES {
+        return Err(io::Error::last_os_error());
+    }
+    let (on, off) = if keep {
+        (FILE_ATTRIBUTE_PINNED.0, FILE_ATTRIBUTE_UNPINNED.0)
+    } else {
+        (FILE_ATTRIBUTE_UNPINNED.0, FILE_ATTRIBUTE_PINNED.0)
+    };
+    let new = (raw | on) & !off;
+    // SAFETY: as above.
+    unsafe { SetFileAttributesW(PCWSTR(z.as_ptr()), FILE_FLAGS_AND_ATTRIBUTES(new)) }
+        .map_err(to_io)?;
+    let mut count = 1;
+    if raw & FILE_ATTRIBUTE_DIRECTORY.0 != 0 && raw & FILE_ATTRIBUTE_REPARSE_POINT.0 == 0
+        || raw & FILE_ATTRIBUTE_DIRECTORY.0 != 0 && is_cloud(raw)
+    {
+        for entry in std::fs::read_dir(path)?.flatten() {
+            count += set_cloud_pin(&entry.path(), keep).unwrap_or(0);
+        }
+    }
+    Ok(count)
+}
+
+/// A cloud placeholder (also a reparse point, but not a link to follow out).
+fn is_cloud(raw: u32) -> bool {
+    raw & (FILE_ATTRIBUTE_PINNED.0
+        | FILE_ATTRIBUTE_UNPINNED.0
+        | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS.0
+        | FILE_ATTRIBUTE_RECALL_ON_OPEN.0
+        | FILE_ATTRIBUTE_OFFLINE.0)
+        != 0
+}
+
 fn map_attributes(raw: u32) -> Attributes {
     let mut a = Attributes::empty();
     for (win, neutral) in [
@@ -75,6 +122,11 @@ fn map_attributes(raw: u32) -> Attributes {
         (FILE_ATTRIBUTE_SYSTEM.0, Attributes::SYSTEM),
         (FILE_ATTRIBUTE_READONLY.0, Attributes::READONLY),
         (FILE_ATTRIBUTE_REPARSE_POINT.0, Attributes::LINK),
+        (FILE_ATTRIBUTE_OFFLINE.0, Attributes::OFFLINE),
+        (FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS.0, Attributes::RECALL),
+        (FILE_ATTRIBUTE_RECALL_ON_OPEN.0, Attributes::RECALL),
+        (FILE_ATTRIBUTE_PINNED.0, Attributes::PINNED),
+        (FILE_ATTRIBUTE_UNPINNED.0, Attributes::UNPINNED),
     ] {
         if raw & win != 0 {
             a = a.with(neutral);
@@ -166,6 +218,32 @@ mod tests {
             SystemTime::UNIX_EPOCH + Duration::from_millis(1500)
         );
         assert!(filetime_to_system_time(0) < SystemTime::UNIX_EPOCH);
+    }
+
+    #[test]
+    fn cloud_flags_are_mapped() {
+        let a = map_attributes(FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS.0 | FILE_ATTRIBUTE_UNPINNED.0);
+        assert!(a.contains(Attributes::RECALL) && a.contains(Attributes::UNPINNED));
+        assert!(map_attributes(FILE_ATTRIBUTE_PINNED.0).contains(Attributes::PINNED));
+        assert!(map_attributes(FILE_ATTRIBUTE_OFFLINE.0).contains(Attributes::OFFLINE));
+    }
+
+    #[test]
+    fn pin_and_unpin_set_only_attributes() {
+        use std::os::windows::fs::MetadataExt;
+        // Outside a cloud folder NTFS keeps the flags without doing anything.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+        std::fs::write(dir.path().join("sub").join("a.txt"), b"data").unwrap();
+        let n = set_cloud_pin(dir.path(), true).unwrap();
+        assert_eq!(n, 3, "folder, subfolder and file");
+        let attr = |p: &Path| map_attributes(std::fs::metadata(p).unwrap().file_attributes());
+        let file = dir.path().join("sub").join("a.txt");
+        assert!(attr(&file).contains(Attributes::PINNED));
+        set_cloud_pin(dir.path(), false).unwrap();
+        assert!(attr(&file).contains(Attributes::UNPINNED));
+        assert!(!attr(&file).contains(Attributes::PINNED));
+        assert_eq!(std::fs::read(&file).unwrap(), b"data");
     }
 
     #[test]

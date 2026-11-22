@@ -106,6 +106,10 @@ pub const ICON_PLAY: &str = "\u{E768}";
 pub const ICON_HISTORY: &str = "\u{E81C}";
 pub const ICON_VIEW: &str = "\u{E890}";
 pub const ICON_SEARCH: &str = "\u{E721}";
+/// Cloud files (T3.9): only in the cloud, on this device, always kept.
+pub const ICON_CLOUD: &str = "\u{E753}";
+pub const ICON_CLOUD_LOCAL: &str = "\u{E930}";
+pub const ICON_CLOUD_KEPT: &str = "\u{EC61}";
 
 pub fn pick_icon_font(available: &[String]) -> &'static str {
     ICON_FAMILIES

@@ -412,3 +412,11 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Teste de varredura:** lê `fx-ui/src`, ignora comentários, SQL e o módulo de testes, e acusa todo literal com cara de português (acentos ou palavras como "de", "para", "não") que não seja a primeira metade de um par. Achou dois esquecidos na primeira rodada.
 - **Pendente:** mensagens de erro vindas de `fx-ops` e `fx-shell` (ex.: "já existe um item chamado …") seguem em português; as do próprio Windows vêm no idioma do sistema.
 
+## D-054 — Pastas de nuvem (T3.9)
+- **Data:** 2026-11-22 · **Status:** aceita
+- **Estado só pelos atributos** (o que a enumeração já traz, sem custo): `PINNED` → sempre neste dispositivo; senão `RECALL_ON_DATA_ACCESS`/`RECALL_ON_OPEN`/`OFFLINE` → só na nuvem; senão `UNPINNED` → disponível; senão nenhum. Vale para o OneDrive e para qualquer provedor da API de arquivos de nuvem do Windows. `Attributes` passou de 8 para 16 bits.
+- **Nunca ler o conteúdo de um item só na nuvem pela lista:** a grade não pede miniatura e a lista/grade não pede ícone por arquivo (exe, lnk, ico) para ele (`icon_key_cloud` cai para o ícone da extensão). Pré-visualizar (Espaço) e abrir continuam baixando, porque o usuário pediu; abrir já roda fora da thread de UI.
+- **Ícones:** Segoe Fluent `E753` (nuvem, cor secundária), `E930` (visto vazado) e `EC61` (visto cheio), estes na cor de destaque, ao lado do nome, como as etiquetas.
+- **Comandos:** "Manter sempre neste dispositivo" e "Liberar espaço" na paleta mudam só os atributos `PINNED`/`UNPINNED` (é o que `attrib +P -U` / `-P +U` fazem e o que o Explorador usa); o provedor baixa ou libera. Recursivo em pastas, em thread de fundo, com aviso no fim. O menu de contexto do shell continua mostrando os itens do próprio provedor.
+- **Pendente:** placeholders de nuvem também são pontos de nova análise, marcados `LINK`; a busca por pasta não desce em subpastas de nuvem (ajustar com a etiqueta de reparse). Conferência com um OneDrive de verdade vai para os testes finais.
+

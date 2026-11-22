@@ -239,6 +239,7 @@ impl TabsView {
                 Action::DefaultManager(on) => {
                     tab.update(cx, |view, cx| view.default_manager(on, cx));
                 }
+                Action::CloudPin(keep) => tab.update(cx, |view, cx| view.cloud_pin(keep, cx)),
                 Action::Language => {
                     crate::i18n::switch();
                     cx.refresh_windows();

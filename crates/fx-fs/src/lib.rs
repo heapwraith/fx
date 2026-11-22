@@ -13,7 +13,7 @@ pub use fx_core::{Attributes, Change, Entry};
 mod windows;
 
 #[cfg(windows)]
-pub use windows::{Watcher, enumerate, watch};
+pub use windows::{Watcher, enumerate, set_cloud_pin, watch};
 
 // Uses `enumerate`, which only exists on Windows for now (D-012).
 #[cfg(windows)]

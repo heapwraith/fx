@@ -41,6 +41,20 @@ pub fn icon_key(dir: &Path, name: &str, is_dir: bool) -> IconKey {
     }
 }
 
+/// Like `icon_key`, but an item only in the cloud (T3.9) never gets a
+/// per-file icon: extracting it would read, and so download, the file.
+pub fn icon_key_cloud(dir: &Path, name: &str, is_dir: bool, cloud_only: bool) -> IconKey {
+    match icon_key(dir, name, is_dir) {
+        IconKey::File(_) if cloud_only => {
+            let ext = name
+                .rfind('.')
+                .map_or(String::new(), |i| name[i + 1..].to_lowercase());
+            IconKey::Extension(ext)
+        }
+        key => key,
+    }
+}
+
 /// An answer: PNG bytes, or `None` when the icon could not be made in time.
 #[derive(Debug, Clone)]
 pub struct IconReady {
@@ -280,6 +294,15 @@ mod tests {
             IconKey::Extension(String::new())
         );
         assert_eq!(icon_key(d, "src", true), IconKey::Folder);
+        assert_eq!(
+            icon_key_cloud(d, "app.EXE", false, true),
+            IconKey::Extension("exe".into()),
+            "cloud-only: never read for its icon"
+        );
+        assert!(matches!(
+            icon_key_cloud(d, "app.exe", false, false),
+            IconKey::File(_)
+        ));
         assert_eq!(
             icon_key(d, "app.EXE", false),
             IconKey::File(d.join("app.EXE"))

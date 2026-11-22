@@ -29,6 +29,8 @@ pub enum Action {
     DefaultManager(bool),
     /// Switches the interface between Portuguese and English (T3.7).
     Language,
+    /// Cloud files (T3.9): keep on this device (`true`) or free up space.
+    CloudPin(bool),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,6 +185,17 @@ pub const COMMANDS: &[Command] = &[
         Action::DefaultManager(false),
     ),
     direct(("Idioma: English", "Language: Português"), Action::Language),
+    direct(
+        (
+            "Manter sempre neste dispositivo (nuvem)",
+            "Always keep on this device (cloud)",
+        ),
+        Action::CloudPin(true),
+    ),
+    direct(
+        ("Liberar espaço (nuvem)", "Free up space (cloud)"),
+        Action::CloudPin(false),
+    ),
 ];
 
 /// "ctrl-shift-n" → "Ctrl+Shift+N", "alt-up" → "Alt+↑", "space" → "Espaço".
