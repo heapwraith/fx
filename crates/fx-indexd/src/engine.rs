@@ -101,6 +101,15 @@ impl Engine {
         } else {
             Status::Indexing
         };
+        if !request.sizes_of.is_empty() {
+            let hits = self.folder_totals(&volumes, &request.sizes_of);
+            return Response {
+                status,
+                items,
+                index_bytes,
+                hits,
+            };
+        }
         let filters = request.filter.to_filters();
         let text = request.query.trim();
         if (text.is_empty() && !filters.is_active()) || request.limit == 0 {
@@ -164,6 +173,38 @@ impl Engine {
             index_bytes,
             hits: scored.into_iter().map(|(_, h)| h).collect(),
         }
+    }
+
+    /// Totals of the subfolders of `folder` (absolute, UTF-16), as hits;
+    /// nothing for a folder outside the index or inside a hidden profile.
+    fn folder_totals(&self, volumes: &[Volume], folder: &[u16]) -> Vec<RemoteHit> {
+        use std::os::windows::ffi::{OsStrExt, OsStringExt};
+        let folder = PathBuf::from(std::ffi::OsString::from_wide(folder));
+        if self.is_hidden(&folder) {
+            return Vec::new();
+        }
+        let text = folder.to_string_lossy();
+        let Some(v) = volumes
+            .iter()
+            .find(|v| text.len() >= 2 && text[..2].eq_ignore_ascii_case(&v.letter))
+        else {
+            return Vec::new();
+        };
+        let rel = PathBuf::from(text[2..].trim_start_matches('\\'));
+        let Some(totals) = v.index.folder_totals(&rel) else {
+            return Vec::new();
+        };
+        totals
+            .into_iter()
+            .map(|(slot, bytes)| (folder.join(v.index.name(slot)), slot, bytes))
+            .filter(|(path, _, _)| !self.is_hidden(path))
+            .map(|(path, slot, bytes)| RemoteHit {
+                path: path.as_os_str().encode_wide().collect(),
+                is_dir: true,
+                size: bytes,
+                modified: v.index.modified(slot),
+            })
+            .collect()
     }
 
     fn is_hidden(&self, path: &std::path::Path) -> bool {
@@ -303,6 +344,7 @@ mod tests {
             query: "notas".into(),
             limit: 50,
             filter: docs.clone(),
+            sizes_of: Vec::new(),
         });
         assert_eq!(
             paths(&r),
@@ -319,6 +361,7 @@ mod tests {
                 dirs: Some(true),
                 ..Default::default()
             },
+            sizes_of: Vec::new(),
         });
         assert_eq!(
             paths(&r),
@@ -337,6 +380,7 @@ mod tests {
             query: String::new(),
             limit: 50,
             filter: big,
+            sizes_of: Vec::new(),
         });
         assert_eq!(
             paths(&r),
@@ -345,6 +389,35 @@ mod tests {
                 r"C:\Users\anabela\notas.doc".to_owned()
             ]
         );
+    }
+
+    #[test]
+    fn folder_totals_through_the_service_hide_other_profiles() {
+        let e = engine();
+        let ask = |p: &str| {
+            let r = e.answer(&Request {
+                sizes_of: p.encode_utf16().collect(),
+                ..Default::default()
+            });
+            let mut v: Vec<(String, u64)> = r
+                .hits
+                .iter()
+                .map(|h| (String::from_utf16_lossy(&h.path), h.size))
+                .collect();
+            v.sort();
+            v
+        };
+        assert_eq!(
+            ask(r"c:\Users"),
+            vec![
+                (r"c:\Users\anabela".to_owned(), 180),
+                (r"c:\Users\bruno".to_owned(), 140),
+            ],
+            "ana is another user's profile: left out"
+        );
+        assert!(ask(r"C:\Users\Ana").is_empty());
+        assert_eq!(ask(r"C:\").len(), 2);
+        assert!(ask(r"Z:\x").is_empty());
     }
 
     #[test]

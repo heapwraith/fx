@@ -4,7 +4,8 @@
 //! limits, so a malformed or hostile request cannot make it allocate much or
 //! read past the message. All integers are little-endian.
 //!
-//! Request:  `FXQ2` · limit u32 · query length u32 · query (UTF-8) · filter
+//! Request:  `FXQ3` · limit u32 · query length u32 · query (UTF-8) · filter
+//!           · folder length u32 · folder (UTF-16LE; empty: a search)
 //! Filter:   extension count u8 · (length u8 · extension)* · folders u8
 //!           (0 any, 1 files, 2 folders) · size min u64 · size max u64
 //!           · modified min i64 · modified max i64 (Unix seconds; the
@@ -16,7 +17,7 @@
 
 use std::io::{self, Read, Write};
 
-const REQUEST_MAGIC: &[u8; 4] = b"FXQ2";
+const REQUEST_MAGIC: &[u8; 4] = b"FXQ3";
 /// Most extensions in a filter, and the longest one.
 const MAX_EXTS: usize = 64;
 const MAX_EXT_LEN: usize = 16;
@@ -37,6 +38,9 @@ pub struct Request {
     pub query: String,
     pub limit: u32,
     pub filter: SearchFilter,
+    /// Not empty: instead of a search, the totals of the subfolders of this
+    /// absolute folder (T2.7), one hit per subfolder with its total as size.
+    pub sizes_of: Vec<u16>,
 }
 
 /// The non-name part of `fx_core::search_filter::Filters`.
@@ -193,6 +197,16 @@ fn read_u64(r: &mut impl Read) -> io::Result<u64> {
 }
 
 impl Request {
+    /// The subfolder totals of `folder` (absolute), instead of a search.
+    #[cfg(windows)]
+    pub fn folder_sizes(folder: &std::path::Path) -> Self {
+        use std::os::windows::ffi::OsStrExt;
+        Self {
+            sizes_of: folder.as_os_str().encode_wide().collect(),
+            ..Self::default()
+        }
+    }
+
     pub fn write_to(&self, w: &mut impl Write) -> io::Result<()> {
         let query = self.query.as_bytes();
         if query.len() > MAX_QUERY {
@@ -204,6 +218,13 @@ impl Request {
         buf.extend_from_slice(&(query.len() as u32).to_le_bytes());
         buf.extend_from_slice(query);
         self.filter.write(&mut buf)?;
+        if self.sizes_of.len() > MAX_PATH_UNITS as usize {
+            return Err(invalid("folder path too long"));
+        }
+        buf.extend_from_slice(&(self.sizes_of.len() as u32).to_le_bytes());
+        for u in &self.sizes_of {
+            buf.extend_from_slice(&u.to_le_bytes());
+        }
         w.write_all(&buf)?;
         w.flush()
     }
@@ -225,10 +246,21 @@ impl Request {
         r.read_exact(&mut query)?;
         let query = String::from_utf8(query).map_err(|_| invalid("query is not UTF-8"))?;
         let filter = SearchFilter::read(r)?;
+        let units = read_u32(r)?;
+        if units > MAX_PATH_UNITS {
+            return Err(invalid("folder path too long"));
+        }
+        let mut sizes_of = Vec::with_capacity(units as usize);
+        for _ in 0..units {
+            let mut u = [0u8; 2];
+            r.read_exact(&mut u)?;
+            sizes_of.push(u16::from_le_bytes(u));
+        }
         Ok(Self {
             query,
             limit,
             filter,
+            sizes_of,
         })
     }
 }
@@ -344,6 +376,7 @@ mod tests {
                 modified_min: Some(1_795_000_000),
                 modified_max: Some(-5),
             },
+            sizes_of: r"C:\Users".encode_utf16().collect(),
         };
         let mut buf = Vec::new();
         req.write_to(&mut buf).unwrap();
@@ -391,6 +424,7 @@ mod tests {
         buf.extend_from_slice(&1u32.to_le_bytes());
         buf.push(b'a');
         SearchFilter::default().write(&mut buf).unwrap();
+        buf.extend_from_slice(&0u32.to_le_bytes());
         assert_eq!(
             Request::read_from(&mut buf.as_slice()).unwrap().limit,
             MAX_HITS

@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use fx_core::natural::fold_into;
 
@@ -217,6 +217,73 @@ impl Index {
         self.modified[slot as usize]
     }
 
+    /// Totals of the subfolders of `dir` (a path relative to the volume
+    /// root; empty for the root itself), for the Size column (T2.7): each
+    /// live subfolder's slot with the sum of every file below it. `None` if
+    /// `dir` is not in the index. One pass over all files, walking each one's
+    /// parents until a subfolder of `dir` (or the root) is met.
+    pub fn folder_totals(&self, dir: &Path) -> Option<Vec<(u32, u64)>> {
+        // Find `dir` component by component (case-insensitive, like NTFS).
+        let mut current = self.root;
+        for part in dir.components() {
+            let name = part.as_os_str().to_string_lossy();
+            let found = (0..self.ids.len() as u32).find(|&s| {
+                self.is_live(s)
+                    && self.is_dir(s)
+                    && FileId::from(self.parents[s as usize]) == current
+                    && self.name(s).eq_ignore_ascii_case(&name)
+            });
+            let found = found.or_else(|| {
+                let folded = fx_core::natural::fold(&name);
+                (0..self.ids.len() as u32).find(|&s| {
+                    self.is_live(s)
+                        && self.is_dir(s)
+                        && FileId::from(self.parents[s as usize]) == current
+                        && self.folded(s) == folded
+                })
+            })?;
+            current = self.id(found);
+        }
+        let children: HashMap<FileId, usize> = (0..self.ids.len() as u32)
+            .filter(|&s| {
+                self.is_live(s)
+                    && self.is_dir(s)
+                    && FileId::from(self.parents[s as usize]) == current
+            })
+            .enumerate()
+            .map(|(k, s)| (self.id(s), k))
+            .collect();
+        let mut totals: Vec<(u32, u64)> = children
+            .keys()
+            .filter_map(|&id| self.slot(id))
+            .map(|s| (s, 0))
+            .collect();
+        totals.sort_by_key(|&(s, _)| children[&self.id(s)]);
+        if totals.is_empty() {
+            return Some(totals);
+        }
+        for s in 0..self.ids.len() as u32 {
+            if !self.is_live(s) || self.is_dir(s) || self.sizes[s as usize] == 0 {
+                continue;
+            }
+            let mut parent = FileId::from(self.parents[s as usize]);
+            for _ in 0..MAX_DEPTH {
+                if parent == current || parent == self.root {
+                    break;
+                }
+                if let Some(&k) = children.get(&parent) {
+                    totals[k].1 += self.sizes[s as usize];
+                    break;
+                }
+                match self.slot(parent) {
+                    Some(p) => parent = FileId::from(self.parents[p as usize]),
+                    None => break,
+                }
+            }
+        }
+        Some(totals)
+    }
+
     /// Path of `slot` relative to the volume root, rebuilt from the parents.
     /// `None` if a parent is missing (orphan) or the chain is too deep.
     pub fn path(&self, slot: u32) -> Option<PathBuf> {
@@ -357,6 +424,110 @@ mod tests {
             is_dir,
             size: id * 10,
             modified: 1,
+        }
+    }
+
+    #[test]
+    fn folder_totals_sum_each_subfolder() {
+        let mut index = Index::new(ROOT);
+        for r in [
+            rec(30, ROOT, "Users", true),
+            rec(31, 30, "ana", true),
+            rec(32, 31, "a.bin", false), // 320
+            rec(33, 31, "Docs", true),
+            rec(34, 33, "b.bin", false), // 340
+            rec(35, 30, "bruno", true),
+            rec(36, 35, "c.bin", false), // 360
+            rec(37, 30, "vazia", true),
+            rec(38, 30, "solto.txt", false), // directly in Users: in no subfolder
+            rec(39, ROOT, "Windows", true),
+            rec(40, 39, "w.bin", false),
+        ] {
+            index.insert(&r).unwrap();
+        }
+        let named = |index: &Index, v: Vec<(u32, u64)>| {
+            let mut v: Vec<(String, u64)> = v
+                .into_iter()
+                .map(|(s, b)| (index.name(s).to_owned(), b))
+                .collect();
+            v.sort();
+            v
+        };
+        let users = named(&index, index.folder_totals(Path::new("users")).unwrap());
+        assert_eq!(
+            users,
+            [
+                ("ana".into(), 660),
+                ("bruno".into(), 360),
+                ("vazia".into(), 0)
+            ],
+            "nested files count, files directly in Users do not, case-insensitive"
+        );
+        let root = named(&index, index.folder_totals(Path::new("")).unwrap());
+        assert_eq!(
+            root,
+            [("Users".into(), 660 + 360 + 380), ("Windows".into(), 400)]
+        );
+        assert!(
+            index
+                .folder_totals(Path::new(
+                    r"Users
+inguém"
+                ))
+                .is_none()
+        );
+        index.remove(36);
+        let after = named(&index, index.folder_totals(Path::new("Users")).unwrap());
+        assert_eq!(
+            after[1],
+            ("bruno".into(), 0),
+            "deleted files leave the total"
+        );
+    }
+
+    /// Timing on a million entries (release: `-- --ignored totals_timing`).
+    #[test]
+    #[ignore]
+    fn totals_timing() {
+        let mut index = Index::new(ROOT);
+        let mut id = 100u64;
+        // 10 top folders × 10 × 10 = 1000 leaf folders with 1000 files each.
+        for a in 0..10u64 {
+            let ta = id;
+            index
+                .insert(&rec(ta, ROOT, &format!("top {a}"), true))
+                .unwrap();
+            id += 1;
+            for b in 0..10u64 {
+                let tb = id;
+                index
+                    .insert(&rec(tb, ta, &format!("mid {b}"), true))
+                    .unwrap();
+                id += 1;
+                for c in 0..10u64 {
+                    let tc = id;
+                    index
+                        .insert(&rec(tc, tb, &format!("leaf {c}"), true))
+                        .unwrap();
+                    id += 1;
+                    for f in 0..1000u64 {
+                        index
+                            .insert(&rec(id, tc, &format!("f{f}.bin"), false))
+                            .unwrap();
+                        id += 1;
+                    }
+                }
+            }
+        }
+        for dir in ["", r"top 3", r"top 3\mid 4"] {
+            let t = std::time::Instant::now();
+            let totals = index.folder_totals(Path::new(dir)).unwrap();
+            println!(
+                "{} entries, totals of {dir:?}: {} folders in {:.1} ms",
+                index.len(),
+                totals.len(),
+                t.elapsed().as_secs_f64() * 1000.0
+            );
         }
     }
 

@@ -308,10 +308,10 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **`bench/drive.ps1`:** digita qualquer caractere do layout atual (`VkKeyScanW`), inclusive ":" e ">" no ABNT2.
 
 ## D-042 — Tamanho das pastas (T2.7)
-- **Data:** 2026-11-22 · **Status:** aceita (caminho pelo serviço pendente)
+- **Data:** 2026-11-22 · **Status:** aceita
 - **Cálculo:** quando a pasta termina de carregar, uma thread de fundo (`fx-dir-sizes`) soma cada subpasta com `fx_fs::folder_size` (mesma enumeração da lista, sem seguir junctions e links, como a busca), na ordem em que aparecem na tela. Os totais chegam em lotes; enquanto não chegam, a coluna mostra "…". Sair da pasta ou recarregá-la cancela (flag atômica, a soma para entre pastas). O total é a soma dos tamanhos dos arquivos, o mesmo "Tamanho" das Propriedades do Windows (não o "tamanho em disco").
 - **Cache da sessão:** os totais ficam guardados por caminho enquanto o fx estiver aberto: voltar a uma pasta mostra na hora, sem recontar. Não é invalidado por mudanças dentro das subpastas (o observador só vê a pasta atual); um total pode ficar desatualizado até reabrir o fx.
 - **Ordenação:** `FileList::set_size` grava o total; com a coluna Tamanho ativa, a lista é reordenada (em segundo plano) quando todos chegam. As pastas continuam antes dos arquivos.
 - **Custo:** pastas enormes (`C:\Windows`) levam segundos para somar, em segundo plano, sem afetar a tecla (P4 medido com p95 ≤ 3,5 ms).
-- **Pendente:** com o `fx-indexd` instalado, os totais podem vir do índice (todos os tamanhos já estão nele), mas o protocolo precisa de um pedido novo para achar a pasta pelo caminho e somar seus descendentes. Fica para quando o serviço for o caminho padrão.
+- **Pelo serviço:** o pedido do protocolo passou a `FXQ3`, com o campo `sizes_of` (uma pasta absoluta): em vez de buscar, o `fx-indexd` devolve uma entrada por subpasta com o total. `Index::folder_totals` acha a pasta componente a componente (sem diferenciar maiúsculas) e soma numa passada sobre todos os arquivos, subindo pelos pais de cada um até encontrar uma subpasta: **~32 ms com 1 milhão de itens**, em qualquer profundidade (release). As pastas dentro do perfil de outros usuários ficam de fora. No app, a thread pergunta ao serviço primeiro; sem ele, o pipe falha na hora e entra a varredura. O que o serviço não conhece (outro volume, rede) também é varrido. Os totais do serviço estão sempre atuais (USN) e não usam o cache.
 

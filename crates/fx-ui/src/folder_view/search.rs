@@ -881,6 +881,7 @@ fn service_search(filters: &Filters, tx: &std::sync::mpsc::Sender<Vec<Found>>) -
         query: filters.text.trim().to_owned(),
         limit: SERVICE_LIMIT,
         filter: SearchFilter::from_filters(filters),
+        sizes_of: Vec::new(),
     };
     match fx_index::pipe::query(&request, 2000) {
         Ok(r) if r.status == Status::Indexing => {

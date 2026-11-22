@@ -77,7 +77,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 - P5: resultado ≤ 50 ms p95 com o índice do C:; P4 ≤ 16 ms digitando; teste dos filtros.
 
 ## T2.7 — Tamanho das pastas
-- [ ] Concluída em: ____ · Resumo: implementada em 2026-11-22 (D-042): coluna Tamanho com o total de cada subpasta, calculado em segundo plano na ordem da tela (`fx_fs::folder_size`), "…" enquanto calcula, cancelado ao sair, guardado por caminho na sessão; a ordenação por tamanho inclui as pastas. Totais iguais aos do PowerShell nas fixtures (121.290, 21.064 e 20.990 KB) e teste contra varredura independente; P4 sem regressão (p95 ≤ 3,5 ms). **Falta:** o caminho rápido pelo `fx-indexd` (pedido novo no protocolo para achar a pasta pelo caminho no índice).
+- [x] Concluída em: 2026-11-22 · Resumo: coluna Tamanho com o total de cada subpasta (D-042): pelo `fx-indexd` quando ele roda (todos de uma vez e sempre atuais; `Index::folder_totals`, **~32 ms com 1 milhão de itens**), senão calculado em segundo plano na ordem da tela, com "…", cancelado ao sair e guardado na sessão; a ordenação por tamanho inclui as pastas. Totais iguais aos do PowerShell nas fixtures (121.290, 21.064 e 20.990 KB), testes contra varredura independente e no serviço (perfis de outros usuários ficam de fora); P4 sem regressão (p95 ≤ 3,5 ms).
 
 **Fazer**
 - Coluna Tamanho com o total de cada pasta vindo do índice (sem o serviço: cálculo sob demanda em segundo plano, cancelável).

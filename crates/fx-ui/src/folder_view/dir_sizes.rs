@@ -1,8 +1,10 @@
 //! Folder sizes in the Size column (task T2.7): once a folder is listed, a
-//! background thread sums each subfolder (`fx_fs::folder_size`), in display
-//! order, and the totals fill in as they arrive. Leaving the folder cancels
-//! it. Totals are kept for the session (by path), so coming back is instant;
-//! a folder being summed shows "…".
+//! background thread asks the `fx-indexd` service for every subfolder total
+//! at once (live, from its index). Without the service (or for folders it
+//! does not know) it sums each subfolder itself (`fx_fs::folder_size`), in
+//! display order, and the totals fill in as they arrive. Leaving the folder
+//! cancels it. Self-computed totals are kept for the session (by path), so
+//! coming back is instant; a folder being summed shows "…".
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -51,28 +53,28 @@ impl FolderView {
     /// The folder finished loading: sum its subfolders in the background.
     pub(super) fn start_dir_sizes(&mut self, cx: &mut Context<Self>) {
         self.stop_dir_sizes();
+        let folder = self.path.clone();
         let dirs: Vec<(u32, PathBuf)> = rows_of(&self.filtered, &self.list)
             .iter()
             .copied()
             .filter(|&i| self.list.attributes(i).is_dir())
             .map(|i| (i, self.path.join(self.list.os_name(i))))
             .collect();
-        let mut todo = Vec::new();
+        if dirs.is_empty() {
+            return;
+        }
+        let mut uncached = Vec::new();
         {
             let known = cache().lock().unwrap_or_else(PoisonError::into_inner);
-            for (i, path) in dirs {
-                match known.get(&path) {
+            for (i, path) in &dirs {
+                match known.get(path) {
                     Some(&bytes) => {
-                        Arc::make_mut(&mut self.list).set_size(i, bytes);
-                        self.dir_sizes.done.insert(i);
+                        Arc::make_mut(&mut self.list).set_size(*i, bytes);
+                        self.dir_sizes.done.insert(*i);
                     }
-                    None => todo.push((i, path)),
+                    None => uncached.push((*i, path.clone())),
                 }
             }
-        }
-        if todo.is_empty() {
-            self.resort_if_by_size(cx);
-            return;
         }
         self.dir_sizes.running = true;
         let cancel = self.dir_sizes.cancel.clone();
@@ -81,6 +83,24 @@ impl FolderView {
         let spawned = std::thread::Builder::new()
             .name("fx-dir-sizes".into())
             .spawn(move || {
+                // The service knows every total at once (and always current).
+                let todo = match service_totals(&folder) {
+                    Some(totals) => {
+                        let mut rest = Vec::new();
+                        for (i, path) in dirs {
+                            match totals.get(&path) {
+                                Some(&bytes) => {
+                                    if tx.send((i, path, bytes)).is_err() {
+                                        return;
+                                    }
+                                }
+                                None => rest.push((i, path)),
+                            }
+                        }
+                        rest
+                    }
+                    None => uncached,
+                };
                 for (i, path) in todo {
                     let total = fx_fs::folder_size(&path, &cancel);
                     if total.cancelled || tx.send((i, path, total.bytes)).is_err() {
@@ -140,4 +160,15 @@ impl FolderView {
             self.resort(cx);
         }
     }
+}
+
+/// Subfolder totals of `folder` from `fx-indexd`, by path; `None` when the
+/// service is not running (the pipe is missing: fails at once) or not ready.
+fn service_totals(folder: &std::path::Path) -> Option<HashMap<PathBuf, u64>> {
+    use fx_index::protocol::{Request, Status};
+    let r = fx_index::pipe::query(&Request::folder_sizes(folder), 200).ok()?;
+    if r.status != Status::Ready {
+        return None;
+    }
+    Some(r.hits.iter().map(|h| (h.path_buf(), h.size)).collect())
 }

@@ -118,6 +118,7 @@ fn query(text: &str) -> std::io::Result<()> {
             query: filters.text.clone(),
             limit: 20,
             filter: fx_index::protocol::SearchFilter::from_filters(&filters),
+            sizes_of: Vec::new(),
         },
         2000,
     )?;
