@@ -9,6 +9,7 @@
 //! Sidebar (task T1.5, `sidebar.rs`): quick access and drives, left of the
 //! active tab; ☰ or Ctrl+B collapses it.
 
+mod dual;
 mod history;
 mod palette;
 mod queue;
@@ -71,6 +72,8 @@ pub struct TabsView {
     history_open: bool,
     /// Command palette (Ctrl+K, Ctrl+Shift+P; T1.24).
     palette: Option<palette::Palette>,
+    /// Second panes (F3, T3.2), by the tab's own view.
+    seconds: std::collections::HashMap<gpui::EntityId, dual::Second>,
 }
 
 /// What is carried while a tab is dragged (also its drag preview).
@@ -147,6 +150,7 @@ impl TabsView {
             shown_active: None,
             history_open: false,
             palette: None,
+            seconds: std::collections::HashMap::new(),
         };
         view.focus_active(window, cx);
         view
@@ -253,7 +257,7 @@ impl TabsView {
                 let alive = this.update(cx, |view, cx| {
                     let wanted = matches!(request.action, Action::Focus | Action::Click);
                     if let (true, Some(entry)) = (wanted, row_entry(request.target_node)) {
-                        let tab = view.tabs.active().clone();
+                        let tab = view.current();
                         tab.update(cx, |tab, cx| {
                             tab.a11y_select(entry);
                             cx.notify();
@@ -270,7 +274,7 @@ impl TabsView {
 
     /// Keys go to the active tab; the window title follows it.
     fn focus_active(&self, window: &mut Window, cx: &mut Context<Self>) {
-        let active = self.tabs.active().clone();
+        let active = self.current();
         let tab = active.read(cx);
         window.set_window_title(&window_title(tab.path()));
         tab.focus_handle().focus(window);
@@ -280,7 +284,7 @@ impl TabsView {
     }
 
     fn open_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let path = self.tabs.active().read(cx).path().to_path_buf();
+        let path = self.current().read(cx).path().to_path_buf();
         let opened = self.trace.as_ref().map(|_| Instant::now());
         let tab = Self::new_tab(
             path,
@@ -297,9 +301,10 @@ impl TabsView {
     }
 
     fn close_tab(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
-        if self.tabs.close(i).is_none() {
+        let Some(closed) = self.tabs.close(i) else {
             return;
-        }
+        };
+        self.seconds.remove(&closed.entity_id());
         if self.tabs.is_empty() {
             self.write_trace();
             window.remove_window();
@@ -375,6 +380,22 @@ impl TabsView {
         let m = ks.modifiers;
         if self.history_open && ks.key == "escape" {
             self.history_open = false;
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
+        let plain = !m.control && !m.alt && !m.shift && !m.platform;
+        let handled = match ks.key.as_str() {
+            "f3" if plain => {
+                self.toggle_dual(window, cx);
+                true
+            }
+            "tab" if plain => self.switch_pane(window, cx),
+            "f5" if plain => self.transfer(true, window, cx),
+            "f6" if plain => self.transfer(false, window, cx),
+            _ => false,
+        };
+        if handled {
             cx.stop_propagation();
             cx.notify();
             return;
@@ -588,6 +609,7 @@ impl Render for TabsView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = self.look.theme;
         let wide = f32::from(window.viewport_size().width) >= SIDEBAR_MIN_WINDOW;
+        self.sync_pane_focus(window, cx);
         let active = self.tabs.active_index();
         if self.shown_active != Some(active) {
             self.shown_active = Some(active);
@@ -615,7 +637,7 @@ impl Render for TabsView {
                     .when(self.sidebar_open && wide, |d| {
                         d.child(self.render_sidebar(cx))
                     })
-                    .child(div().flex_1().min_w_0().child(self.tabs.active().clone())),
+                    .child(self.render_panes(cx)),
             )
             .children(self.render_queue(cx))
             .children(self.render_history(cx))

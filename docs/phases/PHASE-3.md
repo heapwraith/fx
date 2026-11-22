@@ -22,7 +22,7 @@
 - Testes com uma raiz temporária (`HKCU\Software\fx-test-<pid>`): ativar grava o esperado, reverter deixa a raiz como estava (inclusive valores pré-existentes); nenhum teste toca as chaves reais.
 
 ## T3.2 — Painel duplo (F3)
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: F3 divide a aba em dois painéis (cada um com pasta, histórico e seleção próprios); Tab alterna (sem roubar o Tab da barra de caminho, da busca e do renomear em lote); F5/F6 copiam/movem a seleção para a pasta do outro painel pela fila (conflitos, desfazer); clique ativa o painel (faixa teal); paleta e lateral agem no painel ativo (D-047). Conferido na janela: F5 copiou `pequena.jpg` para "Fotos" no outro painel. Ainda não é salvo entre sessões.
 
 **Fazer**
 - F3 divide a aba em dois painéis lado a lado, cada um com sua pasta, histórico e seleção; Tab alterna o foco; F5/F6 copiam/movem a seleção para a pasta do outro painel (mesmo motor e conflitos). O estado do painel duplo é salvo por aba.

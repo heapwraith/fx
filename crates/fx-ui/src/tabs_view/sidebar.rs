@@ -44,7 +44,7 @@ fn drive_icon(kind: DriveKind) -> &'static str {
 impl TabsView {
     /// Opens `path` in the active tab.
     fn open_in_active(&mut self, path: PathBuf, window: &mut gpui::Window, cx: &mut Context<Self>) {
-        let tab = self.tabs.active().clone();
+        let tab = self.current();
         tab.update(cx, |view, cx| view.open(path, window, cx));
         self.focus_active(window, cx);
         cx.notify();
@@ -54,7 +54,7 @@ impl TabsView {
         let t = self.look.theme;
         let icon_font = self.look.icon_font;
         let places = self.places.read(cx);
-        let current = self.tabs.active().read(cx).path().to_path_buf();
+        let current = self.current().read(cx).path().to_path_buf();
         let pinned_here = places.pinned.contains(&current);
 
         let item = |id: SharedString, icon: &'static str, label: SharedString, path: &Path| {
@@ -123,7 +123,7 @@ impl TabsView {
                     .hover(|s| s.bg(rgba(t.hover)))
                     .child(if pinned_here { ICON_UNPIN } else { ICON_PIN })
                     .on_click(cx.listener(move |view, _: &ClickEvent, _, cx| {
-                        let path = view.tabs.active().read(cx).path().to_path_buf();
+                        let path = view.current().read(cx).path().to_path_buf();
                         view.places.update(cx, |places, cx| {
                             if !places.pinned.unpin(&path) {
                                 places.pinned.pin(path);

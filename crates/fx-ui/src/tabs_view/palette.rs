@@ -101,7 +101,7 @@ impl TabsView {
         let mut items: Vec<Item> = Vec::new();
         // Recent folders: other tabs first, then every tab's history, newest
         // first; no duplicates, not the current folder.
-        let current = self.tabs.active().read(cx).path().to_path_buf();
+        let current = self.current().read(cx).path().to_path_buf();
         let mut recent: Vec<PathBuf> = Vec::new();
         let mut push = |p: PathBuf| {
             if p != current && !recent.contains(&p) && recent.len() < RECENT_MAX {
@@ -213,7 +213,7 @@ impl TabsView {
     }
 
     fn run_item(&mut self, item: Item, window: &mut Window, cx: &mut Context<Self>) {
-        let tab = self.tabs.active().clone();
+        let tab = self.current();
         match item {
             Item::Folder { path, .. } => {
                 tab.update(cx, |view, cx| view.open(path, window, cx));

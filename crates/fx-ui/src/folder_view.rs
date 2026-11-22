@@ -1072,6 +1072,22 @@ impl FolderView {
         .detach();
     }
 
+    /// The focused view is using Tab itself (path field, search, batch
+    /// rename): the dual pane must not take it (T3.2).
+    pub fn uses_tab(&self) -> bool {
+        self.edit.is_some() || self.search.is_some() || self.batch_rename.is_some()
+    }
+
+    /// The items an operation would act on (the selection, or the cursor).
+    pub fn selected_paths(&self) -> Vec<PathBuf> {
+        self.targets()
+    }
+
+    /// Queues `job` like a key of this view would (queue, conflicts, undo).
+    pub fn queue_job(&mut self, job: fx_ops::Job, window: &mut Window, cx: &mut Context<Self>) {
+        let _ = self.submit_job(job, window, cx);
+    }
+
     /// A message in the status until the next key (palette commands).
     pub fn show_notice(&mut self, text: String, cx: &mut Context<Self>) {
         self.notice = Some(text);

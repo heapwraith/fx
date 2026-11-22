@@ -357,3 +357,10 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Sem argumento:** o fx agora abre a pasta do usuário (`USERPROFILE`) quando não recebe pasta (Win+E, Menu Iniciar); antes abria a pasta de trabalho, que nesses casos é a System32. Argumento vazio conta como ausente.
 - **No app:** paleta → "Tornar o fx o gerenciador de arquivos padrão (pastas e Win+E)" e "Voltar ao Explorador como gerenciador padrão", numa thread de lançamento, com aviso do resultado.
 
+## D-047 — Painel duplo (T3.2)
+- **Data:** 2026-11-22 · **Status:** aceita
+- **Modelo:** o segundo painel é outro `FolderView` guardado pelo `TabsView` (`tabs_view/dual.rs`), indexado pela vista principal da aba, sem mudar a estrutura das abas. `TabsView::current()` devolve o painel com foco; a paleta, a lateral, a acessibilidade e "nova aba" passaram a usá-lo.
+- **Teclas:** F3 abre/fecha (abre na mesma pasta, já com o foco); Tab troca de painel, a menos que o painel focado use o Tab (campo de caminho, busca, renomear em lote: `FolderView::uses_tab`); F5 copia e F6 move a seleção (ou o item sob o cursor) para a pasta do outro painel, com `Job::copy`/`Job::move_to` pela fila do painel de origem (conflitos, histórico, Ctrl+Z). Clicar num painel o ativa (o foco do GPUI é lido a cada render). Uma faixa de 2 px na cor de destaque marca o painel ativo.
+- **Fechar a aba** descarta o segundo painel.
+- **Pendente:** salvar o painel duplo na sessão (por aba); arrastar entre os painéis já funciona pelo arrastar e soltar normal.
+
