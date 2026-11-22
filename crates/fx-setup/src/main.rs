@@ -89,7 +89,7 @@ fn main() -> ExitCode {
             };
         }
         if flag("--quiet") {
-            return match transaction::uninstall(&target, &[]) {
+            return match transaction::uninstall(&target, &[], &mut |_| {}) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(_) => ExitCode::FAILURE,
             };
@@ -169,6 +169,8 @@ struct Setup {
     /// Progress shown (eases towards `goal`), 0..1.
     shown: f32,
     goal: f32,
+    /// Files of the current install or uninstall (from the real progress).
+    files: usize,
     step: String,
     theme: Theme,
     mica: bool,
@@ -225,6 +227,7 @@ fn run_ui(screen: Screen, package: Option<Arc<Package>>, target: Target) {
                     desktop_shortcut: false,
                     shown: 0.0,
                     goal: 0.0,
+                    files: 0,
                     step: String::new(),
                     theme,
                     mica,
@@ -307,11 +310,15 @@ impl Setup {
             } else {
                 Vec::new()
             };
-            let _ = tx.send(Ok(Step::Copying(1, 2)));
-            let _ = tx.send(match transaction::uninstall(&target, &data) {
-                Ok(()) => Ok(Step::Done),
-                Err(e) => Err(e.to_string()),
-            });
+            let progress_tx = tx.clone();
+            let _ = tx.send(
+                match transaction::uninstall(&target, &data, &mut |s| {
+                    let _ = progress_tx.send(Ok(s));
+                }) {
+                    Ok(()) => Ok(Step::Done),
+                    Err(e) => Err(e.to_string()),
+                },
+            );
         });
         self.begin(true, rx, cx);
     }
@@ -325,7 +332,7 @@ impl Setup {
     ) {
         self.screen = Screen::Working { uninstall };
         self.shown = 0.0;
-        self.goal = 0.02;
+        self.goal = 0.0;
         self.step = if uninstall {
             tr!("Removendo o fx…", "Removing fx…")
         } else {
@@ -376,9 +383,18 @@ impl Setup {
     /// Returns whether the work is over.
     fn advance(&mut self, step: Step, uninstall: bool) -> bool {
         match step {
+            // Fractions of real work: each file is one unit, plus one for the
+            // shortcuts and one for the registry entry (uninstall: the entry).
             Step::Copying(done, total) => {
-                self.goal = 0.05 + 0.75 * done as f32 / total.max(1) as f32;
-                if !uninstall {
+                self.files = total;
+                let units = total + if uninstall { 1 } else { 2 };
+                self.goal = done as f32 / units.max(1) as f32;
+                if uninstall {
+                    self.step = trf!(
+                        "Removendo arquivos ({done} de {total})…",
+                        "Removing files ({done} of {total})…"
+                    );
+                } else {
                     self.step = trf!(
                         "Copiando arquivos ({done} de {total})…",
                         "Copying files ({done} of {total})…"
@@ -387,16 +403,30 @@ impl Setup {
                 false
             }
             Step::Shortcuts => {
-                self.goal = 0.88;
+                // Every file is in place.
+                self.goal = self.files as f32 / (self.files + 2).max(1) as f32;
                 self.step = tr!("Criando atalhos…", "Creating shortcuts…").to_owned();
                 false
             }
             Step::Registering => {
-                self.goal = 0.95;
-                self.step = tr!(
-                    "Registrando nos Aplicativos do Windows…",
-                    "Registering in Windows Apps…"
-                )
+                let units = self.files + if uninstall { 1 } else { 2 };
+                let done = if uninstall {
+                    self.files
+                } else {
+                    self.files + 1
+                };
+                self.goal = done as f32 / units.max(1) as f32;
+                self.step = if uninstall {
+                    tr!(
+                        "Removendo dos Aplicativos do Windows…",
+                        "Removing from Windows Apps…"
+                    )
+                } else {
+                    tr!(
+                        "Registrando nos Aplicativos do Windows…",
+                        "Registering in Windows Apps…"
+                    )
+                }
                 .to_owned();
                 false
             }
@@ -440,11 +470,9 @@ fn failure_text(e: &str, uninstall: bool) -> String {
 impl Render for Setup {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = self.theme;
-        // Ease the bar towards its goal (≈ 120 ms to settle).
-        if self.shown < self.goal {
-            self.shown = (self.shown + (self.goal - self.shown) * 0.25 + 0.002).min(self.goal);
-            window.request_animation_frame();
-        }
+        // The bar shows exactly the work done (no animation between steps).
+        self.shown = self.goal;
+        let _ = window;
         let new = transaction::display_version(VERSION);
         let slogan = tr!(
             "Pastas abrem na hora. Arquivos aparecem enquanto você digita.",

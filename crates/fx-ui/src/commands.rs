@@ -39,6 +39,8 @@ pub enum Action {
     Update,
     /// Turns the daily update check on or off.
     UpdateChecks,
+    /// Asks (or not) before sending items to the Recycle Bin.
+    ConfirmRecycle,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -166,29 +168,29 @@ pub const COMMANDS: &[Command] = &[
     direct(("Sobre o fx", "About fx"), Action::About),
     direct(
         (
-            "Ativar a busca no disco inteiro (serviço, pede administrador)",
-            "Turn on whole-disk search (service, asks for administrator)",
+            "Ativar a busca no disco inteiro",
+            "Turn on whole-disk search",
         ),
         Action::IndexService(true),
     ),
     direct(
         (
-            "Desativar a busca no disco inteiro (remove o serviço)",
-            "Turn off whole-disk search (removes the service)",
+            "Desativar a busca no disco inteiro",
+            "Turn off whole-disk search",
         ),
         Action::IndexService(false),
     ),
     direct(
         (
-            "Tornar o fx o gerenciador de arquivos padrão (pastas e Win+E)",
-            "Make fx the default file manager (folders and Win+E)",
+            "Tornar o fx o gerenciador padrão",
+            "Make fx the default file manager",
         ),
         Action::DefaultManager(true),
     ),
     direct(
         (
-            "Voltar ao Explorador como gerenciador padrão",
-            "Back to Explorer as the default file manager",
+            "Voltar ao Explorador como padrão",
+            "Make Explorer the default again",
         ),
         Action::DefaultManager(false),
     ),
@@ -205,10 +207,7 @@ pub const COMMANDS: &[Command] = &[
         Action::CloudPin(false),
     ),
     direct(
-        (
-            "Relatar a última falha (abre uma issue no navegador)",
-            "Report the last crash (opens an issue in the browser)",
-        ),
+        ("Relatar a última falha", "Report the last crash"),
         Action::ReportCrash,
     ),
     direct(
@@ -218,21 +217,22 @@ pub const COMMANDS: &[Command] = &[
         ),
         Action::CrashReports,
     ),
+    direct(("Atualizar o fx", "Update fx"), Action::Update),
     direct(
         (
-            "Atualizar o fx (procura a versão mais nova)",
-            "Update fx (looks for the newest version)",
-        ),
-        Action::Update,
-    ),
-    direct(
-        (
-            "Verificação diária de atualizações: ligar ou desligar",
-            "Daily update check: turn on or off",
+            "Atualizações automáticas: ligar ou desligar",
+            "Automatic updates: turn on or off",
         ),
         Action::UpdateChecks,
     ),
     window(("Como usar o fx", "How to use fx"), "f1"),
+    direct(
+        (
+            "Confirmar antes de enviar para a Lixeira",
+            "Confirm before sending to the Recycle Bin",
+        ),
+        Action::ConfirmRecycle,
+    ),
 ];
 
 /// "ctrl-shift-n" → "Ctrl+Shift+N", "alt-up" → "Alt+↑", "space" → "Espaço".

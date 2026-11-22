@@ -36,6 +36,8 @@ Seguir a pasta da aba (`cd`) quando ela muda, cmd além do PowerShell, rolar o h
 - Etiquetas na grade e nas colunas; editar nomes de etiquetas; filtro por etiqueta na paleta.
 - Busca por pasta entrando em subpastas de nuvem (distinguir placeholder de nuvem de link pela etiqueta de reparse).
 - Cores fixas que não passam pelo tema no alto contraste (terminal, etiquetas, realce de sintaxe).
+- Ícones do shell nos resultados da busca e na vista em colunas (hoje genéricos).
+- Espaço com um filtro digitado entra no filtro; abrir o Quick Look direto quando o filtro deixa um item selecionado.
 
 ## T5.6 — Robustez
 - [ ] Concluída em: ____ · Resumo:

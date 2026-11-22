@@ -261,7 +261,7 @@ impl FolderView {
             ),
             Ok(_) if changes == 0 => tr!(
                 "Nada muda ainda · {nome} é o nome atual, {n:3} numera · Esc cancela",
-                "Nothing changes yet · {nome} is the current name, {n:3} numbers · Esc cancels"
+                "Nothing changes yet · {name} is the current name, {n:3} numbers · Esc cancels"
             )
             .to_owned(),
             Ok(_) => trf!(
@@ -398,6 +398,7 @@ impl FolderView {
                     .top_0()
                     .left_0()
                     .size_full()
+                    .bg(crate::theme::rgba(crate::theme::scrim(&self.look.theme)))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|view, _, _, cx| {

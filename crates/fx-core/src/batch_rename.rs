@@ -58,7 +58,7 @@ impl Default for Rules {
             replace: String::new(),
             regex: false,
             case_sensitive: false,
-            template: "{nome}".into(),
+            template: crate::tr!("{nome}", "{name}").into(),
             start: 1,
             case: Case::Keep,
         }

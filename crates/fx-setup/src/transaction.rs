@@ -218,7 +218,7 @@ fn installed_names() -> Vec<&'static str> {
 /// Removes fx from `t`; with `data`, also these settings folders (each must
 /// be named `fx`). Fails, leaving things as they are as far as possible,
 /// if a program is still running.
-pub fn uninstall(t: &Target, data: &[PathBuf]) -> io::Result<()> {
+pub fn uninstall(t: &Target, data: &[PathBuf], progress: &mut dyn FnMut(Step)) -> io::Result<()> {
     // Refuse anything that does not look like an fx install folder.
     if t.dir.file_name().is_none_or(|n| n != "fx") || !t.dir.join("fx.exe").exists() {
         return Err(io::Error::other("not an fx install folder"));
@@ -234,14 +234,21 @@ pub fn uninstall(t: &Target, data: &[PathBuf]) -> io::Result<()> {
         let _ = std::fs::rename(&probe, &exe);
         return Err(e);
     }
-    for name in installed_names() {
+    // Real progress: one step per installed file actually present.
+    let present: Vec<&str> = installed_names()
+        .into_iter()
+        .filter(|n| t.dir.join(n).exists())
+        .collect();
+    for (k, name) in present.iter().enumerate() {
         let _ = std::fs::remove_file(t.dir.join(name));
+        progress(Step::Copying(k + 1, present.len()));
     }
     clean_old(&t.dir);
     let _ = std::fs::remove_dir(&t.dir); // only if now empty
     for lnk in [&t.start_menu, &t.desktop].into_iter().flatten() {
         let _ = std::fs::remove_file(lnk);
     }
+    progress(Step::Registering);
     win::unregister_uninstall(&t.uninstall_key)?;
     for d in data {
         if d.file_name().is_some_and(|n| n == "fx") && d.is_dir() {
@@ -362,7 +369,7 @@ mod tests {
         std::fs::write(t.dir.join("meu.txt"), b"mine").unwrap();
         let data = root.path().join("data").join("fx");
         std::fs::create_dir_all(&data).unwrap();
-        uninstall(&t, std::slice::from_ref(&data)).unwrap();
+        uninstall(&t, std::slice::from_ref(&data), &mut |_| {}).unwrap();
         assert!(!t.exe().exists());
         assert!(t.dir.join("meu.txt").exists(), "unknown files are kept");
         assert!(!t.start_menu.as_ref().unwrap().exists());
@@ -403,7 +410,7 @@ mod tests {
         )
         .unwrap();
         let mut running = run_as_fx(&t);
-        let r = uninstall(&t, &[]);
+        let r = uninstall(&t, &[], &mut |_| {});
         let _ = running.kill();
         let _ = running.wait();
         assert!(r.is_err(), "running: refused");
@@ -412,8 +419,8 @@ mod tests {
         let mut other = t.clone();
         other.dir = root.path().join("Documentos");
         std::fs::create_dir_all(&other.dir).unwrap();
-        assert!(uninstall(&other, &[]).is_err());
-        uninstall(&t, &[]).unwrap();
+        assert!(uninstall(&other, &[], &mut |_| {}).is_err());
+        uninstall(&t, &[], &mut |_| {}).unwrap();
         cleanup_key("b");
         assert_eq!(display_version("0.3.0-beta+abc-dirty"), "0.3.0-beta");
     }

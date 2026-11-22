@@ -18,7 +18,7 @@ impl TabsView {
     /// The queue panel, or nothing when no copy or move runs.
     pub(super) fn render_queue(&self, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
         let ops = self.media.ops.read(cx);
-        if ops.active().is_empty() {
+        if ops.active().is_empty() && ops.recent().is_empty() {
             return None;
         }
         let t = self.look.theme;
@@ -33,9 +33,11 @@ impl TabsView {
             .border_t_1()
             .border_color(rgba(t.divider))
             .bg(rgba(t.layer));
-        for job in ops.active() {
+        for job in ops.active().iter().chain(ops.recent()) {
             let id = job.id;
             let paused = job.paused;
+            let finished = job.finished;
+            let status = progress_text(job);
             let fraction = if job.bytes == 0 {
                 0.0
             } else {
@@ -74,49 +76,49 @@ impl TabsView {
                                     .text_size(px(CAPTION_SIZE))
                                     .child(div().truncate().child(job.label.clone()))
                                     .child(
-                                        div().flex_none().text_color(rgba(t.text_secondary)).child(
-                                            trf!(
-                                                "{}{} de {}",
-                                                "{}{} of {}",
-                                                if paused {
-                                                    tr!("pausado · ", "paused · ")
-                                                } else {
-                                                    ""
-                                                },
-                                                size_short(job.done),
-                                                size_short(job.bytes)
-                                            ),
-                                        ),
+                                        div()
+                                            .flex_none()
+                                            .text_color(rgba(t.text_secondary))
+                                            .child(status),
                                     ),
                             )
                             .child(
-                                div().h(px(4.0)).rounded(px(2.0)).bg(rgba(t.divider)).child(
-                                    div()
-                                        .h_full()
-                                        .w(relative(fraction))
-                                        .rounded(px(2.0))
-                                        .bg(rgba(t.accent)),
-                                ),
+                                div()
+                                    .h(px(6.0))
+                                    .rounded(px(3.0))
+                                    // A track that shows in both themes.
+                                    .bg(rgba((t.text_secondary & 0xFFFF_FF00) | 0x33))
+                                    .child(
+                                        div()
+                                            .h_full()
+                                            .w(relative(fraction))
+                                            .rounded(px(3.0))
+                                            .bg(rgba(t.accent)),
+                                    ),
                             ),
                     )
-                    .child(
-                        button(
-                            format!("pause-{id}").into(),
-                            if paused { ICON_PLAY } else { ICON_PAUSE },
+                    .when(!finished, |d| {
+                        d.child(
+                            button(
+                                format!("pause-{id}").into(),
+                                if paused { ICON_PLAY } else { ICON_PAUSE },
+                            )
+                            .on_click(cx.listener(
+                                move |view, _: &ClickEvent, _, cx| {
+                                    view.media
+                                        .ops
+                                        .update(cx, |ops, cx| ops.set_paused(id, !paused, cx));
+                                },
+                            )),
                         )
-                        .on_click(cx.listener(
-                            move |view, _: &ClickEvent, _, cx| {
-                                view.media
-                                    .ops
-                                    .update(cx, |ops, cx| ops.set_paused(id, !paused, cx));
-                            },
-                        )),
-                    )
-                    .child(button(format!("cancel-{id}").into(), ICON_CLOSE).on_click(
-                        cx.listener(move |view, _: &ClickEvent, _, cx| {
-                            view.media.ops.update(cx, |ops, cx| ops.cancel(id, cx));
-                        }),
-                    )),
+                        .child(
+                            button(format!("cancel-{id}").into(), ICON_CLOSE).on_click(
+                                cx.listener(move |view, _: &ClickEvent, _, cx| {
+                                    view.media.ops.update(cx, |ops, cx| ops.cancel(id, cx));
+                                }),
+                            ),
+                        )
+                    }),
             );
         }
         Some(panel)
@@ -234,6 +236,15 @@ impl TabsView {
                         Resolution::KeepBoth,
                         true,
                     )),
+            )
+            .child(
+                div()
+                    .text_size(px(crate::theme::CAPTION_SIZE))
+                    .text_color(rgba(t.text_secondary))
+                    .child(tr!(
+                        "Enter mantém os dois · Esc pula · Espaço marca \"aplicar a todos\"",
+                        "Enter keeps both · Esc skips · Space checks \"apply to all\""
+                    )),
             );
         Some(
             deferred(crate::motion::enter(
@@ -296,6 +307,45 @@ fn compare(
         ),
         (tr!("Novo", "New"), line(incoming, newer == Some(true))),
     ]
+}
+
+/// "1,0 GB de 3,0 GB · 33% · 850 MB/s · 3 s restantes", or "Concluído".
+fn progress_text(job: &crate::ops::JobView) -> String {
+    if job.finished {
+        return trf!("Concluído · {}", "Done · {}", size_short(job.bytes));
+    }
+    let paused = if job.paused {
+        tr!("pausado · ", "paused · ")
+    } else {
+        ""
+    };
+    let percent = (job.done * 100).checked_div(job.bytes).unwrap_or(0);
+    let mut text = trf!(
+        "{paused}{} de {} · {percent}%",
+        "{paused}{} of {} · {percent}%",
+        size_short(job.done),
+        size_short(job.bytes)
+    );
+    let secs = job.started.elapsed().as_secs_f64();
+    if !job.paused && secs > 0.5 && job.done > 0 {
+        let speed = job.done as f64 / secs;
+        let left = (job.bytes.saturating_sub(job.done) as f64 / speed).ceil() as u64;
+        let speed = size_short(speed as u64);
+        text.push_str(&match left {
+            0..=59 => trf!(
+                " · {speed}/s · {left} s restantes",
+                " · {speed}/s · {left} s left"
+            ),
+            _ => {
+                let min = left.div_ceil(60);
+                trf!(
+                    " · {speed}/s · {min} min restantes",
+                    " · {speed}/s · {min} min left"
+                )
+            }
+        });
+    }
+    text
 }
 
 #[cfg(test)]

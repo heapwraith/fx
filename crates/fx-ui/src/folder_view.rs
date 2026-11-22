@@ -2091,7 +2091,10 @@ impl FolderView {
         let selected = match self.selection.len() {
             0 => String::new(),
             1 => tr!(" · 1 selecionado", " · 1 selected").to_owned(),
-            k => trf!(" · {k} selecionados", " · {k} selected"),
+            k => {
+                let k = fx_core::format::count(k);
+                trf!(" · {k} selecionados", " · {k} selected")
+            }
         };
         format!("{head}{selected}{tail}")
     }

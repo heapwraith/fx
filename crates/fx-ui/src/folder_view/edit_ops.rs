@@ -164,9 +164,45 @@ impl FolderView {
         match ks.key.as_str() {
             "delete" if plain => {
                 let items = self.targets();
-                if !items.is_empty() {
-                    self.submit_job(Job::recycle(items), window, cx);
+                if items.is_empty() {
+                    return true;
                 }
+                if !crate::prefs::confirm_recycle() {
+                    self.submit_job(Job::recycle(items), window, cx);
+                    return true;
+                }
+                let detail = match items.len() {
+                    1 => trf!(
+                        "\"{}\" vai para a Lixeira. Dá para desfazer com Ctrl+Z.",
+                        "\"{}\" goes to the Recycle Bin. Ctrl+Z undoes it.",
+                        items[0]
+                            .file_name()
+                            .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
+                    ),
+                    n => trf!(
+                        "{} itens vão para a Lixeira. Dá para desfazer com Ctrl+Z.",
+                        "{} items go to the Recycle Bin. Ctrl+Z undoes it.",
+                        count(n)
+                    ),
+                };
+                let answer = window.prompt(
+                    PromptLevel::Warning,
+                    tr!("Enviar para a Lixeira?", "Send to the Recycle Bin?"),
+                    Some(&detail),
+                    &[
+                        tr!("Enviar para a Lixeira", "Send to Recycle Bin"),
+                        tr!("Cancelar", "Cancel"),
+                    ],
+                    cx,
+                );
+                cx.spawn_in(window, async move |this, cx| {
+                    if answer.await == Ok(0) {
+                        let _ = this.update_in(cx, |view, window, cx| {
+                            view.submit_job(Job::recycle(items), window, cx);
+                        });
+                    }
+                })
+                .detach();
                 true
             }
             "delete" if m.shift && !m.control && !m.alt => {

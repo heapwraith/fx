@@ -36,7 +36,7 @@ Baixe a última versão em [Releases](../../releases):
 - **Instalador** (`fx-X.Y.Z-setup-x64.exe`, ou `-arm64.exe`): instala só para o seu usuário, sem pedir administrador, e coloca o fx no Menu Iniciar. Desinstala por Configurações › Aplicativos.
 - **Portátil** (`fx-X.Y.Z-windows-x64.zip`): descompacte e rode `fx.exe`.
 
-**Atualizações:** o fx procura uma versão nova uma vez por dia, baixa e confere em segundo plano, e aplica quando você fecha o programa. "Atualizar o fx" na paleta reinicia na hora; "Verificação diária de atualizações" desliga.
+**Atualizações:** o fx procura uma versão nova uma vez por dia, baixa e confere em segundo plano, e aplica quando você fecha o programa. "Atualizar o fx" na paleta reinicia na hora; "Atualizações automáticas: ligar ou desligar" desliga.
 
 Enquanto a assinatura digital não está ativa, o Windows pode avisar "editor desconhecido": clique em "Mais informações" e depois em "Executar assim mesmo".
 

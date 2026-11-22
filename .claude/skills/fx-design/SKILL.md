@@ -43,6 +43,7 @@ Nunca escrever cor, tamanho ou espaçamento solto no código: usar o token ou cr
 - **Sobreposição** (menu, paleta, busca, Quick Look): `deferred(...).with_priority`, borda `divider`, sombra `shadow_lg`, raio 8, fecha com Esc e com clique fora, e devolve o foco a quem tinha. A linha selecionada ocupa a **largura toda** (`w_full`).
 - **Texto que pode não caber:** `min_w_0()` + `truncate()` **e** largura vinda do layout (`flex_1`/`w(px)`), senão o GPUI não coloca reticências. Corta-se o menos importante: ponha o que importa no começo da string.
 - **Status:** "N itens · seleção · ocultos · lida em X ms". O "lida em" é assinatura do fx: mantenha.
+- **Nada simulado:** toda barra, porcentagem e texto de progresso vem de trabalho medido (bytes, arquivos, etapas feitas). Sem animação entre marcos falsos nem percentuais fixos.
 - **Estados vazios e erros:** uma frase que diz o que houve e o próximo passo ("Só há itens ocultos aqui. Ctrl+H mostra."). Português do Brasil, sem ponto de exclamação, sem culpar o usuário.
 - **Texto de interface:** verbo no infinitivo nos comandos ("Copiar caminho"), substantivo nos títulos, atalho à direita em `text_secondary`.
 

@@ -68,6 +68,11 @@ impl FolderView {
             loading: HashSet::new(),
             scroll: ScrollHandle::new(),
         });
+        // The current folder is the last column: keep it in view.
+        if let Some(c) = &self.miller {
+            c.scroll
+                .scroll_to_item(c.model.columns.len().saturating_sub(1));
+        }
         self.load_columns(cx);
         cx.notify();
     }
@@ -151,6 +156,9 @@ impl FolderView {
                 };
                 let e = &entries[next];
                 c.model.choose(k, &e.name, e.is_dir);
+                // A folder chosen opens a column: show it.
+                c.scroll
+                    .scroll_to_item(c.model.columns.len().saturating_sub(1));
                 self.load_columns(cx);
             }
             "right" => {
@@ -222,7 +230,16 @@ impl FolderView {
             .flex()
             .overflow_x_scroll()
             .track_scroll(&c.scroll);
-        for (k, col) in c.model.columns.iter().enumerate() {
+        // Only the columns that fit, always with the focused one and
+        // preferring the rightmost (the current folder), like Finder.
+        let len = c.model.columns.len();
+        let fit = if self.last_list_width > 1.0 {
+            ((self.last_list_width / COLUMN_WIDTH).floor() as usize).max(1)
+        } else {
+            len
+        };
+        let start = first_visible(len, fit, c.model.focus);
+        for (k, col) in c.model.columns.iter().enumerate().skip(start).take(fit) {
             let focused = k == c.model.focus;
             let chosen = c.chosen_index(k);
             let body = match c.entries.get(&col.dir) {
@@ -370,8 +387,23 @@ fn read_column(dir: &Path, show_hidden: bool) -> Vec<ColEntry> {
         .collect()
 }
 
+/// The first column drawn when only `fit` of `len` columns fit: the
+/// rightmost ones, moved left if needed to keep `focus` in view.
+fn first_visible(len: usize, fit: usize, focus: usize) -> usize {
+    len.saturating_sub(fit).min(focus)
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_focused_column_is_always_drawn() {
+        use super::first_visible;
+        assert_eq!(first_visible(3, 5, 2), 0, "all fit");
+        assert_eq!(first_visible(5, 2, 4), 3, "the two rightmost");
+        assert_eq!(first_visible(5, 2, 1), 1, "focus moved left: still in view");
+        assert_eq!(first_visible(5, 1, 0), 0);
+    }
+
     use super::*;
 
     #[test]

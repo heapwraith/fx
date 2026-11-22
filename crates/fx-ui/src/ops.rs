@@ -67,6 +67,10 @@ pub struct JobView {
     pub bytes: u64,
     pub done: u64,
     pub paused: bool,
+    /// For the speed and the time left shown in the queue panel.
+    pub started: std::time::Instant,
+    /// Set when it ends: the panel keeps it a moment, as "Concluído".
+    pub finished: bool,
 }
 
 /// A conflict waiting for the user's decision.
@@ -83,6 +87,7 @@ pub struct Ask {
 pub struct Ops {
     engine: Option<Engine>,
     active: Vec<JobView>,
+    recent: Vec<JobView>,
     asks: VecDeque<Ask>,
     pending: HashMap<JobId, Pending>,
     history: UndoStack<Entry>,
@@ -101,6 +106,7 @@ impl Ops {
         Self {
             engine: Self::start(cx),
             active: Vec::new(),
+            recent: Vec::new(),
             asks: VecDeque::new(),
             pending: HashMap::new(),
             history: UndoStack::new(UndoStack::<Entry>::DEFAULT_LIMIT),
@@ -236,7 +242,14 @@ impl Ops {
             bytes,
             done: 0,
             paused: false,
+            started: std::time::Instant::now(),
+            finished: false,
         });
+    }
+
+    /// Operations that just ended, shown a moment longer in the panel.
+    pub fn recent(&self) -> &[JobView] {
+        &self.recent
     }
 
     /// Running copies and moves.
@@ -342,7 +355,26 @@ impl Ops {
                 report,
             } => (job, outcome, report),
         };
-        self.active.retain(|j| j.id != id);
+        // A copy or move that ended stays 1,5 s in the panel, full, so even a
+        // quick one is seen (found in the final QA: the bar was never seen).
+        if let Some(pos) = self.active.iter().position(|j| j.id == id) {
+            let mut done = self.active.remove(pos);
+            if outcome == Outcome::Done {
+                done.done = done.bytes;
+                done.finished = true;
+                self.recent.push(done);
+                cx.spawn(async move |this, cx| {
+                    cx.background_executor()
+                        .timer(std::time::Duration::from_millis(1500))
+                        .await;
+                    let _ = this.update(cx, |ops, cx| {
+                        ops.recent.retain(|j| j.id != id);
+                        cx.notify();
+                    });
+                })
+                .detach();
+            }
+        }
         self.asks.retain(|a| a.job != id);
         self.early_starts.remove(&id);
         if self.clear_after.remove(&id) && outcome == Outcome::Done {

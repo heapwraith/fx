@@ -243,14 +243,25 @@ impl TabsView {
                 Action::Update => tab.update(cx, |view, cx| view.update_command(cx)),
                 Action::UpdateChecks => tab.update(cx, |view, cx| {
                     let text = if crate::update::switch() {
+                        tr!("Atualizações automáticas ligadas", "Automatic updates on")
+                    } else {
                         tr!(
-                            "Verificação diária de atualizações ligada",
-                            "Daily update check on"
+                            "Atualizações automáticas desligadas",
+                            "Automatic updates off"
+                        )
+                    };
+                    view.show_notice(text.to_owned(), cx);
+                }),
+                Action::ConfirmRecycle => tab.update(cx, |view, cx| {
+                    let text = if crate::prefs::switch_confirm_recycle() {
+                        tr!(
+                            "O fx vai perguntar antes de enviar para a Lixeira",
+                            "fx will ask before sending to the Recycle Bin"
                         )
                     } else {
                         tr!(
-                            "Verificação diária de atualizações desligada",
-                            "Daily update check off"
+                            "Delete envia para a Lixeira sem perguntar (Ctrl+Z desfaz)",
+                            "Delete sends to the Recycle Bin without asking (Ctrl+Z undoes it)"
                         )
                     };
                     view.show_notice(text.to_owned(), cx);

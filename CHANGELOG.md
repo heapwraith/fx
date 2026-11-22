@@ -23,6 +23,17 @@ Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualiz
 - Transições curtas nas sobreposições (respeitam "Efeitos de animação" do Windows) e mensagens claras para busca e paleta sem resultado.
 
 ### Mudado
+- Delete pergunta antes de enviar para a Lixeira (dá para desligar na paleta); as confirmações usam um diálogo do fx, traduzido, em vez da caixa do Windows.
+- Barra de progresso mais visível, com porcentagem, velocidade e tempo restante; a operação concluída fica um instante na tela.
+- Botão de ajuda (?) com "Como usar o fx" e "Sobre o fx".
+- A vista em colunas mostra sempre a coluna da pasta atual inteira.
+
+### Corrigido
+- O diálogo de conflito deixava as teclas chegarem à lista atrás dele; agora Enter mantém os dois e Esc pula.
+- O arquivo temporário de uma cópia em andamento aparecia na lista.
+- O progresso do instalador tinha etapas simuladas; agora mostra só o trabalho feito.
+- A lista aparecia pelas bordas do Quick Look e da busca; contagem de selecionados sem separador de milhar; textos cortados em inglês.
+
 - Mensagens de erro de cópia, Lixeira, menu e Propriedades nos dois idiomas.
 - As bibliotecas de rede do atualizador só carregam quando ele roda (menos memória na abertura).
 

@@ -91,10 +91,7 @@ pub fn sections() -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
                 ),
                 (
                     "Ctrl+K",
-                    tr!(
-                        "paleta: todo comando e pasta",
-                        "palette: commands and folders"
-                    ),
+                    tr!("paleta: todo comando e pasta", "palette: every command"),
                 ),
             ],
         ),
@@ -186,6 +183,95 @@ impl TabsView {
         }
         self.guide = Some(guide);
         cx.notify();
+    }
+
+    /// The help button's menu (top right): "Como usar" and "Sobre".
+    pub(super) fn render_help_menu(
+        &self,
+        cx: &mut Context<Self>,
+    ) -> Option<impl IntoElement + use<>> {
+        if !self.help_menu {
+            return None;
+        }
+        let t = self.look.theme;
+        let item = |id: &'static str,
+                    label: &'static str,
+                    hint: &'static str,
+                    guide: Guide,
+                    cx: &mut Context<Self>| {
+            div()
+                .id(id)
+                .w_full()
+                .h(px(32.0))
+                .px(px(space(3)))
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap(px(space(4)))
+                .rounded(px(RADIUS))
+                .cursor_pointer()
+                .hover(|s| s.bg(rgba(t.hover)))
+                .child(label)
+                .child(
+                    div()
+                        .text_size(px(CAPTION_SIZE))
+                        .text_color(rgba(t.text_secondary))
+                        .child(hint),
+                )
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    view.help_menu = false;
+                    view.open_guide(guide, cx);
+                }))
+        };
+        let menu = div()
+            .id("help-menu")
+            .absolute()
+            .top(px(space(10)))
+            .right(px(space(2)))
+            .w(px(240.0))
+            .p(px(space(1)))
+            .flex()
+            .flex_col()
+            .rounded(px(RADIUS * 2.0))
+            .border_1()
+            .border_color(rgba(t.divider))
+            .bg(rgba(t.base))
+            .shadow_lg()
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .child(item(
+                "help-howto",
+                tr!("Como usar o fx", "How to use fx"),
+                "F1",
+                Guide::HowTo,
+                cx,
+            ))
+            .child(item(
+                "help-about",
+                tr!("Sobre o fx", "About fx"),
+                "",
+                Guide::About,
+                cx,
+            ));
+        Some(
+            deferred(crate::motion::enter(
+                "help-in",
+                div()
+                    .id("help-backdrop")
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|view, _: &MouseDownEvent, _, cx| {
+                            view.help_menu = false;
+                            cx.notify();
+                        }),
+                    )
+                    .child(menu),
+            ))
+            .with_priority(1),
+        )
     }
 
     fn open_link(&mut self, url: &'static str, cx: &mut Context<Self>) {

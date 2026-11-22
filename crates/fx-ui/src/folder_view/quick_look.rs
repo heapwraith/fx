@@ -578,6 +578,7 @@ impl FolderView {
                     .top_0()
                     .left_0()
                     .size_full()
+                    .bg(crate::theme::rgba(crate::theme::scrim(&self.look.theme)))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|view, _: &MouseDownEvent, _, cx| {

@@ -71,6 +71,12 @@ pub fn next_sort(current: (SortKey, Direction), clicked: SortKey) -> (SortKey, D
     }
 }
 
+/// The temporary file fx-ops writes while copying (`.name.fx-<pid>-<job>.tmp`,
+/// renamed to the real name at the end): not something to show.
+pub fn is_fx_temp(name: &str) -> bool {
+    name.starts_with('.') && name.ends_with(".tmp") && name.contains(".fx-")
+}
+
 /// "Type" column text: folders, then the extension ("Arquivo JPG"), or just
 /// "Arquivo" without one (a leading dot is not an extension: ".gitignore").
 pub fn type_label(name: &str, is_dir: bool) -> String {
@@ -326,10 +332,11 @@ impl FileList {
         true
     }
 
-    /// Hidden or system entry (shown only when the user asks, T1.21).
+    /// Hidden or system entry (shown only when the user asks, T1.21), and
+    /// the temporary file of a copy in progress (`is_fx_temp`).
     pub fn is_hidden(&self, i: u32) -> bool {
         let a = self.attributes(i);
-        a.contains(Attributes::HIDDEN) || a.contains(Attributes::SYSTEM)
+        a.contains(Attributes::HIDDEN) || a.contains(Attributes::SYSTEM) || is_fx_temp(self.name(i))
     }
 
     /// The rows to show: `filtered` (a name filter's result, `None` for all
@@ -508,6 +515,13 @@ fn extension(folded: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn copy_temporaries_are_hidden() {
+        assert!(is_fx_temp(".grande.bin.fx-2968-1.tmp"));
+        assert!(!is_fx_temp("relatorio.tmp"));
+        assert!(!is_fx_temp(".gitignore"));
+    }
+
     use super::*;
     use std::time::Duration;
 

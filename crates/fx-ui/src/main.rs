@@ -27,6 +27,8 @@ mod motion;
 mod ops;
 mod persist;
 mod places;
+mod prefs;
+mod prompt;
 mod store;
 mod tabs_view;
 mod tags;
@@ -129,6 +131,7 @@ fn main() {
     i18n::init(&settings.idioma);
     motion::init();
     crash::set_enabled(settings.relatorio_falhas);
+    prefs::set_confirm_recycle(settings.confirmar_lixeira);
     // Benchmarks and test runs never ask the network.
     update::set_enabled(persist && settings.verificar_atualizacoes);
     // A report left by the last run (T3.10): offered in the status bar.
@@ -179,6 +182,8 @@ fn main() {
         };
         let persist = cx.new(|cx| Persist::new(persist, settings, places.clone(), cx));
         cx.set_global(persist::PersistGlobal(persist.clone()));
+        // Confirmations with fx's look and language, not the native box.
+        prompt::install(cx);
         // An update ready (T4.4) is applied when fx quits: the new fx-setup
         // waits for this process to end, then replaces the files.
         cx.on_app_quit(|_| {

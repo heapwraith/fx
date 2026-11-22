@@ -128,6 +128,9 @@ impl Persist {
             settings.barra_lateral = ui.sidebar;
             settings.mostrar_ocultos = ui.show_hidden;
         }
+        if let Some(on) = crate::prefs::chosen_confirm_recycle() {
+            settings.confirmar_lixeira = on;
+        }
         if crate::tabs_view::guide_seen() {
             settings.guia_visto = true;
         }

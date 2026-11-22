@@ -75,6 +75,8 @@ pub struct TabsView {
     history_open: bool,
     /// "Sobre" or "Como usar" (T4.6).
     guide: Option<guide::Guide>,
+    /// The help button's menu is open.
+    help_menu: bool,
     /// Command palette (Ctrl+K, Ctrl+Shift+P; T1.24).
     palette: Option<palette::Palette>,
     /// Second panes (F3, T3.2), by the tab's own view.
@@ -155,6 +157,7 @@ impl TabsView {
             shown_active: None,
             history_open: false,
             guide: None,
+            help_menu: false,
             palette: None,
             seconds: std::collections::HashMap::new(),
         };
@@ -386,6 +389,35 @@ impl TabsView {
         }
         let ks = &event.keystroke;
         let m = ks.modifiers;
+        // A conflict dialog is modal: it takes every key (T1.13; found in the
+        // final QA, keys used to reach the list behind it).
+        if self.media.ops.read(cx).current_ask().is_some() {
+            let answer = match ks.key.as_str() {
+                "enter" => Some(fx_ops::Resolution::KeepBoth),
+                "escape" => Some(fx_ops::Resolution::Skip),
+                "space" => {
+                    self.apply_all = !self.apply_all;
+                    None
+                }
+                _ => None,
+            };
+            if let Some(resolution) = answer {
+                let all = self.apply_all;
+                self.apply_all = false;
+                self.media
+                    .ops
+                    .update(cx, |ops, cx| ops.answer(resolution, all, cx));
+            }
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
+        if self.help_menu && ks.key == "escape" {
+            self.help_menu = false;
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
         if self.guide.is_some() && ks.key == "escape" {
             self.guide = None;
             cx.stop_propagation();
@@ -626,6 +658,28 @@ impl TabsView {
                         cx.notify();
                     })),
             )
+            // Help: "Como usar" and "Sobre", always one click away.
+            .child(
+                div()
+                    .id("help")
+                    .flex_none()
+                    .mb(px(space(1)))
+                    .size(px(28.0))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(RADIUS))
+                    .font_family(icon_font)
+                    .text_size(px(CAPTION_SIZE))
+                    .text_color(rgba(t.text_secondary))
+                    .hover(|s| s.bg(rgba(t.hover)))
+                    .when(self.help_menu, |d| d.bg(rgba(t.selected)))
+                    .child(crate::theme::ICON_HELP)
+                    .on_click(cx.listener(|view, _: &ClickEvent, _, cx| {
+                        view.help_menu = !view.help_menu;
+                        cx.notify();
+                    })),
+            )
     }
 }
 
@@ -666,6 +720,7 @@ impl Render for TabsView {
             .children(self.render_queue(cx))
             .children(self.render_history(cx))
             .children(self.render_guide(cx))
+            .children(self.render_help_menu(cx))
             .children(self.render_palette(cx))
             .children(self.render_conflict(cx))
     }

@@ -481,3 +481,19 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - Removidas as capturas da T1.1 (`bench/results/visual-t1.1/`), já aprovadas e sem uso.
 - Os arquivos de fase e os relatórios de portão ficam como histórico.
 
+## D-062 — Bateria final de testes e correções
+- **Data:** 2026-11-22 · **Status:** aceita
+- **Como:** 327 testes automáticos e uma passada pelo fx de verdade, numa pasta descartável, em português e inglês, tema escuro e claro: lista, grade, colunas, painel duplo, filtro, busca com filtros, Quick Look de cada tipo, etiquetas, terminal, histórico, menu Exibir, caminho com sugestões, renomear em lote, paleta, cópia grande, conflito, desfazer, nova pasta, renomear, excluir, abas, "Sobre" e "Como usar".
+- **Regra nova do usuário:** nenhum status pode ser simulado; todo progresso vem de trabalho medido (memória do agente e `fx-design`).
+- **Corrigido:**
+  - **Diálogo de conflito não capturava o teclado:** Enter e Ctrl+Z iam para a lista atrás (o Ctrl+Z chegou a desfazer a cópia com o diálogo aberto). Agora é modal: Enter mantém os dois, Esc pula, Espaço marca "aplicar a todos"; a dica aparece no diálogo.
+  - **Confirmações eram a caixa nativa do Windows** (título "Critical" em inglês): renderizador próprio de prompts do GPUI (`prompt.rs`), com os tokens do tema, nos dois idiomas, botão vermelho para excluir de vez, Enter confirma, Esc cancela.
+  - **Delete mandava para a Lixeira sem perguntar** (como o Explorador desde o Windows 8): agora pergunta; "Confirmar antes de enviar para a Lixeira" na paleta (ou `confirmar_lixeira = false`) desliga.
+  - **Barra de progresso quase invisível:** 6 px com trilho visível, mais bytes, porcentagem, velocidade e tempo restante calculados dos bytes copiados; uma operação concluída fica 1,5 s como "Concluído" (resultado real), para que cópias rápidas também sejam vistas.
+  - **O temporário da cópia aparecia na lista** (`.nome.fx-<pid>-<n>.tmp`): tratado como oculto (`fx_core::list::is_fx_temp`).
+  - **"Sobre" e "Como usar" difíceis de achar:** botão de ajuda (?) ao lado do histórico, com os dois.
+  - **Instalador com progresso simulado** (animação entre etapas, 2% inicial falso, 88% e 95% fixos, etapa inventada na desinstalação): a barra agora é a fração de trabalho feito (cada arquivo uma unidade, mais atalhos e registro), e a desinstalação reporta cada arquivo removido.
+  - **Vista em colunas cortava a coluna atual:** desenha só as colunas que cabem, sempre com a em foco, preferindo as da direita.
+  - **A lista aparecia pelas bordas** do Quick Look, da busca e do renomear em lote: véu suave atrás (`theme::scrim`; nenhum no alto contraste).
+  - "10000 selecionados" sem separador de milhar; rótulos da paleta cortados em inglês (encurtados nos dois idiomas); `{nome}` no renomear em lote em inglês (agora `{name}`; os dois funcionam); textos cortados no "Como usar".
+
