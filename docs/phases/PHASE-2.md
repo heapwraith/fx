@@ -105,7 +105,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 - Prévia de PDF, MP4, MP3, DOCX, ZIP, MD e RS conferidas na janela; handler travado não afeta o fx (teste com handler falso); P4 sem regressão.
 
 ## T2.10 — Instalador e portátil
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: instalador por usuário com Inno Setup (`installer/fx.iss`, D-045): `%LOCALAPPDATA%\Programs\fx`, Menu Iniciar, sem administrador, desinstalador que remove o que instalou, pergunta se apaga as configurações e remove o serviço de índice se ele existir (com UAC); gerado pelo CI a cada push (artefato) e anexado ao release da tag junto do zip portátil. Teste num Windows limpo vai para `docs/TESTES-FINAIS.md` (pedido do usuário: testes manuais no fim).
 
 **Fazer**
 - Instalador por usuário (sem admin) gerado no CI: atalho no Menu Iniciar, desinstalador que apaga tudo que instalou (não os dados do usuário, a não ser que ele marque). Zip portátil continua.

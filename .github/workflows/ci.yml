@@ -40,6 +40,20 @@ jobs:
       - name: Version of the build
         shell: pwsh
         run: (Get-Item target/x86_64-pc-windows-msvc/release/fx.exe).VersionInfo | Format-List FileVersion, ProductVersion
+      - name: Installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
+          & $iscc /Q "/DAppVersion=$v" "/DSourceDir=$PWD\target\x86_64-pc-windows-msvc\release" installer\fx.iss
+          if ($LASTEXITCODE -ne 0) { throw "iscc failed" }
+          Get-ChildItem dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fx-setup
+          path: dist/*-setup-x64.exe
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         with:
           name: fx-exe
@@ -61,6 +75,10 @@ jobs:
         with:
           name: fx-exe
           path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: fx-setup
+          path: setup
       - name: Tag must match Cargo.toml
         id: version
         shell: pwsh
@@ -88,6 +106,7 @@ jobs:
         shell: pwsh
         run: |
           $v = "${{ steps.version.outputs.version }}"
-          $ghArgs = @("${{ github.ref_name }}", "fx-$v-windows-x64.zip", "--draft", "--title", "fx $v", "--notes-file", "notes.md")
+          $setup = (Get-ChildItem setup/*-setup-x64.exe | Select-Object -First 1).FullName
+          $ghArgs = @("${{ github.ref_name }}", "fx-$v-windows-x64.zip", $setup, "--draft", "--title", "fx $v", "--notes-file", "notes.md")
           if ($v.StartsWith('0.')) { $ghArgs += "--prerelease" }  # pre-1.0
           gh release create @ghArgs

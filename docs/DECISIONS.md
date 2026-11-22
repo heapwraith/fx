@@ -341,3 +341,11 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Nesta máquina:** há visualizador para PDF (Edge), RTF, SVG e texto/HTML; não há para DOCX (exige Office) nem para MP4/MP3 (o Windows 11 não traz o de mídia). Esses tipos mostram a miniatura do Windows (o vídeo, um quadro).
 - **Limites:** mover a janela do fx só reposiciona o host na repintura seguinte (até 250 ms); um menu ou a paleta abertos sobre o Quick Look ficam atrás do host.
 
+## D-045 — Instalador (T2.10)
+- **Data:** 2026-11-22 · **Status:** aceita
+- **Ferramenta:** Inno Setup 6, no CI (o runner do GitHub tem ou instala pelo Chocolatey); nada é instalado na máquina de desenvolvimento. Escolhido por ser gratuito, maduro e gerar um `.exe` único com desinstalador; MSI (WiX) fica para a Store/empresas se for pedido.
+- **Por usuário:** `PrivilegesRequired=lowest`, pasta `%LOCALAPPDATA%\Programs\fx`, atalho no Menu Iniciar (área de trabalho opcional), português e inglês. Instala `fx.exe`, `fx-indexd.exe`, `fx-preview.exe`, licenças, README e CHANGELOG.
+- **Desinstalar:** remove tudo que instalou; pergunta (padrão "Não") se apaga também `%APPDATA%\fx` e `%LOCALAPPDATA%\fx`; se o serviço de índice existir (`HKLM\...\Services\fx-indexd`), roda `fx-indexd uninstall` com UAC, que apaga o serviço e sua cópia em Program Files (D-040).
+- **CI:** o job `check` compila o instalador a cada push (artefato `fx-setup`, falha se o script não compilar); a tag anexa `fx-X.Y.Z-setup-x64.exe` ao release ao lado do zip portátil.
+- **Pendente:** o teste num Windows limpo ficou para a rodada final (`docs/TESTES-FINAIS.md`), a pedido do usuário.
+

@@ -1,0 +1,13 @@
+# Testes finais com o usuário
+
+O usuário pediu para terminar todas as funcionalidades primeiro (2026-11-22) e só depois fazer os testes manuais e as correções. Esta é a lista do que ficou para essa rodada, por tarefa. Marque `[x]` com a data e o resultado.
+
+## Fase 2
+
+- [ ] **T2.3/T2.11 Narrador:** ligar o Narrador (Ctrl+Win+Enter), navegar pela lista e pelas migalhas; os itens são lidos com nome e tipo.
+- [ ] **T2.3/T2.11 Explorador:** copiar no fx e colar no Explorador (e o contrário); arrastar do fx para o Explorador, a área de trabalho e o navegador (upload), e do Explorador para o fx.
+- [ ] **T2.7 Totais pelo serviço:** com o `fx-indexd` ativo, abrir `C:\` e conferir que os totais das pastas aparecem quase na hora.
+- [ ] **T2.9 Visualizadores:** DOCX (com Office instalado), MP4 e MP3 (com um visualizador de mídia) no Quick Look.
+- [ ] **T2.10 Instalador:** num Windows limpo (ou máquina virtual): instalar pelo `fx-…-setup-x64.exe` sem administrador, abrir pelo Menu Iniciar, desinstalar pelas Configurações e conferir que `%LOCALAPPDATA%\Programs\fx` sumiu; repetir respondendo "Sim" para apagar as configurações e conferir que `%APPDATA%\fx` e `%LOCALAPPDATA%\fx` sumiram.
+- [ ] **T2.11 Assinatura:** inscrição do projeto na SignPath Foundation (só o usuário pode); depois, conferir que o SmartScreen não mostra "editor desconhecido".
+- [ ] **T2.11 Beta:** publicar o rascunho do release `v0.2.0-beta` no GitHub.
