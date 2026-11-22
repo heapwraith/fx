@@ -63,9 +63,39 @@ jobs:
             target/x86_64-pc-windows-msvc/release/fx-preview.exe
           retention-days: 14
 
+  # ARM64 build (T3.6): cross-compiled on the x64 runner (MSVC ARM64 tools).
+  arm64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain (rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: arm64
+      - name: Build release (aarch64)
+        run: cargo build --release --target aarch64-pc-windows-msvc -p fx-ui -p fx-indexd -p fx-preview
+      - name: Installer (Inno Setup, ARM64)
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
+          & $iscc /Q "/DAppVersion=$v" "/DArch=arm64" "/DSourceDir=$PWD\target\aarch64-pc-windows-msvc\release" installer\fx.iss
+          if ($LASTEXITCODE -ne 0) { throw "iscc failed" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fx-arm64
+          path: |
+            target/aarch64-pc-windows-msvc/release/fx.exe
+            target/aarch64-pc-windows-msvc/release/fx-indexd.exe
+            target/aarch64-pc-windows-msvc/release/fx-preview.exe
+            dist/*-setup-arm64.exe
+          retention-days: 14
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: check
+    needs: [check, arm64]
     runs-on: windows-latest
     permissions:
       contents: write
@@ -79,6 +109,10 @@ jobs:
         with:
           name: fx-setup
           path: setup
+      - uses: actions/download-artifact@v4
+        with:
+          name: fx-arm64
+          path: arm64
       - name: Tag must match Cargo.toml
         id: version
         shell: pwsh
@@ -93,6 +127,9 @@ jobs:
           $v = "${{ steps.version.outputs.version }}"
           Copy-Item LICENSE-MIT, LICENSE-APACHE, README.md, CHANGELOG.md dist/
           Compress-Archive -Path dist/* -DestinationPath "fx-$v-windows-x64.zip"
+          New-Item -ItemType Directory arm64zip | Out-Null
+          Copy-Item arm64/target/aarch64-pc-windows-msvc/release/*.exe, LICENSE-MIT, LICENSE-APACHE, README.md, CHANGELOG.md arm64zip/
+          Compress-Archive -Path arm64zip/* -DestinationPath "fx-$v-windows-arm64.zip"
           $lines = Get-Content CHANGELOG.md
           $start = ($lines | Select-String -Pattern "^## \[$([regex]::Escape($v))\]").LineNumber
           if (-not $start) { throw "CHANGELOG.md has no section for $v" }
@@ -107,6 +144,7 @@ jobs:
         run: |
           $v = "${{ steps.version.outputs.version }}"
           $setup = (Get-ChildItem setup/*-setup-x64.exe | Select-Object -First 1).FullName
-          $ghArgs = @("${{ github.ref_name }}", "fx-$v-windows-x64.zip", $setup, "--draft", "--title", "fx $v", "--notes-file", "notes.md")
+          $setupArm = (Get-ChildItem -Recurse arm64 -Filter *-setup-arm64.exe | Select-Object -First 1).FullName
+          $ghArgs = @("${{ github.ref_name }}", "fx-$v-windows-x64.zip", "fx-$v-windows-arm64.zip", $setup, $setupArm, "--draft", "--title", "fx $v", "--notes-file", "notes.md")
           if ($v.StartsWith('0.')) { $ghArgs += "--prerelease" }  # pre-1.0
           gh release create @ghArgs

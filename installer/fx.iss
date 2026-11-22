@@ -8,6 +8,9 @@
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
+#ifndef Arch
+  #define Arch "x64"
+#endif
 #ifndef SourceDir
   #define SourceDir "..\target\x86_64-pc-windows-msvc\release"
 #endif
@@ -25,10 +28,15 @@ DefaultGroupName=fx
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
+#if Arch == "arm64"
+ArchitecturesAllowed=arm64
+ArchitecturesInstallIn64BitMode=arm64
+#else
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+#endif
 OutputDir=..\dist
-OutputBaseFilename=fx-{#AppVersion}-setup-x64
+OutputBaseFilename=fx-{#AppVersion}-setup-{#Arch}
 SetupIconFile=..\crates\fx-ui\resources\fx.ico
 UninstallDisplayIcon={app}\fx.exe
 UninstallDisplayName=fx
