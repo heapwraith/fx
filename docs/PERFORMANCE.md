@@ -1,20 +1,41 @@
 # Desempenho: metas e protocolo de medição
 
-Os resultados mais recentes estão no relatório do último portão ([`bench/results/gate-4.md`](../bench/results/gate-4.md)). Todas as metas passam; a P8 (memória parado) está no limite.
+Os resultados mais recentes estão no relatório do último portão ([`bench/results/gate-4.md`](../bench/results/gate-4.md)).
 
 ## Metas
 
-| ID | Medida | Meta |
-|---|---|---|
-| P1 | Primeira abertura do dia (processo novo) até a primeira lista pintada | ≤ 500 ms (revisada em D-013; era 150 ms) |
-| P2 | Pasta com 100 mil arquivos: primeira pintura, com o fx já carregado (processo residente, D-013) | ≤ 100 ms |
-| P3 | Pasta com 100 mil arquivos: lista completa e ordenada por nome, com o fx já carregado | ≤ 300 ms |
-| P4 | Resposta a tecla/clique (input → quadro atualizado) | ≤ 16 ms |
-| P5 | Busca por nome no disco inteiro, por tecla, com ~2 milhões de arquivos indexados | ≤ 50 ms |
-| P6 | Construção inicial do índice da MFT de um disco com ~2 milhões de arquivos | ≤ 10 s |
-| P7 | Rolagem na lista de 100 mil itens, na taxa real do monitor | ≤ 0,5% de quadros perdidos (intervalo ≥ 1,5× o período do monitor); reportar também o p95 (D-014) |
-| P8 | Memória do app parado, 1 janela, 1 pasta pequena | ≤ 88 MB (revisada em D-038; era 80 MB) |
-| P9 | Memória do índice por milhão de arquivos | ≤ 150 MB |
+Revisadas em 2026-11-22 (D-064). **Limite** reprova um portão; **alvo** é onde queremos chegar.
+
+### Velocidade
+
+| ID | Medida | Limite | Alvo |
+|---|---|---|---|
+| P1 | Primeira abertura do dia (processo novo) até a primeira lista pintada | ≤ 450 ms p95 | 300 ms |
+| P2 | Pasta com 100 mil arquivos, com o fx já carregado: do pedido até a primeira pintura / aba nova | ≤ 80 ms p95 / ≤ 16 ms | 50 ms |
+| P3 | Lista de 100 mil ordenada por nome | ≤ 50 ms p95 | 30 ms |
+| P4 | Tecla ou clique → quadro atualizado | ≤ 8 ms p95, máximo 16 ms | 4 ms |
+| P5 | Busca por nome no disco inteiro, por tecla, ~2 milhões de arquivos | ≤ 16 ms p95 | 8 ms |
+| P6 | Construir o índice da MFT de ~2 milhões de arquivos | ≤ 10 s | 6 s |
+| P7 | Rolagem na lista de 100 mil, na taxa real do monitor | ≤ 0,1% de quadros perdidos | 0 |
+| QL | Quick Look: tecla → prévia na tela | ≤ 60 ms p95 | 40 ms |
+| P10 | Copiar um arquivo grande | ≥ 90% da velocidade do Explorador na mesma cópia | 100% |
+| P11 | Abrir Configurações, paleta, menus | ≤ 16 ms | — |
+| P12 | Arquivo novo aparecer na busca do disco inteiro | ≤ 300 ms | 150 ms |
+| P13 | Instalar / aplicar uma atualização ao fechar | ≤ 3 s / ≤ 2 s | — |
+
+### Memória e tamanho
+
+| ID | Medida | Limite | Alvo |
+|---|---|---|---|
+| P8 | Memória do app parado, 1 janela, 1 pasta pequena | ≤ 85 MB | 70 MB |
+| P8b | Cada aba a mais | ≤ 3 MB | 1 MB |
+| P8c | Cada janela a mais | ≤ 20 MB | 12 MB |
+| P9 | Memória do índice por milhão de arquivos | ≤ 100 MB | 70 MB |
+| S1 | `fx.exe` | ≤ 12 MB | 9 MB |
+| S2 | Instalador completo | ≤ 10 MB | 7 MB |
+| S3 | `fx-indexd.exe` / `fx-preview.exe` | ≤ 1 MB / ≤ 0,5 MB | — |
+
+**Hoje reprovam** (trabalho da Fase 5, T5.7): P6 (~20 s estimados para 2 milhões), P8 (86–88 MB), S1 (14,3 MB), S2 (14,6 MB). P8b, P8c, P10, P13 e S1–S3 ainda não têm medição automática no `fx-bench`.
 
 ## Protocolo
 

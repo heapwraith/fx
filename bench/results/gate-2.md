@@ -40,7 +40,7 @@ A mesma das fases anteriores: AMD Ryzen 7 5700X, 32 GB, RTX 5070, monitor 1920×
 | P3 lista ordenada de 100 mil | sem mudança no caminho (ordenar 100 mil: ~37 ms, Fase 1) | ≤ 300 ms | ✅ |
 | P4 tecla → quadro | paleta p95 3,5 ms; setas durante reordenação 3,0; busca com resultados chegando 3,4; abas 3,9 | ≤ 16 ms | ✅ |
 | P5 busca no disco inteiro | pelo serviço (pipe + todos os volumes + filtros, até 1000 resultados): p95 **5,39 ms** (744 mil itens) | ≤ 50 ms | ✅ |
-| P6 construir o índice | 744 mil itens em 7,5 s (C: e D:) | ≤ 10 s (2 milhões) | ✅ proporcional |
+| P6 construir o índice | 744 mil itens em 7,5 s (C: e D:) | ≤ 10 s (2 milhões) | ❌ ~20 s projetados para 2 milhões (corrigido em 2026-11-22, D-064; antes marcado como "proporcional") |
 | P7 rolagem | **0 perdidos em 3.999** quadros a 239 Hz | ≤ 0,5% | ✅ |
 | P8 memória parado | mediana 85,8 MB | ≤ 88 MB (D-038) | ✅ |
 | P9 índice por milhão | 73,5 MB para 744 mil = **98,7 MB/milhão** (estável sob mudanças); serviço inteiro 76 MB | ≤ 150 MB | ✅ |

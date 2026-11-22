@@ -504,3 +504,12 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Rodapé da barra lateral:** "Ajuda F1" (abre "Como usar") e "Configurações Ctrl+,", sempre visíveis (fora da rolagem). O botão "?" do topo saiu (duplicava). "Sobre o fx" na paleta abre a seção Sobre; "Configurações" também está na paleta.
 - `restaurar_sessao` virou uma preferência alterável na hora (salva com a sessão), como as demais.
 
+## D-064 — Novos limites de velocidade e tamanho
+- **Data:** 2026-11-22 · **Status:** aceita (aprovada pelo usuário; substitui as metas de D-013 e D-038)
+- **Dois níveis:** *limite* (reprova o portão) e *alvo* (onde queremos chegar). Tabela completa em `docs/PERFORMANCE.md`.
+- **Apertadas** (já passam e viram proteção contra regressão): P2 ≤ 80 ms e aba nova ≤ 16 ms; P3 ≤ 50 ms; P4 ≤ 8 ms p95; P5 ≤ 16 ms; P7 ≤ 0,1%; Quick Look ≤ 60 ms; P1 ≤ 450 ms p95 (passa no limite).
+- **Novas:** P8b (aba ≤ 3 MB), P8c (janela ≤ 20 MB), P10 (cópia ≥ 90% do Explorador), P11 (sobreposições ≤ 16 ms), P12 (arquivo novo na busca ≤ 300 ms), P13 (instalar ≤ 3 s, atualizar ≤ 2 s), S1–S3 (tamanho dos executáveis e do instalador).
+- **Mais duras e hoje reprovadas:** P8 ≤ 85 MB, P9 ≤ 100 MB/milhão, S1 `fx.exe` ≤ 12 MB, S2 instalador ≤ 10 MB.
+- **Correção:** a P6 (índice de 2 milhões em ≤ 10 s) foi marcada como aprovada no portão 2 por "proporcionalidade", mas 744 mil arquivos em 7,5 s projetam ~20 s para 2 milhões: **não passa**. Corrigido em `gate-2.md` e `gate-4.md`.
+- **Plano para as que reprovam** (Fase 5, T5.7): tirar do GPUI o cliente HTTP que ele traz e o fx não usa (`reqwest`, `rustls`, `ring`; o atualizador usa WinHTTP), comprimir o programa do instalador, paralelizar a leitura da MFT por volume e reduzir alocações do índice, e criar no `fx-bench` as medições que faltam.
+

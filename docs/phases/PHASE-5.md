@@ -50,8 +50,16 @@ Seguir a pasta da aba (`cd`) quando ela muda, cmd além do PowerShell, rolar o h
 - `fx-indexd`: a cópia em Program Files não é atualizada pelo atualizador nem removida pelo desinstalador (hoje só avisa).
 - A cópia temporária usada para desinstalar fica em `%TEMP%`.
 
+## T5.7 — Metas novas que hoje reprovam (D-064)
+- [ ] Concluída em: ____ · Resumo:
+
+- **P8 ≤ 85 MB e S1 `fx.exe` ≤ 12 MB:** tirar do GPUI vendorizado o cliente HTTP que o fx não usa (`gpui_http_client`, `reqwest`, `rustls`, `ring`) e medir o que mais pesa no processo parado (WinTrust/Crypt32 carregadas pelo shell, atlas de glifos).
+- **S2 instalador ≤ 10 MB:** comprimir o programa do instalador (hoje 6,7 MB sem compressão) ou reduzir o GPUI que ele leva.
+- **P6 índice de 2 milhões ≤ 10 s:** ler os volumes em paralelo, reduzir alocações e medir num disco real com ~2 milhões de arquivos.
+- **Medições que faltam no `fx-bench`:** P8b (aba a mais), P8c (janela a mais), P10 (cópia contra o Explorador), P13 (instalar e atualizar), S1–S3 (tamanhos).
+
 ---
 
 ## Portão da Fase 5
 
-Lançamento da 1.0: testes manuais feitos, pacote assinado publicado.
+Lançamento da 1.0: testes manuais feitos, pacote assinado publicado e todas as metas de `docs/PERFORMANCE.md` (D-064) dentro do limite.
