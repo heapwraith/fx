@@ -96,6 +96,11 @@ impl FolderView {
     /// Entries an operation applies to: the selection when the cursor is in
     /// it, otherwise the cursor entry.
     pub(super) fn targets(&self) -> Vec<PathBuf> {
+        // The column view covers the list: act on what is chosen there, never
+        // on the hidden list's selection (found in review).
+        if let Some(c) = &self.miller {
+            return c.focused_chosen().into_iter().collect();
+        }
         let Some(c) = self.selection.cursor() else {
             return Vec::new();
         };
@@ -164,45 +169,9 @@ impl FolderView {
         match ks.key.as_str() {
             "delete" if plain => {
                 let items = self.targets();
-                if items.is_empty() {
-                    return true;
+                if !items.is_empty() {
+                    self.recycle_confirmed(items, window, cx);
                 }
-                if !crate::prefs::confirm_recycle() {
-                    self.submit_job(Job::recycle(items), window, cx);
-                    return true;
-                }
-                let detail = match items.len() {
-                    1 => trf!(
-                        "\"{}\" vai para a Lixeira. Dá para desfazer com Ctrl+Z.",
-                        "\"{}\" goes to the Recycle Bin. Ctrl+Z undoes it.",
-                        items[0]
-                            .file_name()
-                            .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
-                    ),
-                    n => trf!(
-                        "{} itens vão para a Lixeira. Dá para desfazer com Ctrl+Z.",
-                        "{} items go to the Recycle Bin. Ctrl+Z undoes it.",
-                        count(n)
-                    ),
-                };
-                let answer = window.prompt(
-                    PromptLevel::Warning,
-                    tr!("Enviar para a Lixeira?", "Send to the Recycle Bin?"),
-                    Some(&detail),
-                    &[
-                        tr!("Enviar para a Lixeira", "Send to Recycle Bin"),
-                        tr!("Cancelar", "Cancel"),
-                    ],
-                    cx,
-                );
-                cx.spawn_in(window, async move |this, cx| {
-                    if answer.await == Ok(0) {
-                        let _ = this.update_in(cx, |view, window, cx| {
-                            view.submit_job(Job::recycle(items), window, cx);
-                        });
-                    }
-                })
-                .detach();
                 true
             }
             "delete" if m.shift && !m.control && !m.alt => {
@@ -329,8 +298,55 @@ impl FolderView {
     }
 
     /// Ctrl+V: files on the clipboard (from fx or any app) into this folder.
+    /// Sends `items` to the Recycle Bin, asking first unless the user turned
+    /// that off (Configurações › Geral). Every path to the Recycle Bin (Delete
+    /// key, palette, shell menu) goes through here.
+    pub(super) fn recycle_confirmed(
+        &mut self,
+        items: Vec<PathBuf>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !crate::prefs::confirm_recycle() {
+            self.submit_job(Job::recycle(items), window, cx);
+            return;
+        }
+        let detail = match items.len() {
+            1 => trf!(
+                "\"{}\" vai para a Lixeira. Dá para desfazer com Ctrl+Z.",
+                "\"{}\" goes to the Recycle Bin. Ctrl+Z undoes it.",
+                items[0]
+                    .file_name()
+                    .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
+            ),
+            n => trf!(
+                "{} vão para a Lixeira. Dá para desfazer com Ctrl+Z.",
+                "{} go to the Recycle Bin. Ctrl+Z undoes it.",
+                count(n)
+            ),
+        };
+        let answer = window.prompt(
+            PromptLevel::Warning,
+            tr!("Enviar para a Lixeira?", "Send to the Recycle Bin?"),
+            Some(&detail),
+            &[
+                tr!("Enviar para a Lixeira", "Send to Recycle Bin"),
+                tr!("Cancelar", "Cancel"),
+            ],
+            cx,
+        );
+        cx.spawn_in(window, async move |this, cx| {
+            if answer.await == Ok(0) {
+                let _ = this.update_in(cx, |view, window, cx| {
+                    view.submit_job(Job::recycle(items), window, cx);
+                });
+            }
+        })
+        .detach();
+    }
+
     pub(super) fn paste(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let dest = self.path.clone();
+        let dest = self.folder_in_view();
         cx.spawn_in(window, async move |this, cx| {
             let clip = cx
                 .background_spawn(async { fx_shell::clipboard_files() })
@@ -431,7 +447,9 @@ impl FolderView {
             MenuOutcome::Fx(_) => self.copy_paths(items, cx),
             MenuOutcome::Verb(verb) => match verb.as_str() {
                 "delete" if !items.is_empty() => {
-                    self.submit_job(Job::recycle(items), window, cx);
+                    // The same confirmation as the Delete key (review: the menu
+                    // skipped it).
+                    self.recycle_confirmed(items, window, cx);
                 }
                 "rename" => {
                     if let Some(c) = self.selection.cursor() {

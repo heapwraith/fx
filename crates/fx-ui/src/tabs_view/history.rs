@@ -119,6 +119,8 @@ impl TabsView {
                 "history-in",
                 div()
                     .id("history-backdrop")
+                    // The closing click never reaches the list behind.
+                    .occlude()
                     .absolute()
                     .top_0()
                     .left_0()

@@ -457,6 +457,8 @@ impl TabsView {
                 "palette-in",
                 div()
                     .id("palette-backdrop")
+                    // The closing click never reaches the list behind.
+                    .occlude()
                     .absolute()
                     .top_0()
                     .left_0()

@@ -574,6 +574,8 @@ impl FolderView {
                 "quick-look-in",
                 div()
                     .id("quick-look-backdrop")
+                    // The closing click never reaches the list behind.
+                    .occlude()
                     .absolute()
                     .top_0()
                     .left_0()

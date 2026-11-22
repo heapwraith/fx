@@ -189,6 +189,8 @@ impl TabsView {
                 "guide-in",
                 div()
                     .id("guide-backdrop")
+                    // The closing click never reaches the list behind.
+                    .occlude()
                     .absolute()
                     .top_0()
                     .left_0()

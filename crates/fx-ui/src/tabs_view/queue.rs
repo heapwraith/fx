@@ -258,6 +258,8 @@ impl TabsView {
                     .items_center()
                     .justify_center()
                     .bg(gpui::rgba(0x00000066))
+                    // Modal: the list behind gets no clicks.
+                    .occlude()
                     .child(card),
             ))
             .with_priority(2),

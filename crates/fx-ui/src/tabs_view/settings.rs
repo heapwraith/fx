@@ -28,7 +28,7 @@ pub enum Section {
 }
 
 impl Section {
-    const ALL: [Section; 6] = [
+    pub(super) const ALL: [Section; 6] = [
         Section::General,
         Section::Appearance,
         Section::Updates,
@@ -63,7 +63,8 @@ impl Section {
 /// What a control does when used.
 #[derive(Debug, Clone, Copy)]
 enum Act {
-    Language,
+    /// `true`: English. Choosing the language already in use does nothing.
+    Language(bool),
     ConfirmRecycle,
     RestoreSession,
     Density(Density),
@@ -87,9 +88,11 @@ impl TabsView {
     fn act(&mut self, act: Act, window: &mut Window, cx: &mut Context<Self>) {
         let tab = self.current();
         match act {
-            Act::Language => {
-                crate::i18n::switch();
-                cx.refresh_windows();
+            Act::Language(english) => {
+                if fx_core::locale::english() != english {
+                    crate::i18n::switch();
+                    cx.refresh_windows();
+                }
             }
             Act::ConfirmRecycle => {
                 crate::prefs::switch_confirm_recycle();
@@ -267,8 +270,8 @@ impl TabsView {
                         segmented(
                             "lang",
                             vec![
-                                ("Português", !english, Act::Language),
-                                ("English", english, Act::Language),
+                                ("Português", !english, Act::Language(false)),
+                                ("English", english, Act::Language(true)),
                             ],
                             cx,
                         ),
@@ -547,6 +550,8 @@ impl TabsView {
                 "settings-in",
                 div()
                     .id("settings-backdrop")
+                    // The closing click never reaches the list behind.
+                    .occlude()
                     .absolute()
                     .top_0()
                     .left_0()

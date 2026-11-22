@@ -394,6 +394,8 @@ impl FolderView {
                 "batch-rename-in",
                 div()
                     .id("batch-rename-backdrop")
+                    // The closing click never reaches the list behind.
+                    .occlude()
                     .absolute()
                     .top_0()
                     .left_0()

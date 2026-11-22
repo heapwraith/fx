@@ -27,6 +27,7 @@ fn build(
 ) -> RenderablePromptHandle {
     let theme = Theme::current(Mode::from_appearance(window.appearance()));
     let view = cx.new(|cx| FxPrompt {
+        opened: std::time::Instant::now(),
         level,
         message: message.to_owned(),
         detail: detail.map(str::to_owned),
@@ -38,6 +39,9 @@ fn build(
 }
 
 struct FxPrompt {
+    /// When the dialog appeared: an Enter right after (the press that opened
+    /// it, or its bounce) must not answer it.
+    opened: std::time::Instant,
     level: PromptLevel,
     message: String,
     detail: Option<String>,
@@ -54,18 +58,36 @@ impl Focusable for FxPrompt {
     }
 }
 
-/// Which button a key picks: Enter the first, Esc the last.
-fn answer_for(key: &str, buttons: usize) -> Option<usize> {
+/// Ignore Enter for this long after the dialog appears (found in review: a
+/// held Enter in the palette confirmed "Excluir permanentemente" unseen).
+const ENTER_GUARD: std::time::Duration = std::time::Duration::from_millis(300);
+
+/// Which button a key picks: Enter the first, Esc the last. A held key
+/// (auto-repeat) never answers, and Enter only after `ENTER_GUARD`.
+fn answer_for(
+    key: &str,
+    buttons: usize,
+    held: bool,
+    since_open: std::time::Duration,
+) -> Option<usize> {
+    if held || buttons == 0 {
+        return None;
+    }
     match key {
-        "enter" if buttons > 0 => Some(0),
-        "escape" if buttons > 0 => Some(buttons - 1),
+        "enter" if since_open >= ENTER_GUARD => Some(0),
+        "escape" => Some(buttons - 1),
         _ => None,
     }
 }
 
 impl FxPrompt {
     fn on_key(&mut self, e: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(ix) = answer_for(e.keystroke.key.as_str(), self.actions.len()) {
+        if let Some(ix) = answer_for(
+            e.keystroke.key.as_str(),
+            self.actions.len(),
+            e.is_held,
+            self.opened.elapsed(),
+        ) {
             cx.emit(PromptResponse(ix));
         }
         cx.stop_propagation();
@@ -145,8 +167,12 @@ impl Render for FxPrompt {
                     )),
             );
         div()
+            .id("fx-prompt")
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key))
+            // Modal: nothing behind it gets the mouse (review: clicks reached
+            // the list and took the keyboard focus away).
+            .occlude()
             .size_full()
             .flex()
             .items_center()
@@ -158,13 +184,32 @@ impl Render for FxPrompt {
 
 #[cfg(test)]
 mod tests {
-    use super::answer_for;
+    use super::{ENTER_GUARD, answer_for};
+    use std::time::Duration;
 
     #[test]
     fn enter_confirms_and_escape_cancels() {
-        assert_eq!(answer_for("enter", 2), Some(0));
-        assert_eq!(answer_for("escape", 2), Some(1));
-        assert_eq!(answer_for("x", 2), None);
-        assert_eq!(answer_for("enter", 0), None);
+        let later = ENTER_GUARD + Duration::from_millis(1);
+        assert_eq!(answer_for("enter", 2, false, later), Some(0));
+        assert_eq!(answer_for("escape", 2, false, later), Some(1));
+        assert_eq!(answer_for("x", 2, false, later), None);
+        assert_eq!(answer_for("enter", 0, false, later), None);
+    }
+
+    #[test]
+    fn a_held_or_early_enter_never_confirms() {
+        let later = ENTER_GUARD + Duration::from_millis(1);
+        assert_eq!(answer_for("enter", 2, true, later), None, "auto-repeat");
+        assert_eq!(
+            answer_for("enter", 2, false, Duration::from_millis(50)),
+            None,
+            "the opening press"
+        );
+        assert_eq!(
+            answer_for("escape", 2, false, Duration::ZERO),
+            Some(1),
+            "Esc always cancels"
+        );
+        assert_eq!(answer_for("escape", 2, true, later), None);
     }
 }

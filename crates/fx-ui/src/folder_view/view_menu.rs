@@ -237,6 +237,8 @@ impl FolderView {
                 "view-menu-in",
                 div()
                     .id("view-menu-backdrop")
+                    // The closing click never reaches the list behind.
+                    .occlude()
                     .absolute()
                     .top_0()
                     .left_0()

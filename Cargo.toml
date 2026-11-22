@@ -23,7 +23,6 @@ fx-fs = { path = "crates/fx-fs" }
 fx-index = { path = "crates/fx-index" }
 fx-shell = { path = "crates/fx-shell" }
 fx-ops = { path = "crates/fx-ops" }
-fx-preview = { path = "crates/fx-preview" }
 
 ntfs-reader = "=0.4.6"
 tempfile = "=3.27.0"
@@ -42,6 +41,14 @@ rusqlite = { version = "=0.37.0", features = ["bundled"] }
 # GPUI: fixado na T0.1 (D-007). Resolvido para a cópia com patch em third_party/gpui
 # via [patch.crates-io] abaixo, para compilar de forma cruzada WSL -> Windows (D-005).
 gpui = "=0.2.2"
+
+# Revisão de código (D-066): já compiladas como dependências do GPUI, agora diretas.
+# Canais assíncronos (sem bloquear o pool de threads do Windows).
+futures = "=0.3.34"
+# Fachada de log: os avisos do GPUI e do fx vão para %LOCALAPPDATA%\fx\logs.
+log = "=0.4.35"
+# Tipos de erro nas bibliotecas (CLAUDE.md).
+thiserror = "=2.0.21"
 
 [workspace.dependencies.windows]
 version = "=0.62.2"

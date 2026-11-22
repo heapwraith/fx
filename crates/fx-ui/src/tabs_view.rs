@@ -430,6 +430,19 @@ impl TabsView {
             cx.stop_propagation();
             return;
         }
+        // Settings are modal: no key reaches the list hidden behind them
+        // (found in review: Delete went to the list). Up/Down change section.
+        if let Some(current) = self.settings {
+            let all = settings::Section::ALL;
+            let at = all.iter().position(|s| *s == current).unwrap_or(0);
+            match ks.key.as_str() {
+                "up" => self.open_settings(all[(at + all.len() - 1) % all.len()], cx),
+                "down" => self.open_settings(all[(at + 1) % all.len()], cx),
+                _ => {}
+            }
+            cx.stop_propagation();
+            return;
+        }
         if self.guide.is_some() && ks.key == "escape" {
             self.guide = None;
             cx.stop_propagation();
@@ -437,6 +450,8 @@ impl TabsView {
             return;
         }
         if ks.key == "f1" && !m.control && !m.alt && !m.shift {
+            // Never behind another dialog.
+            self.settings = None;
             if self.guide == Some(guide::Guide::HowTo) {
                 self.guide = None;
                 cx.notify();

@@ -882,6 +882,8 @@ impl FolderView {
                 "search-in",
                 div()
                     .id("search-backdrop")
+                    // The closing click never reaches the list behind.
+                    .occlude()
                     .absolute()
                     .top_0()
                     .left_0()

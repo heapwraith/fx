@@ -1878,6 +1878,21 @@ impl FolderView {
         if self.search.is_none() && self.columns_key(ks, window, cx) {
             return;
         }
+        // In the column view only the keys that act on the chosen item get
+        // through; the rest would act on the list hidden behind it.
+        if self.search.is_none() && self.miller.is_some() && !columns_allow(ks) {
+            if ks.key == "f2" {
+                self.show_notice(
+                    tr!(
+                        "Para renomear, volte à lista (Esc) ou use o menu de contexto",
+                        "To rename, go back to the list (Esc) or use the context menu"
+                    )
+                    .to_owned(),
+                    cx,
+                );
+            }
+            return;
+        }
         if self.search_key(ks, started, window, cx) {
             cx.notify();
             return;
@@ -2618,6 +2633,30 @@ impl FolderView {
             a.is_dir(),
             !may_read_content(a),
         )
+    }
+}
+
+/// Keys that make sense in the column view, acting on the chosen entry or
+/// the focused column's folder (`targets`, `folder_in_view`).
+fn columns_allow(ks: &gpui::Keystroke) -> bool {
+    let m = ks.modifiers;
+    let ctrl = m.control && !m.alt && !m.platform;
+    match ks.key.as_str() {
+        "delete" => !m.control && !m.alt,
+        "c" | "x" | "v" => ctrl && !m.shift,
+        "f" | "k" | "j" | "t" | "w" | "tab" => ctrl,
+        "enter" => m.alt,
+        _ => false,
+    }
+}
+
+impl FolderView {
+    /// The folder the user is looking at: the focused column in the column
+    /// view, the listed folder otherwise.
+    pub(super) fn folder_in_view(&self) -> PathBuf {
+        self.miller
+            .as_ref()
+            .map_or_else(|| self.path.clone(), |c| c.current_dir().to_path_buf())
     }
 }
 

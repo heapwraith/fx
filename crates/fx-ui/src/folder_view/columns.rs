@@ -43,6 +43,17 @@ pub(super) struct Columns {
 }
 
 impl Columns {
+    /// The folder of the focused column.
+    pub(super) fn current_dir(&self) -> &Path {
+        self.model.current_dir()
+    }
+
+    /// The entry chosen in the focused column, as a full path.
+    pub(super) fn focused_chosen(&self) -> Option<PathBuf> {
+        let col = self.model.columns.get(self.model.focus)?;
+        Some(col.dir.join(col.chosen.as_deref()?))
+    }
+
     fn entries_of(&self, k: usize) -> Option<&Arc<Vec<ColEntry>>> {
         self.entries.get(&self.model.columns.get(k)?.dir)
     }
