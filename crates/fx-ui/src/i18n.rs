@@ -161,7 +161,8 @@ mod tests {
         assert!(files.len() > 20, "sources found: {}", files.len());
         let mut loose = Vec::new();
         for f in &files {
-            let src = std::fs::read_to_string(f).unwrap();
+            // A Windows checkout (CI) may have CRLF line endings.
+            let src = std::fs::read_to_string(f).unwrap().replace("\r\n", "\n");
             let lits = literals(&src);
             for (k, (line, text, pair)) in lits.iter().enumerate() {
                 // The English half of a pair is the literal right after one.
@@ -180,6 +181,14 @@ mod tests {
             "texts outside tr!/trf!:\n{}",
             loose.join("\n")
         );
+    }
+
+    #[test]
+    fn crlf_sources_skip_the_test_module_too() {
+        let src =
+            "let a = 1;\r\n#[cfg(test)]\r\nmod tests {\r\n    let b = \"relatório\";\r\n}\r\n"
+                .replace("\r\n", "\n");
+        assert!(literals(&src).is_empty());
     }
 
     #[test]
