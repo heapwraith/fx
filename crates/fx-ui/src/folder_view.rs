@@ -1203,7 +1203,7 @@ impl FolderView {
     /// the daily check at startup, which only speaks when one is ready.
     pub fn check_updates(&mut self, quiet: bool, cx: &mut Context<Self>) {
         let work = cx.background_executor().spawn(async move {
-            if let Some((v, _)) = crate::update::ready() {
+            if let Some((v, _, _)) = crate::update::ready() {
                 return Ok(Some(v));
             }
             if quiet && !crate::update::due() {

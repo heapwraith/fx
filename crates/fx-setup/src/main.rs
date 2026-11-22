@@ -52,12 +52,23 @@ fn main() -> ExitCode {
         _ => !fx_shell::system_language_is_portuguese(),
     });
     let flag = |f: &str| args.iter().any(|a| a == f);
-    if let [cmd, stub, bins, docs, out] = args.as_slice()
+    let value_of = |f: &str| {
+        args.iter()
+            .position(|a| a == f)
+            .and_then(|i| args.get(i + 1))
+    };
+    if let [cmd, stub, bins, docs, out, rest @ ..] = args.as_slice()
         && cmd == "--pack"
     {
-        // FX_PACK_VERSION: a different version, for the update tests (T4.4).
-        let version = std::env::var("FX_PACK_VERSION")
-            .unwrap_or_else(|_| transaction::display_version(VERSION));
+        // `--version <v>`: a different version, for the update tests (T4.4).
+        let version = match rest {
+            [] => transaction::display_version(VERSION),
+            [opt, v] if opt == "--version" => v.clone(),
+            _ => {
+                eprintln!("fx-setup --pack <programa> <binários> <raiz> <saída> [--version <v>]");
+                return ExitCode::FAILURE;
+            }
+        };
         return match pack::pack_dirs(
             Path::new(stub),
             Path::new(bins),
@@ -72,7 +83,7 @@ fn main() -> ExitCode {
             }
         };
     }
-    let Some(target) = Target::user() else {
+    let Some(target) = Target::user(value_of("--test-root").map(Path::new)) else {
         return ExitCode::FAILURE;
     };
     if flag("--uninstall") {
@@ -112,11 +123,7 @@ fn main() -> ExitCode {
     if flag("--silent") {
         // The update helper (T4.4): wait for fx to close, replace the files,
         // and open the new fx again if this was a restart.
-        let wait = args
-            .iter()
-            .position(|a| a == "--wait")
-            .and_then(|i| args.get(i + 1))
-            .and_then(|p| p.parse::<u32>().ok());
+        let wait = value_of("--wait").and_then(|p| p.parse::<u32>().ok());
         if let Some(pid) = wait {
             fx_shell::install::wait_for_exit(pid, Duration::from_secs(60));
         }

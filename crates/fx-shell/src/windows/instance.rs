@@ -2,9 +2,11 @@
 //! named pipe; later ones send it the folder to open and exit, so a new window
 //! costs ~25 ms instead of a new process (~400 ms).
 //!
-//! Pipe: `\\.\pipe\fx-instance-<session id>`, one instance, message mode,
-//! local clients only, default security (only the creating user, SYSTEM and
-//! administrators can write to it). Message: the absolute path in UTF-16 LE.
+//! Pipe: `\\.\pipe\fx-instance-<session id>-<user SID>`, one instance,
+//! message mode, local clients only, usable only by this user (explicit DACL).
+//! The second process checks the pipe's server runs as the same user before
+//! handing it a folder, so another user's process that took the name first
+//! gets nothing (review, D-066). Message: the absolute path in UTF-16 LE.
 
 use std::ffi::OsString;
 use std::io;
@@ -29,6 +31,7 @@ use windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow;
 use windows::core::PCWSTR;
 
 use super::to_io;
+use super::user::{Descriptor, current_user_sid, process_user_sid};
 
 /// Longest path Windows accepts (32,767 UTF-16 units), in bytes.
 const MAX_MESSAGE: usize = 32_767 * 2;
@@ -54,7 +57,8 @@ fn pipe_name() -> io::Result<Vec<u16>> {
     let mut session = 0u32;
     // SAFETY: `session` is a valid, writable u32 on this stack frame.
     unsafe { ProcessIdToSessionId(std::process::id(), &mut session) }.map_err(to_io)?;
-    Ok(wide_z(&format!(r"\\.\pipe\fx-instance-{session}")))
+    let sid = current_user_sid()?;
+    Ok(wide_z(&format!(r"\\.\pipe\fx-instance-{session}-{sid}")))
 }
 
 fn wide_z(s: &str) -> Vec<u16> {
@@ -101,8 +105,11 @@ impl Drop for Pipe {
 /// Creates the pipe; fails with `ERROR_ACCESS_DENIED` or `ERROR_PIPE_BUSY` if
 /// it already exists.
 fn create_first(name: &[u16]) -> io::Result<Pipe> {
-    // SAFETY: `name` is a NUL-terminated UTF-16 string that outlives the call;
-    // no security attributes (default DACL).
+    // Only this user, nothing inherited.
+    let descriptor = Descriptor::from_sddl(&format!("D:P(A;;GA;;;{})", current_user_sid()?))?;
+    let attributes = descriptor.attributes();
+    // SAFETY: `name` is a NUL-terminated UTF-16 string and `attributes` (with
+    // the descriptor it points at) outlives the call.
     let h = unsafe {
         CreateNamedPipeW(
             PCWSTR(name.as_ptr()),
@@ -112,7 +119,7 @@ fn create_first(name: &[u16]) -> io::Result<Pipe> {
             0,
             MAX_MESSAGE as u32,
             0,
-            None,
+            Some(&attributes),
         )
     };
     if h.is_invalid() {
@@ -155,11 +162,17 @@ fn send(name: &[u16], folder: &Path) -> io::Result<()> {
     let pipe = connect(name)?;
     let mut server = 0u32;
     // SAFETY: `pipe.0` is a valid pipe handle and `server` a writable u32.
-    if unsafe { GetNamedPipeServerProcessId(pipe.0, &mut server) }.is_ok() {
-        // SAFETY: plain call with a process id; failure only means the new
-        // window may open behind the current one.
-        let _ = unsafe { AllowSetForegroundWindow(server) };
+    unsafe { GetNamedPipeServerProcessId(pipe.0, &mut server) }.map_err(to_io)?;
+    // Only an fx of this same user gets the folder.
+    if process_user_sid(server)? != current_user_sid()? {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "the instance pipe belongs to another user",
+        ));
     }
+    // SAFETY: plain call with a process id; failure only means the new
+    // window may open behind the current one.
+    let _ = unsafe { AllowSetForegroundWindow(server) };
     let mut written = 0u32;
     // SAFETY: `message` and `written` outlive the synchronous call.
     unsafe { WriteFile(pipe.0, Some(&message), Some(&mut written), None) }.map_err(to_io)?;

@@ -158,6 +158,23 @@ fn decode_hex(hex: &str) -> Option<[u8; 32]> {
     Some(out)
 }
 
+/// The note left next to a downloaded installer: version, file name and its
+/// SHA-256, checked again right before it runs (review, D-066).
+pub fn ready_note(version: &Version, setup_name: &str, hash: &[u8; 32]) -> String {
+    let hex: String = hash.iter().map(|b| format!("{b:02x}")).collect();
+    format!("{version}\n{setup_name}\n{hex}\n")
+}
+
+/// Reads [`ready_note`]; `None` for anything else (an old two-line note, a
+/// damaged one, a name with folders).
+pub fn parse_ready_note(text: &str) -> Option<(Version, String, [u8; 32])> {
+    let mut lines = text.lines();
+    let version = Version::parse(lines.next()?)?;
+    let name = lines.next()?.trim().to_owned();
+    let hash = decode_hex(lines.next()?.trim())?;
+    crate::package::is_plain_name(&name).then_some((version, name, hash))
+}
+
 /// Whether a downloaded file is the published one.
 pub fn verify(sums: &str, file: &str, actual: &[u8; 32]) -> bool {
     expected_hash(sums, file).is_some_and(|e| &e == actual)
@@ -365,6 +382,29 @@ pub mod json {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn ready_note_round_trips_and_rejects_the_rest() {
+        let v = super::Version::parse("1.2.3").unwrap();
+        let hash = [0xabu8; 32];
+        let note = super::ready_note(&v, "fx-1.2.3-setup-x64.exe", &hash);
+        assert_eq!(
+            super::parse_ready_note(&note),
+            Some((v.clone(), "fx-1.2.3-setup-x64.exe".to_owned(), hash))
+        );
+        assert_eq!(
+            super::parse_ready_note("1.2.3\nfx-setup.exe\n"),
+            None,
+            "old note, no hash"
+        );
+        let folder = super::ready_note(&v, r"..\x.exe", &hash);
+        assert_eq!(
+            super::parse_ready_note(&folder),
+            None,
+            "folders are refused"
+        );
+        assert_eq!(super::parse_ready_note("1.2.3\nfx.exe\nzz\n"), None);
+    }
+
     use super::*;
 
     fn v(s: &str) -> Version {

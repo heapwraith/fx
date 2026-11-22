@@ -5,17 +5,24 @@
 //! one user who installed the service. The server creates it with
 //! `FILE_FLAG_FIRST_PIPE_INSTANCE`, so it refuses to start if someone else
 //! already took the name. One request per connection: read it, answer, hang
-//! up.
+//! up. Each client gets its own pipe instance and thread (up to
+//! `MAX_CLIENTS`), so a client that connects and stalls blocks only itself
+//! (review, D-066). The user may read and write but not create instances
+//! (`FILE_APPEND_DATA` is `FILE_CREATE_PIPE_INSTANCE` on a pipe), so not even
+//! the user can stand in for the server.
 
 use std::ffi::c_void;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::mem::ManuallyDrop;
 use std::os::windows::io::FromRawHandle;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use windows::Win32::Foundation::{
-    CloseHandle, ERROR_PIPE_CONNECTED, HANDLE, HLOCAL, INVALID_HANDLE_VALUE, LocalFree,
+    CloseHandle, ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED, HANDLE, HLOCAL, INVALID_HANDLE_VALUE,
+    LocalFree,
 };
 use windows::Win32::Security::Authorization::{
     ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
@@ -36,11 +43,25 @@ use crate::protocol::{Request, Response};
 pub const PIPE_NAME: &str = r"\\.\pipe\fx-indexd";
 const BUFFER: u32 = 64 * 1024;
 
-/// SDDL of the pipe: full access for SYSTEM, read and write for `user_sid`,
-/// nobody else (protected: nothing inherited).
+/// Most clients served at once.
+const MAX_CLIENTS: u32 = 8;
+
+/// What the client may do: `FILE_GENERIC_READ | FILE_WRITE_DATA` (no
+/// `FILE_APPEND_DATA`, which on a pipe means "create a server instance").
+const CLIENT_ACCESS: u32 = 0x0012_0089 | 0x0002;
+
+/// SDDL of the pipe: full access for SYSTEM and for the pipe's owner (whoever
+/// created it: SYSTEM for the service, the elevated administrator for
+/// `fx-indexd run`; the creator needs it, since creating checks the access it
+/// asks for); for `user_sid`, read and write data (`CLIENT_ACCESS` plus
+/// attributes), never create instances; nobody else (protected: nothing
+/// inherited).
 pub fn pipe_sddl(user_sid: &str) -> String {
-    format!("D:P(A;;GA;;;SY)(A;;GRGW;;;{user_sid})")
+    format!("D:P(A;;GA;;;SY)(A;;GA;;;OW)(A;;0x12019b;;;{user_sid})")
 }
+
+/// Answers each request; called from one thread per client.
+pub type Handler = Arc<dyn Fn(Request) -> Response + Send + Sync>;
 
 /// A security descriptor built from SDDL, freed on drop.
 struct Descriptor(PSECURITY_DESCRIPTOR);
@@ -74,6 +95,10 @@ impl Drop for Descriptor {
 /// An owned pipe handle.
 struct Pipe(HANDLE);
 
+// SAFETY: a kernel handle is valid in the whole process; each `Pipe` is used
+// by one thread at a time (moved into its client's thread).
+unsafe impl Send for Pipe {}
+
 impl Drop for Pipe {
     fn drop(&mut self) {
         // SAFETY: we own the handle and close it once.
@@ -83,64 +108,87 @@ impl Drop for Pipe {
 
 /// Serves requests until `stop` is set (then call [`wake`] to unblock the
 /// wait for the next client). `handler` answers each request.
-pub fn serve(
-    sddl: &str,
-    stop: &AtomicBool,
-    handler: &dyn Fn(Request) -> Response,
-) -> io::Result<()> {
+pub fn serve(sddl: &str, stop: &AtomicBool, handler: Handler) -> io::Result<()> {
     serve_on(PIPE_NAME, sddl, stop, handler)
 }
 
-fn serve_on(
-    name: &str,
-    sddl: &str,
-    stop: &AtomicBool,
-    handler: &dyn Fn(Request) -> Response,
-) -> io::Result<()> {
+fn serve_on(name: &str, sddl: &str, stop: &AtomicBool, handler: Handler) -> io::Result<()> {
     let descriptor = Descriptor::from_sddl(sddl)?;
     let attributes = SECURITY_ATTRIBUTES {
         nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
         lpSecurityDescriptor: descriptor.0.0.cast::<c_void>(),
         bInheritHandle: false.into(),
     };
-    // SAFETY: the name is NUL-terminated (HSTRING) and `attributes` (with its
-    // descriptor) outlives the call.
-    let handle = unsafe {
-        CreateNamedPipeW(
-            &HSTRING::from(name),
-            FILE_FLAGS_AND_ATTRIBUTES(PIPE_ACCESS_DUPLEX.0 | FILE_FLAG_FIRST_PIPE_INSTANCE.0),
-            PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
-            1,
-            BUFFER,
-            BUFFER,
-            0,
-            Some(&attributes),
-        )
-    };
-    if handle == INVALID_HANDLE_VALUE {
-        return Err(io::Error::last_os_error());
-    }
-    let pipe = Pipe(handle);
+    // The first instance claims the name (fails if anyone else has it).
+    let mut next = Some(create_instance(name, &attributes, true)?);
     while !stop.load(Ordering::SeqCst) {
+        let pipe = match next.take() {
+            Some(pipe) => pipe,
+            None => match create_instance(name, &attributes, false) {
+                Ok(pipe) => pipe,
+                // Every instance is busy with a client: wait for one to end.
+                Err(e) if e.raw_os_error() == Some(ERROR_PIPE_BUSY.0 as i32) => {
+                    std::thread::sleep(Duration::from_millis(10));
+                    continue;
+                }
+                Err(e) => return Err(e),
+            },
+        };
         // SAFETY: `pipe.0` is a valid pipe handle owned by `pipe`.
         let connected = match unsafe { ConnectNamedPipe(pipe.0, None) } {
             Ok(()) => true,
             Err(e) => e.code() == ERROR_PIPE_CONNECTED.to_hresult(),
         };
-        if connected && !stop.load(Ordering::SeqCst) {
-            // Reads and writes through std, without closing the handle.
-            // SAFETY: the handle stays valid while `stream` lives; ManuallyDrop
-            // keeps File from closing it.
-            let mut stream = ManuallyDrop::new(unsafe { File::from_raw_handle(pipe.0.0) });
-            let _ = answer(&mut *stream, handler);
-            // SAFETY: valid handle; flush lets the client read everything
-            // before the disconnect.
-            let _ = unsafe { FlushFileBuffers(pipe.0) };
+        if !connected || stop.load(Ordering::SeqCst) {
+            continue; // dropping `pipe` closes this instance
         }
-        // SAFETY: valid handle; ends this client's connection.
-        let _ = unsafe { DisconnectNamedPipe(pipe.0) };
+        let handler = handler.clone();
+        // If the thread cannot start, the closure (and the pipe) is dropped:
+        // that client sees the pipe close and can ask again.
+        let _ = std::thread::Builder::new()
+            .name("fx-indexd-client".into())
+            .spawn(move || serve_client(&pipe, &*handler));
     }
     Ok(())
+}
+
+fn create_instance(name: &str, attributes: &SECURITY_ATTRIBUTES, first: bool) -> io::Result<Pipe> {
+    let mut mode = PIPE_ACCESS_DUPLEX.0;
+    if first {
+        mode |= FILE_FLAG_FIRST_PIPE_INSTANCE.0;
+    }
+    // SAFETY: the name is NUL-terminated (HSTRING) and `attributes` (with its
+    // descriptor) outlives the call.
+    let handle = unsafe {
+        CreateNamedPipeW(
+            &HSTRING::from(name),
+            FILE_FLAGS_AND_ATTRIBUTES(mode),
+            PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
+            MAX_CLIENTS,
+            BUFFER,
+            BUFFER,
+            0,
+            Some(attributes),
+        )
+    };
+    if handle == INVALID_HANDLE_VALUE {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(Pipe(handle))
+}
+
+/// One client on its own thread: read the request, answer, hang up.
+fn serve_client(pipe: &Pipe, handler: &(dyn Fn(Request) -> Response + Send + Sync)) {
+    // Reads and writes through std, without closing the handle.
+    // SAFETY: the handle stays valid while `stream` lives; ManuallyDrop keeps
+    // File from closing it.
+    let mut stream = ManuallyDrop::new(unsafe { File::from_raw_handle(pipe.0.0) });
+    let _ = answer(&mut *stream, handler);
+    // SAFETY: valid handle; flush lets the client read everything before the
+    // disconnect.
+    let _ = unsafe { FlushFileBuffers(pipe.0) };
+    // SAFETY: valid handle; ends this client's connection.
+    let _ = unsafe { DisconnectNamedPipe(pipe.0) };
 }
 
 fn answer(
@@ -157,10 +205,7 @@ pub fn wake() {
 }
 
 fn wake_on(name: &str) {
-    let _ = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(name);
+    let _ = open(name);
 }
 
 /// Sends `request` to the service and waits for the answer. Fails quickly
@@ -190,8 +235,7 @@ fn open(name: &str) -> io::Result<File> {
     // be fx-indexd cannot act as this user, only learn who it is.
     const SQOS: u32 = 0x0010_0000 | (1 << 16);
     std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
+        .access_mode(CLIENT_ACCESS)
         .security_qos_flags(SQOS)
         .open(name)
 }
@@ -200,7 +244,6 @@ fn open(name: &str) -> io::Result<File> {
 mod tests {
     use super::*;
     use crate::protocol::{RemoteHit, Status};
-    use std::sync::Arc;
 
     /// A real pipe in this process, with the ACL the service uses (this user).
     #[test]
@@ -211,7 +254,7 @@ mod tests {
         let server = {
             let (name, stop) = (name.clone(), stop.clone());
             std::thread::spawn(move || {
-                serve_on(&name, &pipe_sddl(&sid), &stop, &|r: Request| Response {
+                let handler: Handler = Arc::new(|r: Request| Response {
                     status: Status::Ready,
                     items: 42,
                     index_bytes: 0,
@@ -221,7 +264,8 @@ mod tests {
                         size: u64::from(r.limit),
                         modified: 0,
                     }],
-                })
+                });
+                serve_on(&name, &pipe_sddl(&sid), &stop, handler)
             })
         };
         let ask = |q: &str| {
@@ -248,11 +292,15 @@ mod tests {
             assert_eq!(r.hits[0].size, 3);
         }
         // A second server on the same name is refused (no squatting).
+        // A client that connects and never writes does not block the others.
+        let _stalled = open(&name).unwrap();
+        let r = ask("depois");
+        assert_eq!(String::from_utf16_lossy(&r.hits[0].path), r"C:\depois");
         let again = serve_on(
             &name,
             &pipe_sddl("S-1-5-18"),
             &AtomicBool::new(true),
-            &|_| unreachable!(),
+            Arc::new(|_: Request| -> Response { unreachable!() }),
         );
         assert!(again.is_err());
         stop.store(true, Ordering::SeqCst);
@@ -278,7 +326,7 @@ mod tests {
     fn the_acl_names_only_system_and_the_user() {
         assert_eq!(
             pipe_sddl("S-1-5-21-1-2-3-1001"),
-            "D:P(A;;GA;;;SY)(A;;GRGW;;;S-1-5-21-1-2-3-1001)"
+            "D:P(A;;GA;;;SY)(A;;GA;;;OW)(A;;0x12019b;;;S-1-5-21-1-2-3-1001)"
         );
         assert!(Descriptor::from_sddl(&pipe_sddl("S-1-5-21-1-2-3-1001")).is_ok());
     }

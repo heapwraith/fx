@@ -119,36 +119,43 @@ pub fn prepare(update: &Update) -> io::Result<()> {
     std::fs::create_dir_all(&dir)?;
     let path = dir.join(&update.setup_name);
     std::fs::write(&path, &setup)?;
-    // A signed fx only installs a signed installer.
-    let signed_now = std::env::current_exe()
-        .map(|exe| fx_shell::net::is_signed(&exe))
-        .unwrap_or(false);
-    if signed_now && !fx_shell::net::is_signed(&path) {
+    // A signed fx only installs an installer signed by the same publisher
+    // (any valid certificate is not enough), not revoked: checked now, online.
+    if let Some(publisher) = own_publisher()
+        && fx_shell::net::signer(&path, true).as_deref() != Some(publisher.as_str())
+    {
         let _ = std::fs::remove_file(&path);
         return Err(io::Error::other(fx_core::tr!(
-            "o instalador baixado não está assinado",
-            "the downloaded installer is not signed"
+            "o instalador baixado não foi assinado pelo editor do fx",
+            "the downloaded installer was not signed by fx's publisher"
         )));
     }
     std::fs::write(
         dir.join(READY),
-        format!("{}\n{}\n", update.version, update.setup_name),
+        fx_core::update::ready_note(&update.version, &update.setup_name, &hash),
     )
+}
+
+/// Who signed the running fx (`None` while builds are unsigned).
+fn own_publisher() -> Option<String> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| fx_shell::net::signer(&exe, false))
 }
 
 /// The version ready to apply and its installer. A leftover from an update
 /// already applied (or a damaged note) is cleaned up.
-pub fn ready() -> Option<(Version, PathBuf)> {
+pub fn ready() -> Option<(Version, PathBuf, [u8; 32])> {
     let dir = update_dir()?;
     let note = std::fs::read_to_string(dir.join(READY)).ok();
-    let parsed = note.as_deref().and_then(|text| {
-        let mut lines = text.lines();
-        let version = Version::parse(lines.next()?)?;
-        let name = lines.next()?.trim().to_owned();
-        fx_core::package::is_plain_name(&name).then(|| (version, dir.join(name)))
-    });
+    let parsed = note
+        .as_deref()
+        .and_then(fx_core::update::parse_ready_note)
+        .map(|(v, name, hash)| (v, dir.join(name), hash));
     match parsed {
-        Some((v, path)) if current().is_some_and(|c| v > c) && path.exists() => Some((v, path)),
+        Some((v, path, hash)) if current().is_some_and(|c| v > c) && path.exists() => {
+            Some((v, path, hash))
+        }
         _ => {
             // Nothing (valid) to apply: an old installer or note goes.
             if dir.exists() {
@@ -164,7 +171,21 @@ pub fn ready() -> Option<(Version, PathBuf)> {
 /// `relaunch`, opens fx again. Returns whether it started. Called when fx
 /// quits (and by "Reiniciar para atualizar").
 pub fn apply(relaunch: bool) -> bool {
-    let Some((_, setup)) = ready() else {
+    // Never from an elevated fx: any program of this user can write to the
+    // update folder, so it would run elevated whatever was put there (review,
+    // D-066). It stays ready for the next time fx closes normally.
+    if fx_shell::is_elevated() {
+        return false;
+    }
+    let Some((_, setup, hash)) = ready() else {
+        return false;
+    };
+    // The installer must still be the one checked when it was downloaded. The
+    // handle keeps it from changing until it has started.
+    let Some(_locked) = checked(&setup, &hash) else {
+        if let Some(dir) = update_dir() {
+            let _ = std::fs::remove_dir_all(&dir);
+        }
         return false;
     };
     let pid = std::process::id().to_string();
@@ -179,6 +200,19 @@ pub fn apply(relaunch: bool) -> bool {
         let _ = std::fs::remove_file(dir.join(READY));
     }
     started
+}
+
+/// Opens the installer locked against changes and checks it is the one
+/// downloaded: same SHA-256 and, for a signed fx, the same publisher.
+fn checked(setup: &std::path::Path, hash: &[u8; 32]) -> Option<std::fs::File> {
+    let (file, bytes) = fx_shell::net::read_locked(setup, MAX_SETUP).ok()?;
+    if fx_shell::net::sha256(&bytes).ok().as_ref() != Some(hash) {
+        return None;
+    }
+    let same_publisher = own_publisher().is_none_or(|publisher| {
+        fx_shell::net::signer(setup, false).as_deref() == Some(publisher.as_str())
+    });
+    same_publisher.then_some(file)
 }
 
 /// Whether to download updates by themselves (`verificar_atualizacoes`).

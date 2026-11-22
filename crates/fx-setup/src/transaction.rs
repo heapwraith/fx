@@ -35,9 +35,12 @@ pub struct Target {
 }
 
 impl Target {
-    pub fn user() -> Option<Target> {
-        // End-to-end tests: everything under one folder and a test key.
-        if let Some(root) = std::env::var_os("FX_SETUP_TEST_ROOT").map(PathBuf::from) {
+    /// Where fx goes for this user. `test_root` (`--test-root <pasta>`, for
+    /// end-to-end tests) puts everything under one folder and a test key; it
+    /// is an explicit option, never read from the environment, so nothing
+    /// inherited can redirect a real install (review, D-066).
+    pub fn user(test_root: Option<&Path>) -> Option<Target> {
+        if let Some(root) = test_root {
             return Some(Target {
                 dir: root.join("Programs").join("fx"),
                 start_menu: Some(root.join("Start Menu").join("fx.lnk")),

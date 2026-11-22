@@ -74,6 +74,9 @@ features = [
     "Win32_System_Services",
     "Win32_Security_Authorization",
     "Win32_Security_Cryptography",
+    # Publisher of a signed installer (WTHelper*, D-066).
+    "Win32_Security_Cryptography_Catalog",
+    "Win32_Security_Cryptography_Sip",
     "Win32_Security_WinTrust",
     "Win32_UI_Accessibility",
     "Win32_UI_Shell",

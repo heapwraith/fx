@@ -49,9 +49,9 @@ jobs:
           & "$rel\fx-setup.exe" --pack "$rel\fx-setup.exe" $rel $PWD "$PWD\dist\fx-$v-setup-x64.exe" | Out-Host
           if (-not (Test-Path "dist\fx-$v-setup-x64.exe")) { throw "fx-setup --pack failed" }
           # The package must install and uninstall cleanly (test folder and key).
-          $env:FX_SETUP_TEST_ROOT = "$env:RUNNER_TEMP\fx-setup-ci"
-          Start-Process -Wait -FilePath "dist\fx-$v-setup-x64.exe" -ArgumentList "--silent"
-          if (-not (Test-Path "$env:FX_SETUP_TEST_ROOT\Programs\fx\fx.exe")) { throw "silent install failed" }
+          $root = "$env:RUNNER_TEMP\fx-setup-ci"
+          Start-Process -Wait -FilePath "dist\fx-$v-setup-x64.exe" -ArgumentList "--silent","--test-root",$root
+          if (-not (Test-Path "$root\Programs\fx\fx.exe")) { throw "silent install failed" }
           Get-ChildItem dist
       - uses: actions/upload-artifact@v4
         with:

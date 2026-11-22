@@ -143,8 +143,9 @@ fn main() {
     crash::set_notice(crashed);
     // "Como usar o fx" opens by itself the first time (T4.6).
     tabs_view::guide_first_run(persist && !settings.guia_visto);
-    // Test hook for the crash report (T3.10).
-    if std::env::var_os("FX_TEST_PANIC").is_some_and(|v| v == "1") {
+    // Test hook for the crash report (T3.10): debug builds only, so a stray
+    // variable can never crash a released fx (review, D-066).
+    if cfg!(debug_assertions) && std::env::var_os("FX_TEST_PANIC").is_some_and(|v| v == "1") {
         panic!("crash report test at C:\\Users\\example\\x.txt");
     }
     let session = (persist && arg.is_none() && settings.restaurar_sessao)

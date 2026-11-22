@@ -237,7 +237,7 @@ pub fn serve(user_sid: &str, stop: &'static AtomicBool) {
         .name("fx-indexd-watch".into())
         .spawn(move || builder.build_and_watch(stop, false));
     let sddl = fx_index::pipe::pipe_sddl(user_sid);
-    let _ = fx_index::pipe::serve(&sddl, stop, &|r| engine.answer(&r));
+    let _ = fx_index::pipe::serve(&sddl, stop, Arc::new(move |r| engine.answer(&r)));
 }
 
 /// `fx-indexd run`: the same in the foreground, printing what it read.
@@ -250,7 +250,7 @@ pub fn run_foreground(user_sid: &str) -> std::io::Result<()> {
         .spawn(move || builder.build_and_watch(&STOP, true))?;
     println!("servindo em {} (Ctrl+C sai)", fx_index::pipe::PIPE_NAME);
     let sddl = fx_index::pipe::pipe_sddl(user_sid);
-    fx_index::pipe::serve(&sddl, &STOP, &|r| engine.answer(&r))
+    fx_index::pipe::serve(&sddl, &STOP, Arc::new(move |r| engine.answer(&r)))
 }
 
 #[cfg(test)]

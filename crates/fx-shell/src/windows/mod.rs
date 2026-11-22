@@ -20,6 +20,7 @@ mod registry;
 mod sheets;
 mod thumbs;
 mod time;
+mod user;
 
 pub use a11y::{A11y, LatestTree};
 pub use clipboard::{clear_clipboard, clipboard_files, set_clipboard_files};
