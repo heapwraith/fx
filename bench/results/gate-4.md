@@ -34,6 +34,7 @@ A mesma das fases anteriores: AMD Ryzen 7 5700X, 32 GB, RTX 5070, monitor 1920×
 | P3 ordenar 100 mil | por nome 38,5 ms (p95 40,6); filtro por tecla 0,87 ms | ≤ 50 / ≤ 5 ms | 39,4 | ✅ |
 | P4 tecla → quadro | paleta p95 3,37; setas 3,38; busca 3,51; abas 4,38 ms | ≤ 16 ms | ≤ 3,95 | ✅ |
 | P5 busca | índice sintético de 2 milhões: p95 7,22 ms | ≤ 50 ms | 7,84 | ✅ |
+| P6 construir o índice | não refeito; Fase 2: 744 mil em 7,5 s, ~20 s projetados para 2 milhões | ≤ 10 s | — | ❌ (corrigido em D-064) |
 | P7 rolagem | 1 perdido em 4.001 quadros (0,02%) | ≤ 0,5% | 0 | ✅ |
 | P8 memória parado | medianas 87,9 / 87,3 / 87,7 / 88,1 (antes do ajuste); 87,8 / 87,2 / 87,2 depois | ≤ 88 MB | 86,9 | ⚠ no limite |
 | P9 índice por milhão | 71,4 MB (sintético) | ≤ 150 MB | 71,4 | ✅ |
