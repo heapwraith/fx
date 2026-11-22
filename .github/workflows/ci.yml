@@ -85,6 +85,6 @@ jobs:
         shell: pwsh
         run: |
           $v = "${{ steps.version.outputs.version }}"
-          $args = @("${{ github.ref_name }}", "fx-$v-windows-x64.zip", "--draft", "--title", "fx $v", "--notes-file", "notes.md")
-          if ($v.StartsWith('0.')) { $args += "--prerelease" }  # pre-1.0
-          gh release create @args
+          $ghArgs = @("${{ github.ref_name }}", "fx-$v-windows-x64.zip", "--draft", "--title", "fx $v", "--notes-file", "notes.md")
+          if ($v.StartsWith('0.')) { $ghArgs += "--prerelease" }  # pre-1.0
+          gh release create @ghArgs

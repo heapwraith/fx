@@ -27,7 +27,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 - Captura da barra de tarefas, do Alt+Tab e das Propriedades do `fx.exe` mostrando ícone e versão; build no WSL (`cargo xwin`) e no CI.
 
 ## T2.2 — Pipeline no GitHub (CI e executável)
-- [ ] Concluída em: ____ · Resumo:
+- [ ] Concluída em: ____ · Resumo: implementada em 2026-11-21 (D-037): `.github/workflows/ci.yml` em `windows-latest` (fmt, clippy `-D warnings`, testes, build release, `fx.exe` como artefato); primeiro push verde em 17 min sem cache, todos os testes passam no runner; o `fx.exe` baixado do CI tem versão `0.1.0+bbe1e2f` e abre. Versão 0.1.0 com commit no exe, "Sobre o fx" na paleta, `CHANGELOG.md`. **Falta:** a tag `v0.1.0` gerar o release em rascunho com o zip (precisa da autorização do usuário para criar a tag).
 
 **Fazer**
 - GitHub Actions em `windows-latest`: `cargo fmt --check`, clippy com `-D warnings`, `cargo test --workspace`, build release, a cada push e PR.

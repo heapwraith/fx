@@ -262,3 +262,10 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Recursos:** `crates/fx-ui/build.rs` gera um `.rc` (UTF-8) com o ícone de id 1 e o VERSIONINFO (descrição, versão do `Cargo.toml`, licença, idioma pt-BR) e o compila com `embed-resource`. O GPUI já carrega o ícone de id 1 do executável para a classe da janela (barra de título, barra de tarefas, Alt+Tab) e já embute o manifesto (DPI por monitor, Common Controls 6), então não há conflito.
 - **Dependência:** `embed-resource = "=3.0.12"` como dependência de build do `fx-ui`. Não é crate novo: é a mesma versão que o `build.rs` do GPUI já usa (estava no `Cargo.lock`). Usa o `llvm-rc` no WSL e o `rc.exe` do Windows SDK no CI.
 
+## D-037 — Pipeline no GitHub e versionamento (T2.2)
+- **Data:** 2026-11-21 · **Status:** aceita
+- **CI:** `.github/workflows/ci.yml`, em `windows-latest`, compila nativo com MSVC (aqui no WSL continua o `cargo xwin`, D-010). A cada push no `main` e a cada PR: `cargo fmt --check`, clippy com `-D warnings`, `cargo test --workspace` (com `FX_NO_STATE=1`) e build release; o `fx.exe` fica como artefato por 14 dias. Cache com `Swatinem/rust-cache`; toolchain do `rust-toolchain.toml`. Primeira execução: 17 min (os testes do `fx-index` levam ~170 s em debug no runner).
+- **Versão:** semver; enquanto 0.x, cada fase sobe o número do meio (Fase 1 = 0.1.0, beta da Fase 2 = 0.2.0-beta). Uma versão só, a do `[workspace.package]`. O `build.rs` do `fx-ui` grava `versão+commit` (com `-dirty` se houver alteração local) no VERSIONINFO (`ProductVersion`) e em `crate::VERSION`, mostrado pelo comando "Sobre o fx (versão)" da paleta.
+- **Release:** a tag `vX.Y.Z` dispara o job `release`, que falha se a tag não bater com o `Cargo.toml` ou se o `CHANGELOG.md` não tiver a seção da versão; monta `fx-X.Y.Z-windows-x64.zip` (exe, licenças, README, CHANGELOG) e cria um release em **rascunho** (pré-lançamento enquanto 0.x) com as notas da seção. Publicar o rascunho é decisão do usuário.
+- **Pendente:** as actions `checkout@v4` e `upload-artifact@v4` usam Node 20, que o GitHub está aposentando (funciona com aviso); atualizar quando houver versões novas estáveis.
+
