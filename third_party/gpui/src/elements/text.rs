@@ -384,6 +384,11 @@ impl TextLayout {
                 }
 
                 let mut line_wrapper = cx.text_system().line_wrapper(text_style.font(), font_size);
+                // fx patch: truncation shortens the runs; work on a copy, since this
+                // closure runs again for another width (see the cache check above) and
+                // the original text with already shortened runs would be sliced inside
+                // a character (crash in DirectWrite's layout_line with "…").
+                let mut runs = runs.clone();
                 let text = if let Some(truncate_width) = truncate_width {
                     line_wrapper.truncate_line(
                         text.clone(),

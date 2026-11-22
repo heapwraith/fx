@@ -116,10 +116,10 @@ fn icon_rgba(icon: HICON) -> Option<(u32, u32, Vec<u8>)> {
     result
 }
 
-/// A bitmap's pixels as 32-bit top-down BGRA (at most 1024 px a side).
 /// Largest bitmap side read back (Quick Look asks the shell for up to 1920).
 const MAX_SIDE: i32 = 4096;
 
+/// A bitmap's pixels as 32-bit top-down BGRA (at most `MAX_SIDE` a side).
 pub(super) fn bitmap_bgra(bitmap: HBITMAP) -> Option<(u32, u32, Vec<u8>)> {
     let mut bm = BITMAP::default();
     // SAFETY: `bm` is a writable BITMAP and its size is passed.

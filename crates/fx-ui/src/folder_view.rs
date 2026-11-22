@@ -202,6 +202,10 @@ pub struct FolderView {
     resizing: Option<Resize>,
     /// The "Exibir" menu is open (T1.21).
     view_menu: bool,
+    /// Width of the breadcrumb area in the last frame (T2.3), and whether
+    /// the menu of the collapsed leading crumbs ("…") is open.
+    crumb_room: std::rc::Rc<std::cell::Cell<f32>>,
+    crumb_menu: bool,
     /// Quick Look (T1.22): the open preview, the ticket of the newest
     /// request, and images to free on the next frame.
     quick_look: Option<quick_look::QuickLook>,
@@ -373,6 +377,8 @@ impl FolderView {
             widths: Widths::default(),
             resizing: None,
             view_menu: false,
+            crumb_room: std::rc::Rc::default(),
+            crumb_menu: false,
             quick_look: None,
             quick_look_ticket: 0,
             stale_images: Vec::new(),
@@ -1319,6 +1325,7 @@ impl FolderView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.crumb_menu = false;
         self.history.current_mut().restore = self.snapshot();
         self.history.push(Visit {
             path: path.clone(),
@@ -1537,6 +1544,11 @@ impl FolderView {
         if ks.key == "f" && only_ctrl {
             self.close_quick_look();
             self.open_search(cx);
+            return;
+        }
+        if self.crumb_menu && ks.key == "escape" {
+            self.crumb_menu = false;
+            cx.notify();
             return;
         }
         if self.view_menu && ks.key == "escape" {
@@ -2042,7 +2054,7 @@ impl Render for FolderView {
                     view.go_forward(window, cx);
                 }),
             )
-            .child(self.render_path_bar(cx))
+            .child(self.render_path_bar(window, cx))
             .child(
                 div()
                     .flex_1()

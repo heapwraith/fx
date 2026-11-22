@@ -14,15 +14,21 @@ use std::sync::mpsc::channel;
 use fx_core::complete::{Candidates, split_typed};
 use fx_fs::Strategy;
 use gpui::{
-    ClickEvent, Context, Keystroke, MouseButton, MouseDownEvent, SharedString, Window, deferred,
-    div, prelude::*, px,
+    ClickEvent, Context, Keystroke, MouseButton, MouseDownEvent, SharedString, Window, canvas,
+    deferred, div, prelude::*, px,
 };
 
 use super::{FolderView, Restore};
+
 use crate::theme::{
-    CAPTION_SIZE, ICON_BACK, ICON_CHEVRON, ICON_FORWARD, ICON_GRID, ICON_LIST, ICON_SEARCH,
-    ICON_UP, ICON_VIEW, RADIUS, rgba, space,
+    BODY_SIZE, CAPTION_SIZE, ICON_BACK, ICON_CHEVRON, ICON_FOLDER, ICON_FORWARD, ICON_GRID,
+    ICON_LIST, ICON_SEARCH, ICON_UP, ICON_VIEW, RADIUS, rgba, space,
 };
+
+/// The button that stands for the folded leading crumbs.
+const MORE: &str = "…";
+/// Width of the chevron between crumbs.
+const CHEVRON_WIDTH: f32 = 14.0;
 
 /// Suggestions shown under the field.
 const MAX_SUGGESTIONS: usize = 8;
@@ -262,7 +268,11 @@ impl FolderView {
         .detach();
     }
 
-    pub(super) fn render_path_bar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    pub(super) fn render_path_bar(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
         let t = self.look.theme;
         let icon_font = self.look.icon_font;
         let button = |id: &'static str, glyph: &'static str, enabled: bool| {
@@ -280,6 +290,22 @@ impl FolderView {
                 .when(enabled, |d| d.hover(|s| s.bg(rgba(t.hover))))
                 .when(!enabled, |d| d.opacity(0.4))
         };
+        let status: SharedString = self.status_text(cx).into();
+        let filtering = !self.filter_text.is_empty();
+        let status_width = (text_width(
+            window,
+            &status,
+            gpui::FontWeight::NORMAL,
+            self.look.font,
+            BODY_SIZE,
+        ) + 2.0 * space(2)
+            + if filtering {
+                CAPTION_SIZE + space(1)
+            } else {
+                0.0
+            }
+            + 1.0)
+            .min(STATUS_MAX_WIDTH);
         let can_back = self.history.can_go_back();
         let can_forward = self.history.can_go_forward();
         let can_up = self.path.parent().is_some();
@@ -297,7 +323,7 @@ impl FolderView {
             .border_color(rgba(t.divider))
             .bg(rgba(t.layer));
         let bar = match &self.edit {
-            None => bar.child(self.render_crumbs(cx)),
+            None => bar.child(self.render_crumbs(window, cx)),
             Some(edit) => bar
                 .border_color(rgba(t.accent))
                 .px(px(space(2)))
@@ -364,14 +390,15 @@ impl FolderView {
                         view.toggle_view_menu(cx);
                     })),
             )
-            // Status and bar share the free width (the status up to its
-            // maximum, the bar takes the rest). A width from the flex layout,
-            // not from the text, is what lets GPUI truncate with an ellipsis.
+            // The status is as wide as its text (up to a maximum) and shrinks
+            // with an ellipsis when room runs out; the bar takes the rest. An
+            // explicit width, not one from the text, is what lets GPUI
+            // truncate with an ellipsis.
             .child(
                 div()
-                    .flex_1()
+                    .flex_shrink()
+                    .w(px(status_width))
                     .min_w_0()
-                    .max_w(px(STATUS_MAX_WIDTH))
                     .pl(px(space(2)))
                     .pr(px(space(2)))
                     .flex()
@@ -389,28 +416,77 @@ impl FolderView {
                                 .child(ICON_SEARCH),
                         )
                     })
-                    .child(div().min_w_0().truncate().child(self.status_text(cx))),
+                    .child(div().min_w_0().truncate().child(status)),
             )
     }
 
     /// Breadcrumbs: one button per folder from the root, then an empty area
-    /// that turns the bar into a text field.
-    fn render_crumbs(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    /// that turns the bar into a text field. When they do not fit, the
+    /// leading ones fold into a "…" button with a menu (T2.3), so no crumb is
+    /// ever cut in the middle and the current folder always shows.
+    fn render_crumbs(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
         let t = self.look.theme;
         let mut ancestors: Vec<&Path> = self.path.ancestors().collect();
         ancestors.reverse();
         let last = ancestors.len().saturating_sub(1);
-        // The crumbs sit in a box that clips from the *start* when they do not
-        // fit, so the current folder (the last crumb) always shows.
+        let labels: Vec<SharedString> = ancestors
+            .iter()
+            .map(|dir| {
+                dir.file_name()
+                    .map_or_else(
+                        || dir.display().to_string(),
+                        |n| n.to_string_lossy().into_owned(),
+                    )
+                    .into()
+            })
+            .collect();
+        // Widths from the text system (cached shaping), as the row lays them out.
+        let text_width = |text: &SharedString, weight: gpui::FontWeight, family: &'static str| {
+            text_width(window, text, weight, family, BODY_SIZE)
+        };
+        let widths: Vec<f32> = labels
+            .iter()
+            .enumerate()
+            .map(|(k, l)| {
+                let weight = if k == last {
+                    gpui::FontWeight::SEMIBOLD
+                } else {
+                    gpui::FontWeight::NORMAL
+                };
+                text_width(l, weight, self.look.font) + 2.0 * space(2)
+            })
+            .collect();
+        let more_width = text_width(&MORE.into(), gpui::FontWeight::NORMAL, self.look.font)
+            + 2.0 * space(2)
+            + CHEVRON_WIDTH;
+        let room = self.crumb_room.get() - 2.0 * space(1) - space(6);
+        let first = first_shown(&widths, CHEVRON_WIDTH, more_width, room);
+
         let mut row = div().flex_none().flex().items_center().px(px(space(1)));
-        for (k, dir) in ancestors.iter().enumerate() {
-            let label: SharedString = dir
-                .file_name()
-                .map_or_else(
-                    || dir.display().to_string(),
-                    |n| n.to_string_lossy().into_owned(),
+        if first > 0 {
+            row = row
+                .child(
+                    div()
+                        .id("crumb-more")
+                        .flex_none()
+                        .px(px(space(2)))
+                        .py(px(space(1)))
+                        .rounded(px(RADIUS))
+                        .hover(|s| s.bg(rgba(t.hover)))
+                        .when(self.crumb_menu, |d| d.bg(rgba(t.selected)))
+                        .child(MORE)
+                        .on_click(cx.listener(|view, _: &ClickEvent, _, cx| {
+                            view.crumb_menu = !view.crumb_menu;
+                            cx.notify();
+                        })),
                 )
-                .into();
+                .child(self.chevron());
+        }
+        for (k, dir) in ancestors.iter().enumerate().skip(first) {
             // Coming back up selects the folder we were in below this one.
             let child = ancestors
                 .get(k + 1)
@@ -426,7 +502,7 @@ impl FolderView {
                     .rounded(px(RADIUS))
                     .hover(|s| s.bg(rgba(t.hover)))
                     .when(k == last, |d| d.font_weight(gpui::FontWeight::SEMIBOLD))
-                    .child(label)
+                    .child(labels[k].clone())
                     .on_click(cx.listener(move |view, _: &ClickEvent, window, cx| {
                         if k == last {
                             return;
@@ -436,16 +512,11 @@ impl FolderView {
                     })),
             );
             if k < last {
-                row = row.child(
-                    div()
-                        .flex_none()
-                        .font_family(self.look.icon_font)
-                        .text_size(px(8.0))
-                        .text_color(rgba(t.text_secondary))
-                        .child(ICON_CHEVRON),
-                );
+                row = row.child(self.chevron());
             }
         }
+        // The crumbs still clip from the start as a safety net (first frame,
+        // before the width is known).
         let crumbs = div()
             .flex_shrink()
             .min_w_0()
@@ -455,11 +526,28 @@ impl FolderView {
             .justify_end()
             .overflow_hidden()
             .child(row);
+        let room_cell = self.crumb_room.clone();
         div()
+            .relative()
             .size_full()
             .min_w_0()
             .flex()
             .items_center()
+            // Measures the area the crumbs may use, for the next frame.
+            .child(
+                canvas(
+                    move |bounds, window, _| {
+                        let w = f32::from(bounds.size.width);
+                        if (room_cell.get() - w).abs() > 0.5 {
+                            room_cell.set(w);
+                            window.request_animation_frame();
+                        }
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .size_full(),
+            )
             .child(crumbs)
             .child(
                 div()
@@ -475,6 +563,90 @@ impl FolderView {
                         }),
                     ),
             )
+            .when(self.crumb_menu && first > 0, |d| {
+                d.child(deferred(self.render_crumb_menu(&ancestors[..first], cx)).with_priority(1))
+            })
+    }
+
+    fn chevron(&self) -> gpui::Div {
+        div()
+            .flex_none()
+            .w(px(CHEVRON_WIDTH))
+            .flex()
+            .justify_center()
+            .font_family(self.look.icon_font)
+            .text_size(px(8.0))
+            .text_color(rgba(self.look.theme.text_secondary))
+            .child(ICON_CHEVRON)
+    }
+
+    /// The folders folded into "…", from the root down; a click opens one.
+    fn render_crumb_menu(
+        &self,
+        hidden: &[&Path],
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        let t = self.look.theme;
+        let mut menu = div()
+            .id("crumb-menu")
+            .absolute()
+            .top(px(BAR_HEIGHT + 2.0))
+            .left_0()
+            .min_w(px(200.0))
+            .max_w(px(420.0))
+            .py(px(space(1)))
+            .rounded(px(RADIUS * 2.0))
+            .border_1()
+            .border_color(rgba(t.divider))
+            .bg(rgba(t.base))
+            .shadow_lg()
+            .on_mouse_down_out(cx.listener(|view, _: &MouseDownEvent, _, cx| {
+                view.crumb_menu = false;
+                cx.notify();
+            }));
+        for (k, dir) in hidden.iter().enumerate() {
+            let label: SharedString = dir
+                .file_name()
+                .map_or_else(
+                    || dir.display().to_string(),
+                    |n| n.to_string_lossy().into_owned(),
+                )
+                .into();
+            let target = dir.to_path_buf();
+            let child = hidden
+                .get(k + 1)
+                .copied()
+                .or_else(|| self.path.ancestors().find(|a| a.parent() == Some(dir)))
+                .and_then(|c| c.file_name())
+                .map(|n| n.to_os_string());
+            menu = menu.child(
+                div()
+                    .id(("crumb-menu-item", k))
+                    .w_full()
+                    .mx(px(space(1)))
+                    .px(px(space(2)))
+                    .py(px(space(1)))
+                    .flex()
+                    .items_center()
+                    .gap(px(space(2)))
+                    .rounded(px(RADIUS))
+                    .hover(|s| s.bg(rgba(t.hover)))
+                    .child(
+                        div()
+                            .flex_none()
+                            .font_family(self.look.icon_font)
+                            .text_size(px(CAPTION_SIZE))
+                            .text_color(rgba(t.text_secondary))
+                            .child(ICON_FOLDER),
+                    )
+                    .child(div().min_w_0().truncate().child(label))
+                    .on_click(cx.listener(move |view, _: &ClickEvent, window, cx| {
+                        let restore = child.clone().map(Restore::cursor_on);
+                        view.go_to(target.clone(), restore, window, cx);
+                    })),
+            );
+        }
+        menu
     }
 
     fn render_suggestions(
@@ -523,6 +695,56 @@ impl FolderView {
     }
 }
 
+/// Width of `text` in one line, as GPUI will lay it out (the shaping is
+/// cached by the text system, so calling it every frame is cheap).
+fn text_width(
+    window: &Window,
+    text: &SharedString,
+    weight: gpui::FontWeight,
+    family: &'static str,
+    size: f32,
+) -> f32 {
+    let run = gpui::TextRun {
+        len: text.len(),
+        font: gpui::Font {
+            weight,
+            ..gpui::font(family)
+        },
+        color: gpui::black(),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    let line = window
+        .text_system()
+        .shape_line(text.clone(), px(size), &[run], None);
+    f32::from(line.width)
+}
+
+/// The first crumb to show so that the crumbs from it to the last fit in
+/// `room` (with a "…" button of width `more` before them when some are
+/// folded). The last crumb always shows; `room <= 0` (not measured yet)
+/// shows them all.
+fn first_shown(widths: &[f32], chevron: f32, more: f32, room: f32) -> usize {
+    let last = widths.len().saturating_sub(1);
+    if room <= 0.0 {
+        return 0;
+    }
+    let total: f32 = widths.iter().sum::<f32>() + chevron * last as f32;
+    if total <= room {
+        return 0;
+    }
+    // Drop crumbs from the start until the rest plus "…" fits.
+    let mut used = total;
+    for (k, w) in widths.iter().enumerate().take(last) {
+        used -= w + chevron;
+        if used + more <= room {
+            return k + 1;
+        }
+    }
+    last
+}
+
 /// Names of the subfolders of `dir` (runs on a background thread).
 fn subfolders(dir: &Path) -> Vec<String> {
     let (tx, rx) = channel();
@@ -535,4 +757,40 @@ fn subfolders(dir: &Path) -> Vec<String> {
         .filter(|e| e.attributes.is_dir())
         .map(|e| e.name.to_string_lossy().into_owned())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::first_shown;
+
+    const CHEVRON: f32 = 14.0;
+    const MORE: f32 = 40.0;
+
+    #[test]
+    fn all_crumbs_when_they_fit_or_before_measuring() {
+        let w = [30.0, 60.0, 80.0];
+        assert_eq!(first_shown(&w, CHEVRON, MORE, 500.0), 0);
+        assert_eq!(first_shown(&w, CHEVRON, MORE, 0.0), 0);
+        // Exactly the total: 170 + 2 chevrons.
+        assert_eq!(first_shown(&w, CHEVRON, MORE, 198.0), 0);
+    }
+
+    #[test]
+    fn leading_crumbs_fold_into_more() {
+        let w = [30.0, 60.0, 80.0, 100.0];
+        // Total 270 + 3 chevrons = 312. Without the first: 268, plus "…" = 308.
+        assert_eq!(first_shown(&w, CHEVRON, MORE, 308.0), 1);
+        // Without the first two: 194 + 40 = 234.
+        assert_eq!(first_shown(&w, CHEVRON, MORE, 307.0), 2);
+        assert_eq!(first_shown(&w, CHEVRON, MORE, 234.0), 2);
+        // Only the last one (100 + 40).
+        assert_eq!(first_shown(&w, CHEVRON, MORE, 233.0), 3);
+    }
+
+    #[test]
+    fn the_current_folder_always_shows() {
+        let w = [30.0, 60.0, 300.0];
+        assert_eq!(first_shown(&w, CHEVRON, MORE, 50.0), 2);
+        assert_eq!(first_shown(&[300.0], CHEVRON, MORE, 50.0), 0);
+    }
 }

@@ -416,7 +416,7 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
  }
 diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples a/src/elements/text.rs ./src/elements/text.rs
 --- a/src/elements/text.rs	2006-07-23 21:21:28.000000000 -0400
-+++ ./src/elements/text.rs	2026-11-21 15:37:40.089061323 -0400
++++ ./src/elements/text.rs	2026-11-21 23:47:06.401652325 -0400
 @@ -316,6 +316,8 @@
      lines: SmallVec<[WrappedLine; 1]>,
      line_height: Pixels,
@@ -426,7 +426,7 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
      size: Option<Size<Pixels>>,
      bounds: Option<Bounds<Pixels>>,
  }
-@@ -370,9 +372,13 @@
+@@ -370,14 +372,23 @@
                          (None, "".into())
                      };
  
@@ -440,7 +440,17 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
                  {
                      return text_layout.size.unwrap();
                  }
-@@ -406,6 +412,7 @@
+ 
+                 let mut line_wrapper = cx.text_system().line_wrapper(text_style.font(), font_size);
++                // fx patch: truncation shortens the runs; work on a copy, since this
++                // closure runs again for another width (see the cache check above) and
++                // the original text with already shortened runs would be sliced inside
++                // a character (crash in DirectWrite's layout_line with "…").
++                let mut runs = runs.clone();
+                 let text = if let Some(truncate_width) = truncate_width {
+                     line_wrapper.truncate_line(
+                         text.clone(),
+@@ -406,6 +417,7 @@
                          len: 0,
                          line_height,
                          wrap_width,
@@ -448,7 +458,7 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
                          size: Some(Size::default()),
                          bounds: None,
                      });
-@@ -424,6 +431,7 @@
+@@ -424,6 +436,7 @@
                      len,
                      line_height,
                      wrap_width,

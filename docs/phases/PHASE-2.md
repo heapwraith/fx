@@ -27,7 +27,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 - Captura da barra de tarefas, do Alt+Tab e das Propriedades do `fx.exe` mostrando ícone e versão; build no WSL (`cargo xwin`) e no CI.
 
 ## T2.2 — Pipeline no GitHub (CI e executável)
-- [ ] Concluída em: ____ · Resumo: implementada em 2026-11-21 (D-037): `.github/workflows/ci.yml` em `windows-latest` (fmt, clippy `-D warnings`, testes, build release, `fx.exe` como artefato); primeiro push verde em 17 min sem cache, todos os testes passam no runner; o `fx.exe` baixado do CI tem versão `0.1.0+bbe1e2f` e abre. Versão 0.1.0 com commit no exe, "Sobre o fx" na paleta, `CHANGELOG.md`. **Falta:** a tag `v0.1.0` gerar o release em rascunho com o zip (precisa da autorização do usuário para criar a tag).
+- [x] Concluída em: 2026-11-21 · Resumo: `.github/workflows/ci.yml` em `windows-latest` (fmt, clippy `-D warnings`, testes, build release, `fx.exe` como artefato), primeiro push verde (17 min sem cache); a tag `v0.1.0` gerou o release em rascunho de pré-lançamento com `fx-0.1.0-windows-x64.zip` (exe, licenças, README, CHANGELOG) e notas da seção do CHANGELOG. Versão 0.1.0 com commit no exe (`0.1.0+bbe1e2f`), "Sobre o fx" na paleta (D-037). O exe desse rascunho tem o travamento corrigido na T2.3: não publicar; lançar 0.1.1.
 
 **Fazer**
 - GitHub Actions em `windows-latest`: `cargo fmt --check`, clippy com `-D warnings`, `cargo test --workspace`, build release, a cada push e PR.
@@ -38,7 +38,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 - Um push verde no GitHub; uma tag de teste gera o zip, que roda num Windows limpo.
 
 ## T2.3 — Pendências da Fase 1
-- [ ] Concluída em: ____ · Resumo:
+- [ ] Concluída em: ____ · Resumo: em andamento (D-038). Feito: migalhas que não cabem viram "…" com menu das pastas escondidas (medidas pelo sistema de texto; 3 testes; conferido estreito, maximizado e clicando no menu); status com a largura do próprio texto; **travamento corrigido** no patch do GPUI (texto truncado com "…" derrubava o app em certas larguras, inclusive o exe do CI); `fx-bench memory` mede a P8: **85,3 MB** (meta 80); ícones custam 6,4 MB (sem eles: 78,9), dos quais 3,2 MB são o cache de ícones do shell (`SHGetFileInfoW`), que não dá para trocar sem perder fidelidade aos ícones do Explorador. **Falta:** decisão do usuário sobre a P8 e os testes manuais (Narrador, Explorador).
 
 **Fazer**
 - P8: memória parada numa pasta pequena ≤ 80 MB (hoje ~84). Perfilar ícones e lateral (VMMap/ETW) e cortar.

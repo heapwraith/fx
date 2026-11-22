@@ -8,6 +8,11 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 - Ícone do fx e versão nas Propriedades do executável (T2.1).
 - Pipeline no GitHub: verificação a cada push e `.exe` portátil a cada versão (T2.2).
 - Comando "Sobre o fx (versão)" na paleta, com o commit do build.
+- Migalhas que não cabem viram um botão "…" com o menu das pastas escondidas.
+- `fx-bench memory` mede a memória parada (P8).
+
+### Corrigido
+- O fx podia fechar sozinho na abertura em certas larguras de janela (texto truncado com reticências).
 
 ## [0.1.0] — 2026-11-21
 

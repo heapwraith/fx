@@ -1061,6 +1061,65 @@ pub fn features() -> std::io::Result<()> {
     )
 }
 
+/// P8 (≤ 80 MB): fx idle with one window on a small folder (the fixtures
+/// root: a few subfolders). Private bytes 6 s after opening, 5 processes,
+/// median. `FX_BENCH_ENV="A=1 B=0"` adds variables, to price a part.
+pub fn memory() -> std::io::Result<()> {
+    const RUNS: usize = 5;
+    const TARGET_P8_MB: f64 = 80.0;
+    let root = fixtures_root()?;
+    let extra = std::env::var("FX_BENCH_ENV").unwrap_or_default();
+    let env: Vec<(&str, &str)> = extra
+        .split_whitespace()
+        .filter_map(|kv| kv.split_once('='))
+        .collect();
+    let mut samples = Vec::new();
+    for _ in 0..RUNS {
+        let mut cmd = Command::new(fx_exe()?);
+        cmd.arg(&root)
+            .env("FX_NO_STATE", "1")
+            .env("FX_SINGLE_INSTANCE", "0")
+            .env_remove("FX_TRACE")
+            .envs(env.iter().copied());
+        let mut child = cmd.spawn()?;
+        std::thread::sleep(Duration::from_secs(6));
+        let out = Command::new("powershell")
+            .args(["-NoProfile", "-Command"])
+            .arg(format!(
+                "$p = Get-Process -Id {0}; $p.PrivateMemorySize64; $p.CloseMainWindow() | Out-Null",
+                child.id()
+            ))
+            .output()?;
+        wait_with_timeout(&mut child, Duration::from_secs(10))?;
+        let bytes: f64 = String::from_utf8_lossy(&out.stdout)
+            .trim()
+            .parse()
+            .map_err(|_| std::io::Error::other("could not read the process memory"))?;
+        samples.push(bytes / (1024.0 * 1024.0));
+    }
+    samples.sort_by(f64::total_cmp);
+    let median = samples[RUNS / 2];
+    let list: Vec<String> = samples.iter().map(|m| format!("{m:.1}")).collect();
+    println!(
+        "P8: private memory, idle, 1 window, fx-fixtures{}",
+        if extra.is_empty() {
+            String::new()
+        } else {
+            format!(" ({extra})")
+        }
+    );
+    println!(
+        "  median {median:.1} MB  [{}]   target ≤ {TARGET_P8_MB} MB  {}",
+        list.join(", "),
+        if median <= TARGET_P8_MB {
+            "pass"
+        } else {
+            "FAIL"
+        }
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
