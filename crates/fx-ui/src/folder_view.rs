@@ -991,6 +991,12 @@ impl FolderView {
             .collect()
     }
 
+    /// A message in the status until the next key (palette commands).
+    pub fn show_notice(&mut self, text: String, cx: &mut Context<Self>) {
+        self.notice = Some(text);
+        cx.notify();
+    }
+
     /// Grid ⇄ list (the button next to the path bar; command palette).
     pub fn toggle_grid(&mut self, cx: &mut Context<Self>) {
         self.set_grid(!self.grid);

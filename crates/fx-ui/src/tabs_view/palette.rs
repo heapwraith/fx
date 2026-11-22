@@ -233,6 +233,9 @@ impl TabsView {
                 }
                 Action::ToggleGrid => tab.update(cx, |view, cx| view.toggle_grid(cx)),
                 Action::Sort(key) => tab.update(cx, |view, cx| view.sort_by_command(key, cx)),
+                Action::About => tab.update(cx, |view, cx| {
+                    view.show_notice(format!("fx {} · MIT OR Apache-2.0", crate::VERSION), cx);
+                }),
             },
         }
     }

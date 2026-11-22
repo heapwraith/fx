@@ -2,7 +2,11 @@
 
 Gerenciador de arquivos para Windows 10/11: abre qualquer pasta na hora, acha qualquer arquivo do disco em milissegundos e pode substituir o Explorador. Open source, escrito em Rust.
 
-> Status: **Fase 1 — MVP de navegação.** A Fase 0 (prova de velocidade) passou no portão. Ainda não é utilizável.
+> Status: **Fase 2 — busca, prévias e beta pública.** A Fase 1 (navegação) está pronta, mas ainda é pré-beta: use com cuidado.
+
+## Baixar
+
+Cada versão publicada fica em [Releases](../../releases), como zip portátil (`fx.exe`, sem instalar). Até a beta os releases são marcados como pré-lançamento, e o Windows pode avisar "editor desconhecido" (a assinatura vem na beta). O que mudou em cada versão está no [`CHANGELOG.md`](CHANGELOG.md); a versão e o commit de um `fx.exe` aparecem nas Propriedades do arquivo e no comando "Sobre o fx" da paleta (Ctrl+K).
 
 ## Benchmarks
 

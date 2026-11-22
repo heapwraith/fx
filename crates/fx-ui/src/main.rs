@@ -14,6 +14,10 @@
 #![windows_subsystem = "windows"]
 
 mod a11y;
+/// `0.1.0+d49b858` (`-dirty` when built with local changes): the version
+/// and the commit it was built from (crates/fx-ui/build.rs).
+pub(crate) const VERSION: &str = env!("FX_VERSION");
+
 mod commands;
 mod folder_view;
 mod icons;

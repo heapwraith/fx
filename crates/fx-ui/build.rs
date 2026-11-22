@@ -9,12 +9,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let icon = PathBuf::from("resources/fx.ico");
     println!("cargo:rerun-if-changed={}", icon.display());
     println!("cargo:rerun-if-changed=build.rs");
+    let version = std::env::var("CARGO_PKG_VERSION")?;
+    let full = format!("{version}+{}", commit());
+    println!("cargo:rustc-env=FX_VERSION={full}");
+    println!("cargo:rerun-if-changed=../../.git/HEAD");
+    println!("cargo:rerun-if-changed=../../.git/index");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return Ok(());
     }
     let dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?);
     let out = PathBuf::from(std::env::var("OUT_DIR")?);
-    let version = std::env::var("CARGO_PKG_VERSION")?;
     let mut parts: Vec<u16> = version
         .split(['.', '-'])
         .filter_map(|p| p.parse().ok())
@@ -49,7 +53,7 @@ BEGIN
       VALUE "LegalCopyright", "MIT OR Apache-2.0"
       VALUE "OriginalFilename", "fx.exe"
       VALUE "ProductName", "fx"
-      VALUE "ProductVersion", "{version}"
+      VALUE "ProductVersion", "{full}"
     END
   END
   BLOCK "VarFileInfo"
@@ -63,4 +67,24 @@ END
     std::fs::write(&rc_path, rc)?;
     embed_resource::compile(&rc_path, embed_resource::NONE).manifest_optional()?;
     Ok(())
+}
+
+/// Short commit hash, with `-dirty` when the tree has local changes;
+/// `unknown` outside a git checkout (e.g. a source tarball).
+fn commit() -> String {
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .args(args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+    };
+    let Some(mut hash) = git(&["rev-parse", "--short=7", "HEAD"]) else {
+        return "unknown".to_owned();
+    };
+    if git(&["status", "--porcelain"]).is_some_and(|s| !s.is_empty()) {
+        hash.push_str("-dirty");
+    }
+    hash
 }

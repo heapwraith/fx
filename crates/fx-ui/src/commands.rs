@@ -19,6 +19,8 @@ pub enum Action {
     Key(Target, &'static str),
     ToggleGrid,
     Sort(SortKey),
+    /// Shows the version (with the commit it was built from) in the status.
+    About,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,6 +97,7 @@ pub const COMMANDS: &[Command] = &[
         "Ordenar por data de modificação",
         Action::Sort(SortKey::Modified),
     ),
+    direct("Sobre o fx (versão)", Action::About),
 ];
 
 /// "ctrl-shift-n" → "Ctrl+Shift+N", "alt-up" → "Alt+↑", "space" → "Espaço".
