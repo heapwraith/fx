@@ -5,7 +5,8 @@
 //! read past the message. All integers are little-endian.
 //!
 //! Request:  `FXQ1` · limit u32 · query length u32 · query (UTF-8)
-//! Response: total length u32 · `FXR1` · status u8 · items u64 · count u32 · hits
+//! Response: total length u32 · `FXR1` · status u8 · items u64 · index bytes u64
+//!           · count u32 · hits
 //! Hit:      flags u8 (bit 0: folder) · size u64 · modified u64 (FILETIME)
 //!           · path length u32 (UTF-16 units) · path (UTF-16LE)
 
@@ -53,6 +54,8 @@ pub struct Response {
     pub status: Status,
     /// Entries in the index (all volumes).
     pub items: u64,
+    /// Memory held by the indexes, in bytes (P9).
+    pub index_bytes: u64,
     pub hits: Vec<RemoteHit>,
 }
 
@@ -120,6 +123,7 @@ impl Response {
             Status::Indexing => 1,
         });
         body.extend_from_slice(&self.items.to_le_bytes());
+        body.extend_from_slice(&self.index_bytes.to_le_bytes());
         body.extend_from_slice(&(hits.len() as u32).to_le_bytes());
         for h in hits {
             let path = &h.path[..h.path.len().min(MAX_PATH_UNITS as usize)];
@@ -157,6 +161,7 @@ impl Response {
             _ => return Err(invalid("bad status")),
         };
         let items = read_u64(&mut b)?;
+        let index_bytes = read_u64(&mut b)?;
         let count = read_u32(&mut b)?;
         if count > MAX_HITS {
             return Err(invalid("too many hits"));
@@ -187,6 +192,7 @@ impl Response {
         Ok(Self {
             status,
             items,
+            index_bytes,
             hits,
         })
     }
@@ -220,6 +226,7 @@ mod tests {
         let resp = Response {
             status: Status::Ready,
             items: 763_000,
+            index_bytes: 54 << 20,
             hits: vec![hit(r"C:\Users\ana\日本語", true), odd],
         };
         let mut buf = Vec::new();
@@ -260,7 +267,7 @@ mod tests {
         let mut body = Vec::new();
         body.extend_from_slice(RESPONSE_MAGIC);
         body.push(0);
-        body.extend_from_slice(&0u64.to_le_bytes());
+        body.extend_from_slice(&[0; 16]);
         body.extend_from_slice(&1u32.to_le_bytes());
         body.push(0);
         body.extend_from_slice(&[0; 16]);
@@ -271,7 +278,7 @@ mod tests {
         // Bad status.
         let mut body = RESPONSE_MAGIC.to_vec();
         body.push(9);
-        body.extend_from_slice(&0u64.to_le_bytes());
+        body.extend_from_slice(&[0; 16]);
         body.extend_from_slice(&0u32.to_le_bytes());
         let mut msg = (body.len() as u32).to_le_bytes().to_vec();
         msg.extend_from_slice(&body);

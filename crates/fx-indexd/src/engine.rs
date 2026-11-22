@@ -73,6 +73,7 @@ impl Engine {
                 Err(_) => {}
             }
         }
+        fx_index::system::trim_heap();
         self.ready.store(true, Ordering::SeqCst);
         while !stop.load(Ordering::SeqCst) {
             std::thread::sleep(WATCH_EVERY);
@@ -94,6 +95,7 @@ impl Engine {
     pub fn answer(&self, request: &Request) -> Response {
         let volumes = self.volumes.read().unwrap_or_else(|e| e.into_inner());
         let items = volumes.iter().map(|v| v.index.len() as u64).sum();
+        let index_bytes = volumes.iter().map(|v| v.index.heap_bytes() as u64).sum();
         let status = if self.ready.load(Ordering::SeqCst) {
             Status::Ready
         } else {
@@ -103,6 +105,7 @@ impl Engine {
             return Response {
                 status,
                 items,
+                index_bytes,
                 hits: Vec::new(),
             };
         }
@@ -137,6 +140,7 @@ impl Engine {
         Response {
             status,
             items,
+            index_bytes,
             hits: scored.into_iter().map(|(_, h)| h).collect(),
         }
     }

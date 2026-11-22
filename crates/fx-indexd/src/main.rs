@@ -92,12 +92,13 @@ fn status() {
         )
     {
         println!(
-            "índice: {} ({} itens)",
+            "índice: {} ({} itens, {:.1} MB)",
             match r.status {
                 fx_index::protocol::Status::Ready => "pronto",
                 fx_index::protocol::Status::Indexing => "lendo os discos",
             },
-            r.items
+            r.items,
+            r.index_bytes as f64 / 1_048_576.0
         );
     }
 }

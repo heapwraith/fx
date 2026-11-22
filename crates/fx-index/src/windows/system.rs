@@ -18,6 +18,19 @@ use windows::core::{HSTRING, PWSTR};
 
 const DRIVE_FIXED: u32 = 3;
 
+/// Returns free blocks of the process heap to the system: after reading a
+/// volume's MFT (hundreds of MB, transient), the freed memory otherwise stays
+/// committed to the service.
+pub fn trim_heap() {
+    use windows::Win32::System::Memory::{GetProcessHeap, HEAP_FLAGS, HeapCompact};
+    // SAFETY: the process heap handle is always valid; compacting it only
+    // decommits free blocks.
+    if let Ok(heap) = unsafe { GetProcessHeap() } {
+        // SAFETY: as above.
+        let _ = unsafe { HeapCompact(heap, HEAP_FLAGS(0)) };
+    }
+}
+
 /// Fixed NTFS volumes, as `"C:"`.
 pub fn ntfs_volumes() -> Vec<String> {
     // SAFETY: plain call.

@@ -10,7 +10,7 @@
 $ErrorActionPreference = 'Continue'
 Set-Location $PSScriptRoot
 $log = Join-Path $PSScriptRoot 'indexd-test.log'
-function Say($text) { $text | Tee-Object -FilePath $log -Append }
+function Say($text) { Write-Host $text; $text | Out-File -FilePath $log -Append -Encoding utf8 }
 "fx-indexd test $(Get-Date -Format s)" | Out-File $log -Encoding utf8
 
 $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
@@ -26,12 +26,14 @@ Say '== index ready'
 $sw = [Diagnostics.Stopwatch]::StartNew()
 do { Start-Sleep -Milliseconds 250; $status = (& $exe status) -join ' ' } until ($status -match 'pronto' -or $sw.Elapsed.TotalSeconds -gt 120)
 Say ("  {0} after {1:N1} s" -f $status, $sw.Elapsed.TotalSeconds)
-$items = if ($status -match '\((\d+) itens\)') { [double]$Matches[1] } else { 0 }
+$items = if ($status -match '\((\d+) itens') { [double]$Matches[1] } else { 0 }
+$indexMb = if ($status -match 'itens, ([\d.,]+) MB') { [double]($Matches[1] -replace ',', '.') } else { 0 }
 Start-Sleep -Seconds 3
 $proc = Get-Process fx-indexd -ErrorAction SilentlyContinue
 if ($proc -and $items -gt 0) {
     $mb = $proc.PrivateMemorySize64 / 1MB
-    Say ("  service memory {0:N1} MB for {1:N0} items = {2:N1} MB per million (P9 target <= 150)" -f $mb, $items, ($mb * 1e6 / $items))
+    Say ("  index {0:N1} MB for {1:N0} items = {2:N1} MB per million (P9 target <= 150)" -f $indexMb, $items, ($indexMb * 1e6 / $items))
+    Say ("  whole service process {0:N1} MB = {1:N1} MB per million" -f $mb, ($mb * 1e6 / $items))
 }
 
 Say '== new file shows up in search (target <= 1 s)'

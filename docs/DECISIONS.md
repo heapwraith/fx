@@ -283,3 +283,17 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Testes** (`fx-ops/src/tests.rs`, SAFETY.md §3): disco cheio é simulado (gancho de teste que grava parte do temporário e devolve `ERROR_DISK_FULL`), porque um volume pequeno de verdade exige administrador; arquivo em uso com `share_mode(0)`; somente leitura; processo morto com um processo filho real (o próprio executável de teste, com a cópia desacelerada) e `TerminateProcess`; > 4 GiB com `set_len` e marcas no começo e no fim. Unicode, caminhos > 260, 0 bytes e cancelamento já tinham teste (T1.11).
 - **Limites:** o diário não é gravado com `fsync`; numa queda de energia (não de processo), a última linha pode se perder e um temporário ficar para trás. O teste de disco cheio real (volume pequeno) fica para quando houver um ambiente com administrador.
 
+## D-040 — Serviço de índice `fx-indexd` (T2.5)
+- **Data:** 2026-11-22 · **Status:** aceita
+- **O serviço:** `fx-indexd.exe` (subcomandos `install`, `uninstall`, `status`, `query`, `run` e `service`, este chamado pelo Windows). Lê a MFT de cada volume NTFS fixo (`fx-index`), com o diário USN aberto antes da leitura para não perder mudanças, e aplica o diário a cada 250 ms. Roda como LocalSystem (abrir o volume exige administrador), início automático atrasado.
+- **Segurança:**
+  - **instalação:** o `install` copia o executável para `%ProgramFiles%\fx\fx-indexd.exe`. Um serviço SYSTEM rodando de uma pasta do usuário seria uma elevação de privilégio para qualquer programa que trocasse o arquivo;
+  - **pipe:** `\\.\pipe\fx-indexd`, só local (`PIPE_REJECT_REMOTE_CLIENTS`), com ACL apenas para SYSTEM e o SID de quem instalou (o usuário que aceitou o UAC), criado com `FILE_FLAG_FIRST_PIPE_INSTANCE` (ninguém toma o nome antes);
+  - **cliente:** abre o pipe com `SECURITY_IDENTIFICATION`, para que um falso servidor não possa agir como o usuário;
+  - **protocolo:** binário com limites fixos (consulta ≤ 1 KB, ≤ 1000 resultados), testado contra mensagens malformadas;
+  - **privacidade:** os resultados dentro das pastas de perfil dos outros usuários (`ProfileList`) não são devolvidos.
+- **Código:** o unsafe do Windows (pipe, SCM, volumes, SID, registro) fica em `fx-index/src/windows/{pipe,service,system}.rs`, já que o `fx-indexd` não pode ter unsafe (CLAUDE.md); a lógica do serviço (busca nos volumes, filtro de perfis) fica em `fx-indexd/src/engine.rs`, com testes. Features novas do crate `windows`: `Win32_System_Services` e `Win32_Security_Authorization` (sem crate novo).
+- **No app:** comandos na paleta "Ativar/Desativar a busca no disco inteiro" rodam `fx-indexd.exe install|uninstall` com o verbo `runas` (UAC) e esperam o código de saída (`Launch::Elevated`). O Ctrl+F passa a usar o serviço na T2.6.
+- **Medido** (elevado, `bench/indexd-test.ps1`): 744.649 itens (C: e D:) em 7,5 s; índice 71,3 MB = **95,7 MB/milhão** (P9 ≤ 150); arquivo novo aparece em 101–258 ms (≤ 1 s); busca 3,8 ms; desinstalação sem resto.
+- **Pendente:** o processo inteiro fica em ~142 MB (≈ 70 MB além do índice) mesmo com `HeapCompact` depois da leitura; investigar os buffers do `ntfs-reader` e do diário. Uma conexão que não manda nada prende o servidor (só o próprio usuário consegue abrir o pipe); pôr tempo limite.
+

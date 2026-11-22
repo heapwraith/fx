@@ -58,7 +58,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 - Todos os casos com teste; nenhum perde dados (origem intacta ou destino completo, nunca nenhum dos dois).
 
 ## T2.5 — `fx-indexd`: serviço de índice
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: `fx-indexd` (serviço do Windows, D-040): lê os volumes NTFS fixos, segue o USN a cada 250 ms, responde por pipe com ACL só para SYSTEM e o usuário, esconde perfis de outros usuários; instala copiando para `%ProgramFiles%\fx` e remove sem resto; comandos na paleta com UAC. Medido elevado (`bench/indexd-test.ps1`): 744.649 itens prontos em 7,5 s, **P9 95,7 MB/milhão** (índice; processo inteiro 141,9 MB), arquivo novo na busca em **101–258 ms**, apagado some em ≤ 255 ms, busca em 3,8 ms, desinstalação sem serviço, arquivo ou pasta.
 
 **Fazer**
 - Serviço do Windows opcional que lê a MFT de todas as unidades NTFS (`fx-index`), segue o diário USN para ficar atualizado e responde buscas por named pipe com ACL só para o usuário.

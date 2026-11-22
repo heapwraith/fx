@@ -214,6 +214,7 @@ mod tests {
                 serve_on(&name, &pipe_sddl(&sid), &stop, &|r: Request| Response {
                     status: Status::Ready,
                     items: 42,
+                    index_bytes: 0,
                     hits: vec![RemoteHit {
                         path: format!(r"C:\{}", r.query).encode_utf16().collect(),
                         is_dir: false,
