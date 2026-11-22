@@ -103,7 +103,7 @@
 - Teste: o relatório não contém o nome do usuário nem caminhos; desligado, nada é gravado.
 
 ## T3.11 — Relatório do portão
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: `bench/results/gate-3.md`: os três critérios atendidos nos testes (gerenciador padrão em chaves temporárias, 39 testes de falha do fx-ops + 4 GiB em 6,5 s); P1 421 ms, P2 69/11 ms, P4 p95 ≤ 3,95 ms, P7 0/4.000, P8 86,9 MB (meta 88), Quick Look p95 47 ms; recomendação: passar, com o gerenciador padrão testado de verdade antes de publicar.
 
 ---
 
