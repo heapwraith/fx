@@ -215,7 +215,10 @@ pub fn service() -> std::io::Result<()> {
         }
     }
     let (median, p95) = median_p95(&samples);
-    let max = samples.iter().max().map_or(0.0, |d| d.as_secs_f64() * 1000.0);
+    let max = samples
+        .iter()
+        .max()
+        .map_or(0.0, |d| d.as_secs_f64() * 1000.0);
     let pass = p95 <= TARGET_P5_MS;
     println!("P5: key -> results from fx-indexd (pipe, every NTFS volume, up to 1000 results)");
     println!(

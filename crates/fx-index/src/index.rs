@@ -102,6 +102,7 @@ impl Index {
         let slot = u32::try_from(self.ids.len()).map_err(|_| IndexFull)?;
         self.remove(record.id);
 
+        self.make_room(record.name.len());
         let name = match String::from_utf16(&record.name) {
             Ok(s) => s,
             Err(_) => {
@@ -122,11 +123,40 @@ impl Index {
 
         let id = id as usize;
         if self.slot_of.len() <= id {
+            let extra = (id + 1 - self.slot_of.len()).max(self.slot_of.len() / GROWTH_DIVISOR);
+            self.slot_of.reserve_exact(extra);
             self.slot_of.resize(id + 1, NONE);
         }
         self.slot_of[id] = slot;
         self.live += 1;
         Ok(())
+    }
+
+    /// Grows full buffers by a small step (1/32, at least `MIN_GROWTH` entries)
+    /// instead of letting a push double them: after `shrink_to_fit`, the
+    /// first change of a live index would otherwise double its memory (seen
+    /// in the service: 71 MB → 139 MB for one new file).
+    fn make_room(&mut self, name_units: usize) {
+        fn grow<T>(v: &mut Vec<T>) {
+            if v.len() == v.capacity() {
+                v.reserve_exact((v.len() / GROWTH_DIVISOR).max(MIN_GROWTH));
+            }
+        }
+        fn grow_text(s: &mut String, need: usize) {
+            if s.capacity() - s.len() < need {
+                s.reserve_exact((s.len() / GROWTH_DIVISOR).max(MIN_GROWTH * 16).max(need));
+            }
+        }
+        // A UTF-16 unit is at most 3 UTF-8 bytes; folding may add a separator.
+        grow_text(&mut self.names, name_units * 3);
+        grow_text(&mut self.folded, name_units * 3 + 1);
+        grow(&mut self.name_ends);
+        grow(&mut self.folded_ends);
+        grow(&mut self.ids);
+        grow(&mut self.parents);
+        grow(&mut self.sizes);
+        grow(&mut self.modified);
+        grow(&mut self.flags);
     }
 
     /// Marks the entry with `id` as deleted. Returns whether it existed.
@@ -291,6 +321,11 @@ impl Index {
     }
 }
 
+/// Buffers of a live index grow by 1/32 of their size when full.
+const GROWTH_DIVISOR: usize = 32;
+/// ... and by at least this many entries.
+const MIN_GROWTH: usize = 4096;
+
 fn offset(len: usize) -> Result<u32, IndexFull> {
     u32::try_from(len).map_err(|_| IndexFull)
 }
@@ -323,6 +358,31 @@ mod tests {
             size: id * 10,
             modified: 1,
         }
+    }
+
+    /// One change after the initial build must not double the memory.
+    #[test]
+    fn a_live_index_grows_in_small_steps() {
+        let mut index = Index::new(ROOT);
+        for id in 0..200_000u64 {
+            index
+                .insert(&rec(100 + id, ROOT, &format!("arquivo {id}.txt"), false))
+                .unwrap();
+        }
+        index.shrink_to_fit();
+        let built = index.heap_bytes();
+        index
+            .insert(&rec(100 + 200_000, ROOT, "novo.txt", false))
+            .unwrap();
+        let after = index.heap_bytes();
+        assert!(
+            after < built + built / 16,
+            "one insert grew {built} -> {after} bytes"
+        );
+        assert_eq!(
+            index.path(index.slot(100 + 200_000).unwrap()).unwrap(),
+            PathBuf::from("novo.txt")
+        );
     }
 
     fn sample() -> Index {

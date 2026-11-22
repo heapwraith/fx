@@ -68,7 +68,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 - Índice do C: em memória ≤ 150 MB por milhão de itens (P9); arquivo criado aparece na busca em ≤ 1 s; serviço removido sem resto (serviço, arquivos, regras).
 
 ## T2.6 — Busca completa
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: filtros digitados (`tipo:`, `ext:`, `tamanho:`, `data:`; `fx-core::search_filter`, 6 testes) aplicados dentro de cada busca (serviço, índice próprio e pasta), também sem nome; Tab alterna "Disco inteiro" (fx-indexd) e "Nesta pasta"; colunas Tamanho e Modificado ordenáveis; duplo clique abre, arrastar e menu do Windows nos resultados (D-041). **P5 pelo serviço: p95 5,39 ms** (243 teclas, até 1000 resultados de 744 mil itens); P4 das teclas da busca p95 3,57 ms. Achado e corrigido: o índice dobrava de memória na primeira mudança depois da leitura (139 → 73,5 MB; processo do serviço 142 → 76 MB).
 
 **Fazer**
 - Ctrl+F consulta o `fx-indexd` quando instalado (disco inteiro), senão a enumeração atual. Filtros: tipo, tamanho, data, pasta; resultados ordenáveis; abrir, revelar, arrastar e menu de contexto nos resultados.

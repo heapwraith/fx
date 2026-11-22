@@ -11,6 +11,7 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 - Migalhas que não cabem viram um botão "…" com o menu das pastas escondidas.
 - `fx-bench memory` mede a memória parada (P8).
 
+- Busca com filtros digitados (`tipo:imagem`, `ext:pdf`, `tamanho:>10mb`, `data:semana`), alcance disco inteiro ou pasta (Tab), colunas ordenáveis, arrastar e menu do Windows nos resultados.
 - Serviço opcional `fx-indexd` para a busca no disco inteiro (ativado pela paleta, com o aviso de administrador do Windows; remove sem deixar nada).
 - Testes de falha do motor de operações (disco cheio, arquivo em uso, processo morto, > 4 GB).
 
