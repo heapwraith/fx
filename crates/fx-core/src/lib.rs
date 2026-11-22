@@ -13,6 +13,7 @@ pub mod highlight;
 mod history;
 mod list;
 pub mod markdown;
+pub mod miller;
 pub mod natural;
 mod pinned;
 pub mod preview;

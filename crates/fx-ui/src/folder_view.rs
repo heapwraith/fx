@@ -17,6 +17,7 @@
 //! bar is in `path_bar.rs`.
 
 mod batch_rename;
+mod columns;
 mod dir_sizes;
 mod dnd;
 mod edit_ops;
@@ -208,6 +209,8 @@ pub struct FolderView {
     dir_sizes: dir_sizes::DirSizes,
     /// The batch rename panel (F2 with several items, T2.8).
     batch_rename: Option<batch_rename::BatchRename>,
+    /// The column view (Ctrl+Shift+3, T3.3).
+    miller: Option<columns::Columns>,
     /// Width of the breadcrumb area in the last frame (T2.3), and whether
     /// the menu of the collapsed leading crumbs ("…") is open.
     crumb_room: std::rc::Rc<std::cell::Cell<f32>>,
@@ -385,6 +388,7 @@ impl FolderView {
             view_menu: false,
             dir_sizes: dir_sizes::DirSizes::default(),
             batch_rename: None,
+            miller: None,
             crumb_room: std::rc::Rc::default(),
             crumb_menu: false,
             quick_look: None,
@@ -1633,6 +1637,9 @@ impl FolderView {
         if self.batch_rename_key(ks, window, cx) {
             return;
         }
+        if self.search.is_none() && self.columns_key(ks, window, cx) {
+            return;
+        }
         if self.search_key(ks, started, window, cx) {
             cx.notify();
             return;
@@ -1706,6 +1713,10 @@ impl FolderView {
             } else {
                 None
             };
+            if digit == Some(3) {
+                self.toggle_columns(window, cx);
+                return;
+            }
             let grid = match digit {
                 Some(2) => Some(true),
                 Some(6) => Some(false),
@@ -2271,6 +2282,7 @@ impl Render for FolderView {
             )
             .children(self.render_quick_look(cx))
             .children(self.render_search(cx))
+            .children(self.render_columns(cx))
             .children(self.render_batch_rename(cx))
             .children(self.render_view_menu(cx))
     }

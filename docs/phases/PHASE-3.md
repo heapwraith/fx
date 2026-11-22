@@ -31,7 +31,7 @@
 - Copiar e mover entre painéis pelo motor (teste); P4 sem regressão.
 
 ## T3.3 — Vista em colunas (Miller)
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: Ctrl+Shift+3 abre a vista em colunas (modelo `fx-core::miller`, 3 testes; uma coluna por pasta, ↑↓ escolhe, → entra, ← volta e continua subindo, Enter abre, Esc volta à lista na pasta da coluna ativa); cada coluna é lida numa thread e desenhada virtualizada (D-048). Conferido na janela com a coluna de 100 mil arquivos sem travar.
 
 **Fazer**
 - Ctrl+Shift+3: colunas lado a lado, uma por nível do caminho; selecionar uma pasta abre a coluna seguinte; ← → navegam entre colunas. Cada coluna é uma lista virtualizada lida em segundo plano.

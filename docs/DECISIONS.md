@@ -364,3 +364,10 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Fechar a aba** descarta o segundo painel.
 - **Pendente:** salvar o painel duplo na sessão (por aba); arrastar entre os painéis já funciona pelo arrastar e soltar normal.
 
+## D-048 — Vista em colunas (T3.3)
+- **Data:** 2026-11-22 · **Status:** aceita
+- **Modelo** (`fx-core/src/miller.rs`): colunas a partir do caminho (as 3 últimas pastas), cada uma com o item escolhido; escolher uma pasta abre a coluna seguinte e fecha as que vinham depois; ← na primeira coluna acrescenta a pasta-mãe (continua subindo); → entra na coluna da pasta escolhida.
+- **Interface** (`folder_view/columns.rs`): camada sobre a área da lista (abaixo da barra de caminho), colunas de 260 px numa linha com rolagem horizontal que acompanha a coluna ativa; cada coluna lida por `fx_fs::enumerate` numa thread (`fx-column`) e desenhada com `uniform_list`, pastas primeiro em ordem natural, ocultos conforme Ctrl+H. Clique escolhe; duplo clique abre arquivo. Esc ou Ctrl+Shift+3 fecham e levam a lista para a pasta da coluna ativa.
+- **Atalho:** Ctrl+Shift+3, lido pelo estado do teclado como Ctrl+Shift+2/6 (D-034), por causa do Shift+dígito do GPUI.
+- **Pendente:** arrastar, menu de contexto e Quick Look dentro das colunas; salvar o modo na sessão.
+

@@ -5,6 +5,7 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 ## [Não lançado]
 
 ### Adicionado
+- Vista em colunas (Ctrl+Shift+3).
 - Painel duplo (F3): Tab troca de painel, F5 copia e F6 move para o outro painel.
 - Tornar o fx o gerenciador de arquivos padrão (pastas, unidades e Win+E) pela paleta, com "Voltar ao Explorador" que restaura tudo.
 
