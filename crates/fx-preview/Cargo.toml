@@ -12,4 +12,5 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+fx-core.workspace = true
 fx-shell.workspace = true

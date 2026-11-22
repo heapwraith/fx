@@ -437,3 +437,12 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Delta descartado:** o instalador tem ~6 MB; pacotes delta trariam um formato próprio, assinatura e casos de falha a mais para economizar poucos MB por versão.
 - **Limite conhecido:** sem assinatura ainda, a integridade depende do HTTPS do GitHub e do `SHA256SUMS.txt` no mesmo release (protege contra download corrompido, não contra quem controlar o release). A assinatura fecha isso.
 
+## D-057 — Polimento final (T4.2)
+- **Data:** 2026-11-22 · **Status:** aceita
+- **Transições:** só na entrada das sobreposições (paleta, menu Exibir, busca, Quick Look, renomear em lote, histórico, diálogo de conflito), 120 ms com `ease_out_quint`, opacidade de 0,35 a 1 (`fx-ui/src/motion.rs`). A sobreposição existe e recebe teclas desde o primeiro quadro; o estado da animação fica preso ao id do elemento, então digitar não a reinicia. Saída sem animação (fechar é instantâneo). Com "Efeitos de animação" desligado no Windows (`SPI_GETCLIENTAREAANIMATION`, lido ao abrir) nada anima. Teste: duração ≤ 150 ms e nenhuma com a opção desligada.
+- **Estados vazios:** busca sem resultado e paleta sem resultado mostram uma frase onde estariam os resultados, com o próximo passo ("Tab busca no disco inteiro" só quando há busca no disco; senão "Tente menos letras ou outro filtro"). Pasta vazia, só ocultos, filtro sem resultado e erros de leitura já tinham frase (Fase 1).
+- **Erros nos dois idiomas:** as mensagens de `fx-ops` (Lixeira, confirmação de operações perigosas, nomes, cópia) e de `fx-shell` (menu, Propriedades, prévia, elevação) viraram pares `tr!`/`trf!`; o `fx-preview` recebe o idioma do fx por `FX_LANG`. O relatório de falhas (D-055) passa a usar rótulos neutros em inglês (`module`, `location`, `<path>`, `<user>`, `<text>`), por ir para uma issue pública.
+- **Varredura de textos** (T3.7) agora cobre `fx-core`, `fx-ops`, `fx-shell` e `fx-fs`, entende strings cruas (`r"…"`, `r#"…"#`), corta o módulo de testes em qualquer `#[cfg(...test...)]`, ignora `tests.rs`, tabelas de caracteres e palavras soltas sem acento (palavras-chave de linguagens como "as", "do").
+- **Medido:** P4 p95 3,41 (paleta), 3,34 (setas), 3,45 (busca); Quick Look p95 50 ms; P8 em três rodadas 87,6, 86,8 e 86,0 MB (portão 3: 86,9), sem regressão.
+- **Não feito:** passada nas três densidades e em janela estreita (as telas novas usam os mesmos componentes); transição de saída.
+

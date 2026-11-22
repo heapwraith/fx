@@ -390,7 +390,8 @@ impl FolderView {
                     .child(footer),
             );
         Some(
-            deferred(
+            deferred(crate::motion::enter(
+                "batch-rename-in",
                 div()
                     .id("batch-rename-backdrop")
                     .absolute()
@@ -405,7 +406,7 @@ impl FolderView {
                         }),
                     )
                     .child(card),
-            )
+            ))
             .with_priority(1),
         )
     }

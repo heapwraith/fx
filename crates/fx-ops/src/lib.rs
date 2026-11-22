@@ -355,7 +355,13 @@ pub fn system_guard(job: &Job, system: &[PathBuf]) -> Option<String> {
     let mut touched: Vec<PathBuf> = job.sources.iter().map(|p| abs(p)).collect();
     touched.extend(job.pairs.iter().map(|(from, _)| abs(from)));
     if touched.iter().any(|p| p.parent().is_none()) {
-        return Some("a operação apaga, move ou renomeia a raiz de uma unidade".into());
+        return Some(
+            fx_core::tr!(
+                "a operação apaga, move ou renomeia a raiz de uma unidade",
+                "the operation deletes, moves or renames the root of a drive"
+            )
+            .into(),
+        );
     }
     touched.extend(job.pairs.iter().map(|(_, to)| abs(to)));
     if matches!(job.kind, OpKind::Copy | OpKind::Move | OpKind::NewFolder) {
@@ -366,7 +372,13 @@ pub fn system_guard(job: &Job, system: &[PathBuf]) -> Option<String> {
     touched
         .iter()
         .find_map(|p| system.iter().find(|s| p.starts_with(s)))
-        .map(|s| format!("a operação mexe numa pasta do sistema ({})", s.display()))
+        .map(|s| {
+            fx_core::trf!(
+                "a operação mexe numa pasta do sistema ({})",
+                "the operation touches a system folder ({})",
+                s.display()
+            )
+        })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -690,7 +702,10 @@ fn run_job(work: &Work, events: &Sender<Event>) {
     {
         let _ = events.send(Event::Finished {
             job: work.id,
-            outcome: Outcome::Failed(format!("{reason}: é preciso confirmar")),
+            outcome: Outcome::Failed(fx_core::trf!(
+                "{reason}: é preciso confirmar",
+                "{reason}: confirmation needed"
+            )),
             report: Report::default(),
         });
         return;
@@ -829,7 +844,7 @@ impl Run<'_> {
         if name.is_empty() || name.contains(['\\', '/']) || name == "." || name == ".." {
             return Err(Stop::Failed(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "nome inválido",
+                fx_core::tr!("nome inválido", "invalid name"),
             )));
         }
         let to = from.with_file_name(name);
@@ -839,7 +854,10 @@ impl Run<'_> {
             {
                 Stop::Failed(io::Error::new(
                     io::ErrorKind::AlreadyExists,
-                    "já existe um item com esse nome",
+                    fx_core::tr!(
+                        "já existe um item com esse nome",
+                        "an item with that name already exists"
+                    ),
                 ))
             } else {
                 Stop::from(e)
@@ -865,7 +883,7 @@ impl Run<'_> {
             if name.trim().is_empty() || name == "." || name == ".." {
                 return Err(Stop::Failed(io::Error::new(
                     io::ErrorKind::InvalidInput,
-                    "nome inválido",
+                    fx_core::tr!("nome inválido", "invalid name"),
                 )));
             }
         }
@@ -896,8 +914,9 @@ impl Run<'_> {
                         failure = Some(if exists(to) {
                             io::Error::new(
                                 io::ErrorKind::AlreadyExists,
-                                format!(
+                                fx_core::trf!(
                                     "já existe um item chamado {}",
+                                    "an item named {} already exists",
                                     to.file_name()
                                         .map(|n| n.to_string_lossy())
                                         .unwrap_or_default()
@@ -1018,7 +1037,10 @@ impl Run<'_> {
         if meta.is_dir() && dest_dir.starts_with(&src) {
             return Err(Stop::Failed(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "não é possível copiar ou mover uma pasta para dentro dela mesma",
+                fx_core::tr!(
+                    "não é possível copiar ou mover uma pasta para dentro dela mesma",
+                    "a folder cannot be copied or moved into itself"
+                ),
             )));
         }
         if self.job.kind == OpKind::Move && src.parent() == Some(dest_dir.as_path()) {
@@ -1165,8 +1187,9 @@ impl Run<'_> {
         let finish = copied.map_err(Stop::from).and_then(|()| {
             let written = std::fs::metadata(&temp)?.len();
             if written != size {
-                return Err(Stop::Failed(io::Error::other(format!(
-                    "tamanho diferente depois da cópia: {written} de {size} bytes"
+                return Err(Stop::Failed(io::Error::other(fx_core::trf!(
+                    "tamanho diferente depois da cópia: {written} de {size} bytes",
+                    "size differs after the copy: {written} of {size} bytes"
                 ))));
             }
             if replace && exists(target) {

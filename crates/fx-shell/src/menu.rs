@@ -129,7 +129,9 @@ fn dispatch(
         let answer = if !sent {
             worker = spawn_worker(show, init);
             MenuReply {
-                outcome: MenuOutcome::Unavailable("menu indisponível".into()),
+                outcome: MenuOutcome::Unavailable(
+                    fx_core::tr!("menu indisponível", "menu unavailable").into(),
+                ),
                 ready_after: None,
                 built_in: None,
             }
@@ -167,7 +169,11 @@ fn dispatch(
                     worker = spawn_worker(show, init);
                     MenuReply {
                         outcome: MenuOutcome::Unavailable(
-                            "o menu demorou demais (uma extensão do shell travou)".into(),
+                            fx_core::tr!(
+                                "o menu demorou demais (uma extensão do shell travou)",
+                                "the menu took too long (a shell extension hung)"
+                            )
+                            .into(),
                         ),
                         ready_after: None,
                         built_in: None,

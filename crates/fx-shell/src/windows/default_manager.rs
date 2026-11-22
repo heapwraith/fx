@@ -176,7 +176,7 @@ pub fn enable(classes: &str, backup: &str, exe: &str) -> io::Result<()> {
     if exe.contains('"') {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "caminho inválido",
+            fx_core::tr!("caminho inválido", "invalid path"),
         ));
     }
     if !exists(backup) {

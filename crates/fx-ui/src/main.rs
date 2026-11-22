@@ -23,6 +23,7 @@ mod crash;
 mod folder_view;
 mod i18n;
 mod icons;
+mod motion;
 mod ops;
 mod persist;
 mod places;
@@ -126,6 +127,7 @@ fn main() {
         Settings::default()
     };
     i18n::init(&settings.idioma);
+    motion::init();
     crash::set_enabled(settings.relatorio_falhas);
     // Benchmarks and test runs never ask the network.
     update::set_enabled(persist && settings.verificar_atualizacoes);

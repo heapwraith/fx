@@ -233,7 +233,8 @@ impl FolderView {
             };
         }
         Some(
-            deferred(
+            deferred(crate::motion::enter(
+                "view-menu-in",
                 div()
                     .id("view-menu-backdrop")
                     .absolute()
@@ -248,7 +249,7 @@ impl FolderView {
                         }),
                     )
                     .child(card),
-            )
+            ))
             .with_priority(1),
         )
     }

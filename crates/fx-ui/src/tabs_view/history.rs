@@ -115,7 +115,8 @@ impl TabsView {
             )
             .child(list);
         Some(
-            deferred(
+            deferred(crate::motion::enter(
+                "history-in",
                 div()
                     .id("history-backdrop")
                     .absolute()
@@ -130,7 +131,7 @@ impl TabsView {
                         }),
                     )
                     .child(card),
-            )
+            ))
             .with_priority(1),
         )
     }

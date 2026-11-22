@@ -236,7 +236,8 @@ impl TabsView {
                     )),
             );
         Some(
-            deferred(
+            deferred(crate::motion::enter(
+                "conflict-in",
                 div()
                     .absolute()
                     .top_0()
@@ -247,7 +248,7 @@ impl TabsView {
                     .justify_center()
                     .bg(gpui::rgba(0x00000066))
                     .child(card),
-            )
+            ))
             .with_priority(2),
         )
     }

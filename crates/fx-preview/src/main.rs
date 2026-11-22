@@ -17,6 +17,8 @@ use std::process::ExitCode;
 
 #[cfg(windows)]
 fn main() -> ExitCode {
+    // fx passes its interface language (T4.2).
+    fx_core::locale::set_english(std::env::var("FX_LANG").is_ok_and(|v| v == "en"));
     let args: Vec<String> = std::env::args().skip(1).collect();
     let parsed = match args.as_slice() {
         [owner, x, y, w, h, file] => (|| {

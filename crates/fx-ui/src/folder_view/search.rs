@@ -597,6 +597,29 @@ impl FolderView {
                     .to_owned()
             }
         };
+        // Nothing found: say so where the results would be, with the next step.
+        let empty_message = (!s.running
+            && s.hits.is_empty()
+            && !s.query.trim().is_empty()
+            && s.summary.is_some())
+        .then(|| {
+            let q = s.query.trim().to_owned();
+            let disk_ready = matches!(s.disk, Disk::Service | Disk::OwnIndex);
+            match s.scope {
+                Scope::Folder if !disk_ready => trf!(
+                    "Nada com \"{q}\" nesta pasta. Tente menos letras ou outro filtro.",
+                    "Nothing with \"{q}\" in this folder. Try fewer letters or another filter."
+                ),
+                Scope::Folder => trf!(
+                    "Nada com \"{q}\" nesta pasta. Tab busca no disco inteiro.",
+                    "Nothing with \"{q}\" in this folder. Tab searches the whole disk."
+                ),
+                Scope::Disk => trf!(
+                    "Nada com \"{q}\" no disco. Tente menos letras ou outro filtro.",
+                    "Nothing with \"{q}\" on the disk. Try fewer letters or another filter."
+                ),
+            }
+        });
         let hits: Arc<Vec<Found>> = Arc::new(s.hits.clone());
         let cursor = s.cursor;
         let (accent, secondary, hover) = (t.selected, t.text_secondary, t.hover);
@@ -829,7 +852,19 @@ impl FolderView {
                 )
             })
             .child(header)
-            .child(list)
+            .child(if empty_message.is_some() {
+                div()
+                    .flex_1()
+                    .flex()
+                    .justify_center()
+                    .pt(px(space(8)))
+                    .px(px(space(4)))
+                    .text_color(rgba(t.text_secondary))
+                    .children(empty_message)
+                    .into_any_element()
+            } else {
+                list.into_any_element()
+            })
             .child(
                 div()
                     .flex_none()
@@ -843,7 +878,8 @@ impl FolderView {
                     .child(status),
             );
         Some(
-            deferred(
+            deferred(crate::motion::enter(
+                "search-in",
                 div()
                     .id("search-backdrop")
                     .absolute()
@@ -858,7 +894,7 @@ impl FolderView {
                         }),
                     )
                     .child(card),
-            )
+            ))
             .with_priority(1),
         )
     }

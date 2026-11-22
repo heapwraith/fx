@@ -25,7 +25,7 @@
 - Testes: comparação de versões (0.2.0-beta < 0.2.0 < 0.10.0), leitura do JSON dos releases e escolha do instalador, verificação do hash (arquivo certo passa, alterado falha, ausente no SHA256SUMS falha), nada baixado com a opção desligada. Conferência real contra o GitHub (consulta) sem instalar.
 
 ## T4.2 — Polimento final
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: as 7 sobreposições (paleta, menu Exibir, busca, Quick Look, renomear em lote, histórico, conflito) entram em 120 ms só na opacidade (`motion.rs`, máx. 150 ms, nada anima com "Efeitos de animação" desligado); busca e paleta sem resultado dizem o que houve e o próximo passo; 27 mensagens de erro de `fx-ops`/`fx-shell` e as do `fx-preview` em pares pt/en; relatório de falhas com rótulos neutros; varredura de textos estendida a `fx-core`, `fx-ops`, `fx-shell`, `fx-fs` (D-057). P4 p95 ≤ 3,45 ms, Quick Look p95 50 ms, P8 86,0–87,6 MB (sem regressão); conferido em claro e escuro.
 
 **Fazer**
 - Transições ≤ 150 ms nas sobreposições (paleta, menus, busca, Quick Look, diálogos): entrada curta, nunca atrasando a próxima tecla; respeitar "efeitos de animação" desligados no Windows.

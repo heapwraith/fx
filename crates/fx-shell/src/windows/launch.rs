@@ -90,7 +90,13 @@ fn run_elevated(exe: &Path, args: &str) -> io::Result<()> {
     // SAFETY: `info` is a properly sized SHELLEXECUTEINFOW whose strings live
     // in vectors alive for the call.
     unsafe { ShellExecuteExW(&mut info) }.map_err(|e| match e.code().0 as u32 & 0xFFFF {
-        1223 => io::Error::new(io::ErrorKind::Interrupted, "cancelado no aviso do Windows"),
+        1223 => io::Error::new(
+            io::ErrorKind::Interrupted,
+            fx_core::tr!(
+                "cancelado no aviso do Windows",
+                "canceled at the Windows prompt"
+            ),
+        ),
         _ => to_io(e),
     })?;
     let process = info.hProcess;
@@ -110,7 +116,10 @@ fn run_elevated(exe: &Path, args: &str) -> io::Result<()> {
     if code == 0 {
         Ok(())
     } else {
-        Err(io::Error::other(format!("terminou com o código {code}")))
+        Err(io::Error::other(fx_core::trf!(
+            "terminou com o código {code}",
+            "ended with code {code}"
+        )))
     }
 }
 

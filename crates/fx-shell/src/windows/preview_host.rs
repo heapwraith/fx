@@ -174,7 +174,10 @@ pub fn run_host(path: &Path, _owner: isize, rect: ScreenRect) -> io::Result<()> 
     // SAFETY: first COM call of this process's main thread.
     let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
     let Some(clsid) = handler_for(path) else {
-        say("error este tipo não tem visualizador do Windows");
+        say(fx_core::tr!(
+            "error este tipo não tem visualizador do Windows",
+            "error this type has no Windows viewer"
+        ));
         return Ok(());
     };
     // SAFETY: the class name and procedure are static; module of this exe.

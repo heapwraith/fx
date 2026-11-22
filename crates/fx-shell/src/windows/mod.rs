@@ -53,6 +53,25 @@ pub fn windows_build() -> Option<u32> {
     Some(info.dwBuildNumber)
 }
 
+/// Whether "Animation effects" is on in Windows (Accessibility > Visual
+/// effects), for fx's own transitions (T4.2).
+pub fn animations_enabled() -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SPI_GETCLIENTAREAANIMATION, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SystemParametersInfoW,
+    };
+    let mut on = windows::core::BOOL(1);
+    // SAFETY: `on` is a writable BOOL, as this action documents.
+    let read = unsafe {
+        SystemParametersInfoW(
+            SPI_GETCLIENTAREAANIMATION,
+            0,
+            Some((&raw mut on).cast()),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        )
+    };
+    read.is_err() || on.as_bool()
+}
+
 /// Whether the Windows display language is Portuguese (any country), for
 /// the interface language (T3.7).
 pub fn system_language_is_portuguese() -> bool {

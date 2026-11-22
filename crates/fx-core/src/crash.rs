@@ -1,6 +1,6 @@
 //! Crash report text (task T3.10): what a panic leaves on disk, with no
-//! personal data. Paths become `<caminho>`, quoted text (file names) becomes
-//! `<texto>`, the user name becomes `<usuário>`; the stack keeps only
+//! personal data. Paths become `<path>`, quoted text (file names) becomes
+//! `<text>`, the user name becomes `<user>`; the stack keeps only
 //! function names. Pure: the UI crate gathers the inputs and writes the file.
 
 /// Most stack frames kept.
@@ -19,7 +19,7 @@ pub fn scrub(text: &str, user: Option<&str>) -> String {
             && let Some(end) = chars[i + 1..].iter().position(|&d| d == c)
         {
             out.push(c);
-            out.push_str("<texto>");
+            out.push_str("<text>");
             out.push(c);
             i += end + 2;
             continue;
@@ -39,7 +39,7 @@ pub fn scrub(text: &str, user: Option<&str>) -> String {
                 .count()
                 >= 1;
         if drive || unc || unix {
-            out.push_str("<caminho>");
+            out.push_str("<path>");
             while i < chars.len() && !chars[i].is_whitespace() && !matches!(chars[i], ')' | ',') {
                 i += 1;
             }
@@ -49,7 +49,7 @@ pub fn scrub(text: &str, user: Option<&str>) -> String {
         i += 1;
     }
     match user.filter(|u| u.chars().count() >= 2) {
-        Some(u) => replace_ignoring_case(&out, u, "<usuário>"),
+        Some(u) => replace_ignoring_case(&out, u, "<user>"),
         None => out,
     }
 }
@@ -124,7 +124,7 @@ pub fn report(p: &Panic<'_>) -> String {
     let location = short_location(p.file);
     let module = location.split('/').next().unwrap_or("?").replace('-', "_");
     let mut out = format!(
-        "fx {}\nmódulo: {module}\nlocal: {location}:{}\nmensagem: {}\npilha:\n",
+        "fx {}\nmodule: {module}\nlocation: {location}:{}\nmessage: {}\nstack:\n",
         p.version,
         p.line,
         scrub(p.message, p.user)
@@ -171,8 +171,8 @@ mod tests {
         assert!(!r.contains("salário"), "file names removed: {r}");
         assert!(!r.contains("projetos"), "{r}");
         assert!(r.contains("fx 0.2.0-beta+abc123"));
-        assert!(r.contains("local: fx-ui/src/folder_view.rs:1200"), "{r}");
-        assert!(r.contains("módulo: fx_ui"));
+        assert!(r.contains("location: fx-ui/src/folder_view.rs:1200"), "{r}");
+        assert!(r.contains("module: fx_ui"));
         assert!(r.contains("fx::folder_view::FolderView::open_selected"));
         assert!(r.contains("gpui::window::Window::dispatch_event"));
         assert!(!r.contains("std::panicking"), "panic machinery dropped");
@@ -190,7 +190,7 @@ mod tests {
             "ratio 3/4",
             "not a path: no leading slash"
         );
-        assert_eq!(scrub("a (/tmp/x) b", None), "a (<caminho>) b");
+        assert_eq!(scrub("a (/tmp/x) b", None), "a (<path>) b");
         assert_eq!(short_location("src/main.rs"), "main.rs");
         assert_eq!(
             short_location(r"C:\x\gpui-0.2.2\src\window.rs"),

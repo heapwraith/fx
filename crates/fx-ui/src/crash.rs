@@ -125,7 +125,7 @@ fn newest(dir: &Path) -> Option<PathBuf> {
 /// The issue URL for a report (title and body filled in).
 pub fn issue_url(report: &str) -> String {
     let first = report.lines().nth(2).unwrap_or("falha");
-    let place = first.trim_start_matches("local: ");
+    let place = first.trim_start_matches("location: ");
     let title = fx_core::trf!("Falha: {place}", "Crash: {place}");
     let mut body = fx_core::trf!(
         "O fx fechou com uma falha. Relatório gerado pelo próprio fx (sem caminhos nem nomes):\n\n```\n{report}```\n\nO que eu estava fazendo:\n",
@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn issue_link_is_encoded_and_bounded() {
-        let report = "fx 0.2.0\nmódulo: fx_ui\nlocal: fx-ui/src/a.rs:3\nmensagem: x & y\n";
+        let report = "fx 0.2.0\nmodule: fx_ui\nlocation: fx-ui/src/a.rs:3\nmessage: x & y\n";
         let url = issue_url(report);
         assert!(url.starts_with("https://github.com/heapwraith/fx/issues/new?labels=bug&title=Falha%3A%20fx-ui%2Fsrc%2Fa.rs%3A3&body="));
         assert!(!url.contains(' ') && !url.contains('&') || url.matches('&').count() == 2);

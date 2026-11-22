@@ -180,15 +180,21 @@ fn verb_of(menu: &IContextMenu, id: u32) -> Option<String> {
 fn show(req: &MenuRequest, ready: &dyn Fn()) -> MenuOutcome {
     let unavailable = |why: &str| MenuOutcome::Unavailable(why.to_owned());
     let Some(hwnd) = host() else {
-        return unavailable("janela do menu indisponível");
+        return unavailable(fx_core::tr!(
+            "janela do menu indisponível",
+            "menu window unavailable"
+        ));
     };
     let mut pidls = Pidls(Vec::new());
     let Some(menu) = context_menu(req, hwnd, &mut pidls) else {
-        return unavailable("o shell não deu um menu para esses itens");
+        return unavailable(fx_core::tr!(
+            "o shell não deu um menu para esses itens",
+            "the shell gave no menu for these items"
+        ));
     };
     // SAFETY: plain call creating an empty popup menu, destroyed below.
     let Ok(popup) = (unsafe { CreatePopupMenu() }) else {
-        return unavailable("sem menu");
+        return unavailable(fx_core::tr!("sem menu", "no menu"));
     };
     for (k, label) in req.fx_items.iter().enumerate() {
         let text: Vec<u16> = label.encode_utf16().chain([0]).collect();
@@ -275,7 +281,10 @@ fn show(req: &MenuRequest, ready: &dyn Fn()) -> MenuOutcome {
                 if done.is_ok() {
                     MenuOutcome::Shell
                 } else {
-                    unavailable("o comando do menu falhou")
+                    unavailable(fx_core::tr!(
+                        "o comando do menu falhou",
+                        "the menu command failed"
+                    ))
                 }
             }
         }
@@ -313,7 +322,9 @@ pub fn show_context_menu(request: MenuRequest) -> std::sync::mpsc::Receiver<Menu
         None => {
             let (tx, rx) = std::sync::mpsc::channel();
             let _ = tx.send(MenuReply {
-                outcome: MenuOutcome::Unavailable("menu indisponível".into()),
+                outcome: MenuOutcome::Unavailable(
+                    fx_core::tr!("menu indisponível", "menu unavailable").into(),
+                ),
                 ready_after: None,
                 built_in: None,
             });

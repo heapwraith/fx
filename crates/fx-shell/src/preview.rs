@@ -72,13 +72,19 @@ impl PreviewProcess {
             }
             Ok(_) => {
                 process.kill();
-                Err(io::Error::other("a prévia terminou sem abrir"))
+                Err(io::Error::other(fx_core::tr!(
+                    "a prévia terminou sem abrir",
+                    "the preview ended without opening"
+                )))
             }
             Err(_) => {
                 process.kill();
                 Err(io::Error::new(
                     io::ErrorKind::TimedOut,
-                    "o visualizador do Windows não respondeu",
+                    fx_core::tr!(
+                        "o visualizador do Windows não respondeu",
+                        "the Windows viewer did not respond"
+                    ),
                 ))
             }
         }

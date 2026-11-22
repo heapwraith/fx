@@ -81,19 +81,37 @@ mod tests {
             return false;
         }
         const WORDS: &[&str] = &[
-            " de ", " da ", " do ", " para ", " não ", " um ", " uma ", " com ", " sem ", " no ",
-            " na ", " em ", " os ", " as ", " é ",
+            " de ", " da ", " do ", " para ", " não ", " um ", " uma ", " com ", " sem ", " na ",
+            " em ", " os ", " é ",
         ];
+        // Character tables (the CP437 map of the zip reader) are not text.
+        if !text.contains(' ') && text.chars().filter(|c| !c.is_ascii()).count() > 20 {
+            return false;
+        }
         let accents = text.chars().any(|c| "ãõçáéíóúâêôàÃÕÇÁÉÍÓÚÂÊÔ".contains(c));
         let padded = format!(" {} ", text.to_lowercase());
-        accents || WORDS.iter().any(|w| padded.contains(w))
+        // Single words count only with accents ("as", "do" are also code).
+        accents || text.trim().contains(' ') && WORDS.iter().any(|w| padded.contains(w))
     }
 
     /// The literals of a source file, outside comments and the test module,
     /// each with whether it is the first half of a pair: `tr!("pt", "en")`,
     /// `trf!("pt", "en", ...)` or `("pt", "en")` (palette commands).
     fn literals(src: &str) -> Vec<(usize, String, bool)> {
-        let src = src.split("\n#[cfg(test)]\nmod tests").next().unwrap_or(src);
+        // Cut at the test module (`#[cfg(test)]`, `#[cfg(all(test, windows))]`).
+        let cut = src
+            .match_indices("\n#[cfg(")
+            .find(|(at, _)| {
+                let rest = &src[at + 1..];
+                let line = rest.lines().next().unwrap_or("");
+                line.contains("test")
+                    && rest
+                        .lines()
+                        .nth(1)
+                        .is_some_and(|l| l.starts_with("mod tests"))
+            })
+            .map_or(src.len(), |(at, _)| at);
+        let src = &src[..cut];
         let bytes = src.as_bytes();
         let mut out = Vec::new();
         let (mut i, mut line) = (0, 1);
@@ -112,6 +130,30 @@ mod tests {
                         i += 1;
                     }
                     i += 1;
+                }
+                // Raw strings: r"…", r#"…"# (no escapes inside).
+                b'r' if (i == 0
+                    || !bytes[i - 1].is_ascii_alphanumeric() && bytes[i - 1] != b'_')
+                    && matches!(bytes.get(i + 1), Some(b'"' | b'#')) =>
+                {
+                    let mut j = i + 1;
+                    let mut hashes = 0;
+                    while bytes.get(j) == Some(&b'#') {
+                        hashes += 1;
+                        j += 1;
+                    }
+                    if bytes.get(j) != Some(&b'"') {
+                        i += 1;
+                        continue;
+                    }
+                    let start = j + 1;
+                    let close = format!("\"{}", "#".repeat(hashes));
+                    let end = src[start..].find(&close).map_or(src.len(), |e| start + e);
+                    let text = &src[start..end];
+                    line += text.matches('\n').count();
+                    out.push((line, text.to_owned(), false));
+                    i = end + close.len();
+                    continue;
                 }
                 b'"' => {
                     let start = i;
@@ -147,7 +189,9 @@ mod tests {
             let p = entry.path();
             if p.is_dir() {
                 sources(&p, out);
-            } else if p.extension().is_some_and(|e| e == "rs") {
+            } else if p.extension().is_some_and(|e| e == "rs")
+                && p.file_name().is_none_or(|n| n != "tests.rs")
+            {
                 out.push(p);
             }
         }
@@ -156,8 +200,13 @@ mod tests {
     #[test]
     fn no_interface_text_outside_the_pairs() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
         let mut files = Vec::new();
         sources(&root, &mut files);
+        // Libraries whose messages reach the interface (T4.2).
+        for lib in ["fx-core", "fx-ops", "fx-shell", "fx-fs"] {
+            sources(&crates.join(lib).join("src"), &mut files);
+        }
         assert!(files.len() > 20, "sources found: {}", files.len());
         let mut loose = Vec::new();
         for f in &files {
@@ -171,7 +220,7 @@ mod tests {
                     continue;
                 }
                 if looks_portuguese(text) {
-                    let name = f.strip_prefix(&root).unwrap_or(f).display();
+                    let name = f.strip_prefix(&crates).unwrap_or(f).display();
                     loose.push(format!("{name}:{line}: \"{text}\""));
                 }
             }

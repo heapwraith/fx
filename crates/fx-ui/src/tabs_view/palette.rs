@@ -407,7 +407,23 @@ impl TabsView {
                         div().truncate().child(format!("{}|", p.query))
                     }),
             )
-            .child(list)
+            .child(if p.shown.is_empty() {
+                div()
+                    .flex_1()
+                    .flex()
+                    .justify_center()
+                    .pt(px(space(8)))
+                    .px(px(space(4)))
+                    .text_color(rgba(t.text_secondary))
+                    .child(trf!(
+                        "Nenhum comando ou pasta com \"{}\". Tente outra palavra.",
+                        "No command or folder with \"{}\". Try another word.",
+                        p.query
+                    ))
+                    .into_any_element()
+            } else {
+                list.into_any_element()
+            })
             .child(
                 div()
                     .flex_none()
@@ -428,7 +444,8 @@ impl TabsView {
                     }),
             );
         Some(
-            deferred(
+            deferred(crate::motion::enter(
+                "palette-in",
                 div()
                     .id("palette-backdrop")
                     .absolute()
@@ -443,7 +460,7 @@ impl TabsView {
                         }),
                     )
                     .child(card),
-            )
+            ))
             .with_priority(3),
         )
     }

@@ -56,8 +56,9 @@ pub(crate) fn recycle(paths: &[PathBuf]) -> io::Result<()> {
         if !ok {
             return Err(io::Error::new(
                 io::ErrorKind::Unsupported,
-                format!(
+                fx_core::trf!(
                     "a unidade de \"{}\" não tem Lixeira; nada foi excluído (Shift+Delete exclui permanentemente)",
+                    "the drive of \"{}\" has no Recycle Bin; nothing was deleted (Shift+Delete deletes permanently)",
                     p.display()
                 ),
             ));
@@ -89,7 +90,7 @@ pub(crate) fn recycle(paths: &[PathBuf]) -> io::Result<()> {
     if aborted.as_bool() {
         return Err(io::Error::new(
             io::ErrorKind::Interrupted,
-            "exclusão cancelada",
+            fx_core::tr!("exclusão cancelada", "deletion canceled"),
         ));
     }
     Ok(())
@@ -202,10 +203,12 @@ pub(crate) fn find_recycled(original: &Path, real: &Path) -> Option<Recycled> {
 /// Puts a recycled item back. If its original name is taken now, it comes
 /// back under a "keep both" name; returns where it went.
 pub(crate) fn restore(item: &Recycled) -> io::Result<PathBuf> {
-    let dir = item
-        .original
-        .parent()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "sem pasta de origem"))?;
+    let dir = item.original.parent().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            fx_core::tr!("sem pasta de origem", "no source folder"),
+        )
+    })?;
     std::fs::create_dir_all(dir)?;
     let mut target = item.original.clone();
     if std::fs::symlink_metadata(&target).is_ok() {

@@ -46,9 +46,12 @@ fn host() -> io::Result<&'static Mutex<Host>> {
     std::thread::Builder::new()
         .name("fx-sheets".into())
         .spawn(move || run(&rx, &ready_tx))?;
-    let thread_id = ready_rx
-        .recv_timeout(CREATE_TIMEOUT)
-        .map_err(|_| io::Error::other("a thread das Propriedades não iniciou"))?;
+    let thread_id = ready_rx.recv_timeout(CREATE_TIMEOUT).map_err(|_| {
+        io::Error::other(fx_core::tr!(
+            "a thread das Propriedades não iniciou",
+            "the Properties thread did not start"
+        ))
+    })?;
     // A race with another first caller only leaves an idle thread behind.
     Ok(HOST.get_or_init(|| {
         Mutex::new(Host {
@@ -94,18 +97,27 @@ fn show(items: &[PathBuf]) -> io::Result<()> {
 pub(super) fn multi(items: Vec<PathBuf>) -> io::Result<()> {
     let (reply_tx, reply_rx) = channel();
     let thread_id = {
-        let host = host()?
-            .lock()
-            .map_err(|_| io::Error::other("Propriedades indisponíveis"))?;
-        host.requests
-            .send((items, reply_tx))
-            .map_err(|_| io::Error::other("Propriedades indisponíveis"))?;
+        let host = host()?.lock().map_err(|_| {
+            io::Error::other(fx_core::tr!(
+                "Propriedades indisponíveis",
+                "Properties unavailable"
+            ))
+        })?;
+        host.requests.send((items, reply_tx)).map_err(|_| {
+            io::Error::other(fx_core::tr!(
+                "Propriedades indisponíveis",
+                "Properties unavailable"
+            ))
+        })?;
         host.thread_id
     };
     // SAFETY: plain call; the host thread's queue exists (created before its
     // id was published).
     unsafe { PostThreadMessageW(thread_id, WM_SHEET, WPARAM(0), LPARAM(0)) }.map_err(to_io)?;
-    reply_rx
-        .recv_timeout(CREATE_TIMEOUT)
-        .map_err(|_| io::Error::other("as Propriedades não responderam"))?
+    reply_rx.recv_timeout(CREATE_TIMEOUT).map_err(|_| {
+        io::Error::other(fx_core::tr!(
+            "as Propriedades não responderam",
+            "Properties did not respond"
+        ))
+    })?
 }

@@ -102,6 +102,15 @@ impl Host {
                 return;
             };
             let mut cmd = std::process::Command::new(exe);
+            // Its messages follow the interface language (T4.2).
+            cmd.env(
+                "FX_LANG",
+                if fx_core::locale::english() {
+                    "en"
+                } else {
+                    "pt"
+                },
+            );
             cmd.arg(owner.to_string())
                 .args([rect.x, rect.y, rect.width, rect.height].map(|v| v.to_string()))
                 .arg(path);
@@ -561,7 +570,8 @@ impl FolderView {
             )
             .child(div().flex_1().min_h_0().child(body));
         Some(
-            deferred(
+            deferred(crate::motion::enter(
+                "quick-look-in",
                 div()
                     .id("quick-look-backdrop")
                     .absolute()
@@ -576,7 +586,7 @@ impl FolderView {
                         }),
                     )
                     .child(card),
-            )
+            ))
             .with_priority(1),
         )
     }
