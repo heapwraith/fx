@@ -82,6 +82,14 @@ pub struct TabState {
     pub widths: Option<[f32; 3]>,
 }
 
+/// A named set of tabs (T6.13): the folders and which one is active.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct WorkspaceState {
+    pub name: String,
+    pub tabs: Vec<PathBuf>,
+    pub active: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct WindowState {
     /// x, y, width, height (logical pixels).
@@ -99,6 +107,8 @@ pub struct Session {
     /// Folders opened, for "ir para" que aprende (T6.5); `None` while they
     /// are still loading (the saved ones are then left as they are).
     pub visits: Option<Vec<fx_core::frecency::Visit>>,
+    /// Workspaces (T6.13); `None` while they are still loading.
+    pub workspaces: Option<Vec<WorkspaceState>>,
 }
 
 /// `%APPDATA%\fx` or `%LOCALAPPDATA%\fx`; `FX_DATA_DIR` replaces both (tests).
@@ -167,6 +177,9 @@ const SCHEMA: &str = "
     -- T6.5: how often and how recently each folder was opened.
     CREATE TABLE IF NOT EXISTS visits (
         path TEXT PRIMARY KEY, rank REAL NOT NULL, last INTEGER NOT NULL);
+    -- T6.13: named sets of tabs, one row per tab.
+    CREATE TABLE IF NOT EXISTS workspaces (
+        name TEXT NOT NULL, pos INTEGER NOT NULL, path TEXT NOT NULL, active INTEGER NOT NULL);
 ";
 
 fn text(p: &Path) -> String {
@@ -257,6 +270,20 @@ impl Db {
                 [],
             )?;
         }
+        if let Some(spaces) = &s.workspaces {
+            tx.execute("DELETE FROM workspaces", [])?;
+            for ws in spaces {
+                for (k, path) in ws.tabs.iter().enumerate() {
+                    // Only exact paths are kept (nothing converted with loss).
+                    if let Some(path) = path.to_str() {
+                        tx.execute(
+                            "INSERT INTO workspaces (name, pos, path, active) VALUES (?1, ?2, ?3, ?4)",
+                            params![ws.name, k as i64, path, ws.active as i64],
+                        )?;
+                    }
+                }
+            }
+        }
         if let Some(visits) = &s.visits {
             tx.execute("DELETE FROM visits", [])?;
             for v in visits {
@@ -270,6 +297,33 @@ impl Db {
             }
         }
         tx.commit()
+    }
+
+    /// The workspaces (T6.13), by name.
+    pub fn load_workspaces(&self) -> rusqlite::Result<Vec<WorkspaceState>> {
+        let mut q = self
+            .conn
+            .prepare("SELECT name, path, active FROM workspaces ORDER BY name, pos")?;
+        let rows = q.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                PathBuf::from(r.get::<_, String>(1)?),
+                r.get::<_, i64>(2)?,
+            ))
+        })?;
+        let mut out: Vec<WorkspaceState> = Vec::new();
+        for row in rows {
+            let (name, path, active) = row?;
+            match out.last_mut().filter(|w| w.name == name) {
+                Some(w) => w.tabs.push(path),
+                None => out.push(WorkspaceState {
+                    name,
+                    tabs: vec![path],
+                    active: usize::try_from(active).unwrap_or(0),
+                }),
+            }
+        }
+        Ok(out)
     }
 
     /// The folders opened (T6.5), read on their own: they count even when
@@ -400,6 +454,7 @@ impl Db {
             pinned,
             settings: Settings::default(),
             visits: None,
+            workspaces: None,
         })
     }
 
@@ -472,6 +527,33 @@ mod tests {
         assert_eq!(db.load_visits().unwrap().len(), 2);
     }
 
+    #[test]
+    fn workspaces_round_trip_in_tab_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut db = Db::open(&dir.path().join("state.db")).unwrap();
+        let ws = |name: &str, tabs: &[&str], active| WorkspaceState {
+            name: name.into(),
+            tabs: tabs.iter().map(PathBuf::from).collect(),
+            active,
+        };
+        let mut s = session(1);
+        s.workspaces = Some(vec![
+            ws("Trabalho", &[r"C:\Projetos\fx", r"C:\Projetos\fx\docs"], 1),
+            ws("Fotos", &[r"D:\Fotos"], 0),
+        ]);
+        db.save(&s).unwrap();
+        assert_eq!(
+            db.load_workspaces().unwrap(),
+            vec![
+                ws("Fotos", &[r"D:\Fotos"], 0),
+                ws("Trabalho", &[r"C:\Projetos\fx", r"C:\Projetos\fx\docs"], 1),
+            ]
+        );
+        s.workspaces = None;
+        db.save(&s).unwrap();
+        assert_eq!(db.load_workspaces().unwrap().len(), 2, "kept while loading");
+    }
+
     fn session(n: u32) -> Session {
         Session {
             windows: vec![WindowState {
@@ -498,6 +580,7 @@ mod tests {
             pinned: Some(vec![PathBuf::from(r"C:\Fotos"), PathBuf::from(r"D:\")]),
             settings: Settings::default(),
             visits: None,
+            workspaces: None,
         }
     }
 

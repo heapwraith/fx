@@ -40,6 +40,7 @@ mod tooltip;
 mod trace;
 mod update;
 mod visits;
+mod workspaces;
 
 use futures::StreamExt;
 use fx_core::tr;
@@ -83,6 +84,20 @@ struct Startup {
     density: Density,
     sidebar: bool,
     show_hidden: bool,
+}
+
+/// Opens a window on a folder, with saved tabs if given (`WindowState`).
+type OpenWindow = Rc<dyn Fn(PathBuf, Option<WindowState>, &mut App)>;
+
+/// How any part of the app opens a new window.
+pub struct WindowOpener(pub OpenWindow);
+
+impl gpui::Global for WindowOpener {}
+
+impl std::fmt::Debug for WindowOpener {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("WindowOpener")
+    }
 }
 
 /// The daily update check runs once per process.
@@ -136,8 +151,8 @@ fn main() {
     // Settings and the saved session (task T1.17), read before the event
     // loop. Benchmarks and test runs (FX_NO_STATE=1) neither read nor save.
     let persist = trace.is_none() && std::env::var_os("FX_NO_STATE").is_none_or(|v| v != "1");
-    // "Ir para" que aprende (T6.5): the folders opened, read off the UI thread.
-    visits::load(persist);
+    // The folders opened (T6.5) and the workspaces (T6.13), off the UI thread.
+    persist::load_lists(persist);
     let settings = if persist {
         store::settings_path()
             .map(|p| store::load_settings(&p))
@@ -215,6 +230,13 @@ fn main() {
             media,
             persist,
         };
+        // Lets a window open another one (workspaces, T6.13).
+        {
+            let shared = shared.clone();
+            cx.set_global(WindowOpener(Rc::new(move |path, saved, cx| {
+                let _ = open_folder_window(path, startup, None, shared.clone(), saved, cx);
+            })));
+        }
         // The last session's windows, or one window on the folder asked for.
         let saved: Vec<WindowState> = session
             .map(|s| s.windows)

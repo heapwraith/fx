@@ -40,6 +40,8 @@ pub enum Action {
     UpdateChecks,
     /// Asks (or not) before sending items to the Recycle Bin.
     ConfirmRecycle,
+    /// T6.13: asks a name and saves this window's tabs as a workspace.
+    SaveWorkspace,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,6 +107,7 @@ impl Command {
             Action::ReportCrash | Action::CrashReports => "\u{E7BA}", // Warning
             Action::Update | Action::UpdateChecks => "\u{E895}", // Sync
             Action::ConfirmRecycle => "\u{E74D}",
+            Action::SaveWorkspace => "\u{E74E}", // Save
         }
     }
 
@@ -157,6 +160,13 @@ pub const COMMANDS: &[Command] = &[
     tab(("Desfazer", "Undo"), "ctrl-z"),
     tab(("Refazer", "Redo"), "ctrl-y"),
     tab(("Selecionar tudo", "Select all"), "ctrl-a"),
+    direct(
+        (
+            "Salvar abas como espaço de trabalho…",
+            "Save tabs as a workspace…",
+        ),
+        Action::SaveWorkspace,
+    ),
     tab(("Propriedades", "Properties"), "alt-enter"),
     tab(("Abrir com…", "Open with…"), "shift-enter"),
     tab(

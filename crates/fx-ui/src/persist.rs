@@ -155,6 +155,7 @@ impl Persist {
             pinned,
             settings,
             visits: crate::visits::saved(),
+            workspaces: crate::workspaces::saved(),
         }
     }
 
@@ -171,6 +172,32 @@ impl Persist {
 }
 
 /// Reads the saved session (before the event loop starts).
+/// Reads the visited folders (T6.5) and the workspaces (T6.13) on a thread
+/// of its own, at startup: one connection, nothing on the UI thread. If they
+/// cannot be read, they are not saved this session, so nothing saved before
+/// is lost.
+pub fn load_lists(persist: bool) {
+    if !persist {
+        return;
+    }
+    let _ = std::thread::Builder::new()
+        .name("fx-load".into())
+        .spawn(|| {
+            let Some(db) = store::state_path().and_then(|p| store::Db::open(&p).ok()) else {
+                log::warn!("state.db could not be opened to read visits and workspaces");
+                return;
+            };
+            match db.load_visits() {
+                Ok(v) => crate::visits::set_loaded(v),
+                Err(e) => log::warn!("folder visits could not be read: {e}"),
+            }
+            match db.load_workspaces() {
+                Ok(w) => crate::workspaces::set_loaded(w),
+                Err(e) => log::warn!("workspaces could not be read: {e}"),
+            }
+        });
+}
+
 pub fn load_session() -> Option<Session> {
     let db = store::Db::open(&store::state_path()?).ok()?;
     db.load().ok()

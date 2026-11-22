@@ -16,6 +16,7 @@ mod palette;
 mod queue;
 mod settings;
 mod sidebar;
+mod workspace;
 
 use futures::StreamExt;
 use fx_core::tr;
@@ -205,6 +206,7 @@ impl TabsView {
                     self.settings_keyboard = true;
                 }
             }
+            "palette" if arg == "naming" => self.open_palette_naming(cx),
             "palette" => self.open_palette(cx),
             "sidebar" => self.sidebar_focus = Some(arg.parse().unwrap_or(0)),
             "guide" => self.open_guide(cx),

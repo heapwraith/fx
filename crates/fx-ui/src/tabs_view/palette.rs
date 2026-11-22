@@ -42,6 +42,13 @@ enum Item {
         /// `usize::MAX` for one never opened.
         order: usize,
     },
+    /// A saved workspace (T6.13): opens in a window of its own.
+    Workspace {
+        name: String,
+        tabs: usize,
+    },
+    /// Deletes a workspace (offered only when searching).
+    RemoveWorkspace(String),
 }
 
 impl Item {
@@ -49,6 +56,10 @@ impl Item {
         match self {
             Item::Command(c) => c.label().to_owned(),
             Item::Folder { name, .. } => name.clone(),
+            Item::Workspace { name, .. } => trf!("Espaço: {}", "Workspace: {}", name),
+            Item::RemoveWorkspace(name) => {
+                trf!("Excluir espaço: {}", "Delete workspace: {}", name)
+            }
         }
     }
 }
@@ -60,6 +71,8 @@ pub(super) struct Palette {
     shown: Vec<usize>,
     cursor: usize,
     scroll: UniformListScrollHandle,
+    /// Typing the name of a workspace to save (T6.13), not searching.
+    naming: bool,
 }
 
 impl Palette {
@@ -68,6 +81,10 @@ impl Palette {
     fn filter(&mut self) {
         self.cursor = 0;
         self.scroll.scroll_to_item(0, ScrollStrategy::Top);
+        if self.naming {
+            self.shown.clear();
+            return;
+        }
         if self.query.trim().is_empty() {
             let recent: Vec<usize> = (0..self.items.len())
                 .filter(|&i| matches!(self.items[i], Item::Folder { pinned: false, .. }))
@@ -75,9 +92,16 @@ impl Palette {
                 .collect();
             let pinned = (0..self.items.len())
                 .filter(|&i| matches!(self.items[i], Item::Folder { pinned: true, .. }));
+            let spaces =
+                (0..self.items.len()).filter(|&i| matches!(self.items[i], Item::Workspace { .. }));
             let commands =
                 (0..self.items.len()).filter(|&i| matches!(self.items[i], Item::Command(_)));
-            self.shown = recent.into_iter().chain(pinned).chain(commands).collect();
+            self.shown = recent
+                .into_iter()
+                .chain(pinned)
+                .chain(spaces)
+                .chain(commands)
+                .collect();
             return;
         }
         let mut scored: Vec<(usize, i32, usize)> = self
@@ -98,7 +122,7 @@ impl Palette {
                     Item::Folder { path, .. } => {
                         fuzzy_score(&self.query, &path.to_string_lossy()).map(|s| s - PATH_PENALTY)
                     }
-                    Item::Command(_) => None,
+                    _ => None,
                 })?;
                 Some((i, score, label.len()))
             })
@@ -111,6 +135,21 @@ impl Palette {
 impl TabsView {
     pub(super) fn palette_open(&self) -> bool {
         self.palette.is_some()
+    }
+
+    /// The palette asking the name of a workspace to save (T6.13).
+    pub(super) fn open_palette_naming(&mut self, cx: &mut Context<Self>) {
+        let mut p = Palette {
+            query: String::new(),
+            items: Vec::new(),
+            shown: Vec::new(),
+            cursor: 0,
+            scroll: UniformListScrollHandle::new(),
+            naming: true,
+        };
+        p.filter();
+        self.palette = Some(p);
+        cx.notify();
     }
 
     pub(super) fn open_palette(&mut self, cx: &mut Context<Self>) {
@@ -157,13 +196,20 @@ impl TabsView {
             let order = frecent.iter().position(|f| f == p).unwrap_or(usize::MAX);
             folder(p.clone(), true, order)
         }));
+        let spaces = crate::workspaces::list();
+        items.extend(spaces.iter().map(|w| Item::Workspace {
+            name: w.name.clone(),
+            tabs: w.tabs.len(),
+        }));
         items.extend(COMMANDS.iter().map(Item::Command));
+        items.extend(spaces.into_iter().map(|w| Item::RemoveWorkspace(w.name)));
         let mut palette = Palette {
             query: String::new(),
             items,
             shown: Vec::new(),
             cursor: 0,
             scroll: UniformListScrollHandle::new(),
+            naming: false,
         };
         palette.filter();
         self.palette = Some(palette);
@@ -189,6 +235,16 @@ impl TabsView {
             "escape" => {
                 self.palette = None;
                 self.focus_active(window, cx);
+                cx.notify();
+                return;
+            }
+            "enter" if p.naming => {
+                let name = p.query.trim().to_owned();
+                if !name.is_empty() {
+                    self.palette = None;
+                    self.save_workspace(name, cx);
+                    self.focus_active(window, cx);
+                }
                 cx.notify();
                 return;
             }
@@ -247,7 +303,12 @@ impl TabsView {
         use crate::a11y::{Item as A11yItem, Overlay};
         let p = self.palette.as_ref()?;
         let mut items = vec![A11yItem::Input {
-            label: tr!("Comando ou pasta", "Command or folder").to_owned(),
+            label: if p.naming {
+                tr!("Nome do espaço de trabalho", "Workspace name")
+            } else {
+                tr!("Comando ou pasta", "Command or folder")
+            }
+            .to_owned(),
             value: p.query.clone(),
         }];
         let mut acts = vec![None];
@@ -255,6 +316,14 @@ impl TabsView {
             let description = match &p.items[i] {
                 Item::Command(c) => c.shortcut(),
                 Item::Folder { path, .. } => Some(path.display().to_string()),
+                Item::Workspace { tabs, .. } => {
+                    let tabs = super::workspace::tabs_text(*tabs);
+                    Some(trf!(
+                        "{tabs}, abre numa janela nova",
+                        "{tabs}, opens in a new window"
+                    ))
+                }
+                Item::RemoveWorkspace(_) => None,
             };
             items.push(A11yItem::Choice {
                 label: p.items[i].label(),
@@ -272,10 +341,17 @@ impl TabsView {
             Overlay {
                 title: tr!("Paleta de comandos", "Command palette").to_owned(),
                 description: Some(
-                    tr!(
-                        "Digite para filtrar. ↑ e ↓ escolhem, Enter executa, Esc fecha.",
-                        "Type to filter. ↑ and ↓ choose, Enter runs, Esc closes."
-                    )
+                    if p.naming {
+                        tr!(
+                            "Digite o nome do espaço de trabalho. Enter salva as abas desta janela, Esc cancela.",
+                            "Type the workspace name. Enter saves this window's tabs, Esc cancels."
+                        )
+                    } else {
+                        tr!(
+                            "Digite para filtrar. ↑ e ↓ escolhem, Enter executa, Esc fecha.",
+                            "Type to filter. ↑ and ↓ choose, Enter runs, Esc closes."
+                        )
+                    }
                     .to_owned(),
                 ),
                 items,
@@ -306,6 +382,12 @@ impl TabsView {
         match item {
             Item::Folder { path, .. } => {
                 tab.update(cx, |view, cx| view.open(path, window, cx));
+            }
+            Item::Workspace { name, .. } => self.open_workspace(&name, cx),
+            Item::RemoveWorkspace(name) => {
+                crate::workspaces::remove(&name);
+                let text = trf!("Espaço \"{}\" excluído", "Workspace \"{}\" deleted", name);
+                tab.update(cx, |view, cx| view.show_notice(text, cx));
             }
             Item::Command(c) => match c.action {
                 Action::Key(Target::Window, keys) => {
@@ -373,6 +455,7 @@ impl TabsView {
                     cx.refresh_windows();
                 }
                 Action::About => self.open_settings(super::settings::Section::About, cx),
+                Action::SaveWorkspace => self.open_palette_naming(cx),
             },
         }
     }
@@ -410,6 +493,18 @@ impl TabsView {
                         tr!("Recente", "Recent")
                     }
                     .into(),
+                },
+                item @ Item::Workspace { tabs, .. } => Row {
+                    glyph: "\u{E7C4}", // TaskView
+                    label: item.label().into(),
+                    detail: super::workspace::tabs_text(*tabs).into(),
+                    shortcut: tr!("Nova janela", "New window").into(),
+                },
+                item @ Item::RemoveWorkspace(_) => Row {
+                    glyph: "\u{E74D}", // Delete
+                    label: item.label().into(),
+                    detail: SharedString::default(),
+                    shortcut: SharedString::default(),
                 },
             })
             .collect();
@@ -473,7 +568,8 @@ impl TabsView {
             .id("palette")
             .w_full()
             .max_w(px(PANEL_WIDTH))
-            .h(px(400.0))
+            // Naming a workspace needs only a line, not the list's height.
+            .when(!p.naming, |d| d.h(px(400.0)))
             .flex()
             .flex_col()
             .rounded(px(RADIUS * 2.0))
@@ -493,15 +589,33 @@ impl TabsView {
                     .border_b_1()
                     .border_color(rgba(t.divider))
                     .child(if p.query.is_empty() {
-                        div().text_color(rgba(t.text_secondary)).child(tr!(
-                            "Digite um comando ou uma pasta…",
-                            "Type a command or a folder…"
-                        ))
+                        div().text_color(rgba(t.text_secondary)).child(if p.naming {
+                            tr!(
+                                "Nome do espaço de trabalho (ex.: Trabalho)…",
+                                "Workspace name (e.g. Work)…"
+                            )
+                        } else {
+                            tr!("Digite um comando ou uma pasta…", "Type a command or a folder…")
+                        })
                     } else {
                         div().truncate().child(format!("{}|", p.query))
                     }),
             )
-            .child(if p.shown.is_empty() {
+            .child(if p.naming {
+                // Saving a workspace: what Enter will do.
+                let tabs = super::workspace::tabs_text(self.tabs.iter().count());
+                div()
+                    .flex()
+                    .justify_center()
+                    .py(px(space(6)))
+                    .px(px(space(4)))
+                    .text_color(rgba(t.text_secondary))
+                    .child(trf!(
+                        "Enter salva esta janela ({tabs}) com esse nome; o mesmo nome atualiza o espaço.",
+                        "Enter saves this window ({tabs}) under that name; the same name updates the workspace."
+                    ))
+                    .into_any_element()
+            } else if p.shown.is_empty() {
                 div()
                     .flex_1()
                     .flex()
@@ -527,7 +641,9 @@ impl TabsView {
                     .border_color(rgba(t.divider))
                     .text_size(px(CAPTION_SIZE))
                     .text_color(rgba(t.text_secondary))
-                    .child(if p.shown.is_empty() {
+                    .child(if p.naming {
+                        tr!("Enter salva · Esc cancela", "Enter saves · Esc cancels").to_owned()
+                    } else if p.shown.is_empty() {
                         tr!("Nada encontrado", "Nothing found").to_owned()
                     } else {
                         tr!(
@@ -593,6 +709,7 @@ mod tests {
             shown: Vec::new(),
             cursor: 0,
             scroll: UniformListScrollHandle::new(),
+            naming: false,
         };
         p.filter();
         p
@@ -628,6 +745,39 @@ mod tests {
         assert!(p.shown.is_empty());
     }
 
+    /// T6.13: workspaces show after the pinned folders; "Excluir" only when
+    /// searching; naming lists nothing.
+    #[test]
+    fn workspaces_in_the_palette() {
+        let mut p = palette(&[(r"C:\Fotos", true)]);
+        p.items.push(Item::Workspace {
+            name: "Trabalho".into(),
+            tabs: 3,
+        });
+        p.items.push(Item::RemoveWorkspace("Trabalho".into()));
+        p.filter();
+        assert_eq!(
+            p.items[p.shown[1]].label(),
+            Item::Workspace {
+                name: "Trabalho".into(),
+                tabs: 3
+            }
+            .label()
+        );
+        assert!(
+            !p.shown
+                .iter()
+                .any(|&i| matches!(p.items[i], Item::RemoveWorkspace(_))),
+            "no delete without searching"
+        );
+        p.query = "excluir trab".into();
+        p.filter();
+        assert!(matches!(p.items[p.shown[0]], Item::RemoveWorkspace(_)));
+        p.naming = true;
+        p.filter();
+        assert!(p.shown.is_empty());
+    }
+
     /// T6.5: "proj fx" takes to the folder, the most used first, before any
     /// command or fuzzy match.
     #[test]
@@ -639,7 +789,7 @@ mod tests {
         ]);
         let path_of = |p: &Palette, k: usize| match &p.items[p.shown[k]] {
             Item::Folder { path, .. } => path.clone(),
-            Item::Command(c) => PathBuf::from(c.label()),
+            other => PathBuf::from(other.label()),
         };
         p.query = "proj fx".into();
         p.filter();

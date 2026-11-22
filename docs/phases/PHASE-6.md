@@ -77,7 +77,7 @@ Painel duplo mostrando o que difere entre duas pastas; sincronizar pelo motor se
 Ícone de modificado/novo nos itens de pastas que são repositórios, lido em segundo plano.
 
 ### T6.13 — Espaços de trabalho
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: "Salvar abas como espaço de trabalho…" na paleta pede o nome no próprio campo e guarda as pastas das abas e a ativa numa tabela `workspaces` do `state.db` (o mesmo nome atualiza); "Espaço: Trabalho" abre numa janela nova, sem fechar nada; "Excluir espaço" aparece ao buscar; visitas e espaços lidos por uma só conexão fora da interface (4 testes novos).
 
 Conjuntos de abas e painéis por projeto ("Trabalho", "Fotos"), trocados pela paleta.
 
