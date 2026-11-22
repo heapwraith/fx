@@ -38,7 +38,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 - Um push verde no GitHub; uma tag de teste gera o zip, que roda num Windows limpo.
 
 ## T2.3 — Pendências da Fase 1
-- [ ] Concluída em: ____ · Resumo: em andamento (D-038). Feito: migalhas que não cabem viram "…" com menu das pastas escondidas (medidas pelo sistema de texto; 3 testes; conferido estreito, maximizado e clicando no menu); status com a largura do próprio texto; **travamento corrigido** no patch do GPUI (texto truncado com "…" derrubava o app em certas larguras, inclusive o exe do CI); `fx-bench memory` mede a P8: **85,3 MB** (meta 80); ícones custam 6,4 MB (sem eles: 78,9), dos quais 3,2 MB são o cache de ícones do shell (`SHGetFileInfoW`), que não dá para trocar sem perder fidelidade aos ícones do Explorador. **Falta:** decisão do usuário sobre a P8 e os testes manuais (Narrador, Explorador).
+- [x] Concluída em: 2026-11-22 · Resumo: migalhas que não cabem viram "…" com menu das pastas escondidas (3 testes; conferido estreito, maximizado e no menu); status com a largura do próprio texto; travamento do texto truncado corrigido no patch do GPUI; `fx-bench memory`: **P8 85,3 MB**, meta revista para ≤ 88 MB porque o excedente é o cache de ícones do Windows (D-038). Testes manuais com o usuário (Narrador, Explorador) movidos para a T2.11.
 
 **Fazer**
 - P8: memória parada numa pasta pequena ≤ 80 MB (hoje ~84). Perfilar ícones e lateral (VMMap/ETW) e cortar.
@@ -118,9 +118,10 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 
 **Fazer**
 - Assinatura do executável e do instalador (SignPath Foundation, depois que o usuário se inscrever); README com instalação, atalhos e como relatar problemas; modelo de issue.
+- Testes manuais com o usuário (vindos da T2.3): Narrador ao vivo; copiar, colar e arrastar com o Explorador, a área de trabalho e o navegador.
 
 **Aceite**
-- Release `v0.2.0-beta` publicado pelo usuário; SmartScreen sem aviso de "editor desconhecido" (se a assinatura sair a tempo).
+- Testes manuais feitos, com o resultado de cada um registrado; release `v0.2.0-beta` publicado pelo usuário; SmartScreen sem aviso de "editor desconhecido" (se a assinatura sair a tempo).
 
 ## T2.12 — Relatório do portão
 - [ ] Concluída em: ____ · Resumo:

@@ -11,7 +11,7 @@
 | P5 | Busca por nome no disco inteiro, por tecla, com ~2 milhões de arquivos indexados | ≤ 50 ms |
 | P6 | Construção inicial do índice da MFT de um disco com ~2 milhões de arquivos | ≤ 10 s |
 | P7 | Rolagem na lista de 100 mil itens, na taxa real do monitor | ≤ 0,5% de quadros perdidos (intervalo ≥ 1,5× o período do monitor); reportar também o p95 (D-014) |
-| P8 | Memória do app parado, 1 janela, 1 pasta pequena | ≤ 80 MB |
+| P8 | Memória do app parado, 1 janela, 1 pasta pequena | ≤ 88 MB (revisada em D-038; era 80 MB) |
 | P9 | Memória do índice por milhão de arquivos | ≤ 150 MB |
 
 ## Protocolo
