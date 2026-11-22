@@ -14,6 +14,7 @@ mod guide;
 mod history;
 mod palette;
 mod queue;
+mod settings;
 mod sidebar;
 
 #[allow(unused_imports)]
@@ -75,8 +76,8 @@ pub struct TabsView {
     history_open: bool,
     /// "Sobre" or "Como usar" (T4.6).
     guide: Option<guide::Guide>,
-    /// The help button's menu is open.
-    help_menu: bool,
+    /// The settings dialog and its section (Ctrl+, or the sidebar gear).
+    settings: Option<settings::Section>,
     /// Command palette (Ctrl+K, Ctrl+Shift+P; T1.24).
     palette: Option<palette::Palette>,
     /// Second panes (F3, T3.2), by the tab's own view.
@@ -157,7 +158,7 @@ impl TabsView {
             shown_active: None,
             history_open: false,
             guide: None,
-            help_menu: false,
+            settings: None,
             palette: None,
             seconds: std::collections::HashMap::new(),
         };
@@ -412,10 +413,21 @@ impl TabsView {
             cx.notify();
             return;
         }
-        if self.help_menu && ks.key == "escape" {
-            self.help_menu = false;
+        if self.settings.is_some() && ks.key == "escape" {
+            self.settings = None;
             cx.stop_propagation();
             cx.notify();
+            return;
+        }
+        // Ctrl+, : settings (the shortcut of macOS, VS Code, Zed, Slack...).
+        if ks.key == "," && m.control && !m.alt && !m.shift {
+            if self.settings.is_some() {
+                self.settings = None;
+                cx.notify();
+            } else {
+                self.open_settings(settings::Section::General, cx);
+            }
+            cx.stop_propagation();
             return;
         }
         if self.guide.is_some() && ks.key == "escape" {
@@ -658,28 +670,6 @@ impl TabsView {
                         cx.notify();
                     })),
             )
-            // Help: "Como usar" and "Sobre", always one click away.
-            .child(
-                div()
-                    .id("help")
-                    .flex_none()
-                    .mb(px(space(1)))
-                    .size(px(28.0))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded(px(RADIUS))
-                    .font_family(icon_font)
-                    .text_size(px(CAPTION_SIZE))
-                    .text_color(rgba(t.text_secondary))
-                    .hover(|s| s.bg(rgba(t.hover)))
-                    .when(self.help_menu, |d| d.bg(rgba(t.selected)))
-                    .child(crate::theme::ICON_HELP)
-                    .on_click(cx.listener(|view, _: &ClickEvent, _, cx| {
-                        view.help_menu = !view.help_menu;
-                        cx.notify();
-                    })),
-            )
     }
 }
 
@@ -720,7 +710,7 @@ impl Render for TabsView {
             .children(self.render_queue(cx))
             .children(self.render_history(cx))
             .children(self.render_guide(cx))
-            .children(self.render_help_menu(cx))
+            .children(self.render_settings(cx))
             .children(self.render_palette(cx))
             .children(self.render_conflict(cx))
     }
@@ -742,5 +732,12 @@ pub fn guide_seen() -> bool {
 impl TabsView {
     pub fn open_howto(&mut self, cx: &mut Context<Self>) {
         self.open_guide(guide::Guide::HowTo, cx);
+    }
+}
+
+impl TabsView {
+    /// The sidebar footer's "Configurações".
+    pub(crate) fn open_settings_general(&mut self, cx: &mut Context<Self>) {
+        self.open_settings(settings::Section::General, cx);
     }
 }

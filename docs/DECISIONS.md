@@ -497,3 +497,10 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
   - **A lista aparecia pelas bordas** do Quick Look, da busca e do renomear em lote: véu suave atrás (`theme::scrim`; nenhum no alto contraste).
   - "10000 selecionados" sem separador de milhar; rótulos da paleta cortados em inglês (encurtados nos dois idiomas); `{nome}` no renomear em lote em inglês (agora `{name}`; os dois funcionam); textos cortados no "Como usar".
 
+## D-063 — Configurações e rodapé da barra lateral (padrão global de 2026)
+- **Data:** 2026-11-22 · **Status:** aceita (pedido do usuário: "padrão global, não padrão Windows")
+- **Padrão seguido:** o dos apps de referência de 2026 (Linear, Notion, Slack, Discord, Arc, VS Code, Zed): rodapé fixo na barra lateral com **Ajuda** e **Configurações**; **Ctrl+,** abre as Configurações (atalho universal); Configurações numa janela com categorias à esquerda; **"Sobre"** é a última categoria.
+- **Configurações** (`tabs_view/settings.rs`), cada controle ligado ao estado real: Geral (idioma, confirmar Lixeira, reabrir abas), Aparência (densidade, itens ocultos, barra lateral; o tema segue o Windows), Atualizações (automáticas, versão, procurar agora), Privacidade (relatórios de falha; o que o fx envia), Sistema (gerenciador padrão, busca no disco inteiro), Sobre (logo, slogan, versão, licença, Como usar, Novidades, Código, Relatar um problema).
+- **Rodapé da barra lateral:** "Ajuda F1" (abre "Como usar") e "Configurações Ctrl+,", sempre visíveis (fora da rolagem). O botão "?" do topo saiu (duplicava). "Sobre o fx" na paleta abre a seção Sobre; "Configurações" também está na paleta.
+- `restaurar_sessao` virou uma preferência alterável na hora (salva com a sessão), como as demais.
+

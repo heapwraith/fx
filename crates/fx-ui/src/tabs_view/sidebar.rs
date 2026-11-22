@@ -98,13 +98,10 @@ impl TabsView {
 
         let mut col = div()
             .id("sidebar")
-            .flex_none()
-            .w(px(WIDTH))
-            .h_full()
+            .flex_1()
+            .min_h_0()
             .overflow_y_scroll()
-            .py(px(space(1)))
-            .border_r_1()
-            .border_color(rgba(t.divider));
+            .py(px(space(1)));
 
         if let Some(home) = places.home() {
             col = col.child(item("home".into(), ICON_HOME, places.label(home), home));
@@ -238,6 +235,71 @@ impl TabsView {
                     })),
             );
         }
-        col
+        // Fixed footer (the 2026 pattern: settings and help at the bottom
+        // of the sidebar, always in view).
+        let footer_item =
+            |id: &'static str, icon: &'static str, label: &'static str, hint: &'static str| {
+                div()
+                    .id(id)
+                    .h(px(ITEM_HEIGHT))
+                    .mx(px(space(1)))
+                    .px(px(space(3)))
+                    .flex()
+                    .items_center()
+                    .gap(px(space(3)))
+                    .rounded(px(RADIUS))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(rgba(t.hover)))
+                    .child(
+                        div()
+                            .flex_none()
+                            .font_family(icon_font)
+                            .text_size(px(14.0))
+                            .child(icon),
+                    )
+                    .child(div().flex_1().min_w_0().truncate().child(label))
+                    .child(
+                        div()
+                            .flex_none()
+                            .text_size(px(11.0))
+                            .text_color(rgba(t.text_secondary))
+                            .child(hint),
+                    )
+            };
+        let footer = div()
+            .flex_none()
+            .py(px(space(1)))
+            .border_t_1()
+            .border_color(rgba(t.divider))
+            .child(
+                footer_item(
+                    "sidebar-help",
+                    crate::theme::ICON_HELP,
+                    tr!("Ajuda", "Help"),
+                    "F1",
+                )
+                .on_click(cx.listener(|view, _: &ClickEvent, _, cx| view.open_howto(cx))),
+            )
+            .child(
+                footer_item(
+                    "sidebar-settings",
+                    "\u{E713}",
+                    tr!("Configurações", "Settings"),
+                    "Ctrl+,",
+                )
+                .on_click(
+                    cx.listener(|view, _: &ClickEvent, _, cx| view.open_settings_general(cx)),
+                ),
+            );
+        div()
+            .flex_none()
+            .w(px(WIDTH))
+            .h_full()
+            .flex()
+            .flex_col()
+            .border_r_1()
+            .border_color(rgba(t.divider))
+            .child(col)
+            .child(footer)
     }
 }

@@ -25,7 +25,7 @@ Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualiz
 ### Mudado
 - Delete pergunta antes de enviar para a Lixeira (dá para desligar na paleta); as confirmações usam um diálogo do fx, traduzido, em vez da caixa do Windows.
 - Barra de progresso mais visível, com porcentagem, velocidade e tempo restante; a operação concluída fica um instante na tela.
-- Botão de ajuda (?) com "Como usar o fx" e "Sobre o fx".
+- **Configurações** (Ctrl+, ou a engrenagem no rodapé da barra lateral): idioma, Lixeira, sessão, aparência, atualizações, privacidade, sistema e "Sobre o fx". O rodapé da lateral também tem "Ajuda" (F1).
 - A vista em colunas mostra sempre a coluna da pasta atual inteira.
 
 ### Corrigido

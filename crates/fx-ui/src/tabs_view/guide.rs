@@ -1,26 +1,19 @@
-//! "Sobre o fx" and "Como usar o fx" (task T4.6): two dialogs over the
-//! window. "Como usar" opens by itself the first time fx runs, and with F1;
-//! both are in the palette. Esc or a click outside closes them.
+//! "Como usar o fx" (task T4.6): a dialog over the window that opens by
+//! itself the first time fx runs, with F1, the sidebar's "Ajuda" and the
+//! palette. "Sobre" lives in the settings (settings.rs). Esc or a click
+//! outside closes it.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[allow(unused_imports)]
 use fx_core::{tr, trf};
-use gpui::{
-    Context, Image, ImageFormat, MouseButton, MouseDownEvent, SharedString, deferred, div, img,
-    prelude::*, px,
-};
+use gpui::{Context, MouseButton, MouseDownEvent, SharedString, deferred, div, prelude::*, px};
 
 use super::TabsView;
 use crate::theme::{CAPTION_SIZE, RADIUS, rgba, space};
 
-const LOGO: &[u8] = include_bytes!("../../resources/logo-128.png");
-const REPO: &str = "https://github.com/heapwraith/fx";
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Guide {
-    About,
     HowTo,
 }
 
@@ -185,105 +178,10 @@ impl TabsView {
         cx.notify();
     }
 
-    /// The help button's menu (top right): "Como usar" and "Sobre".
-    pub(super) fn render_help_menu(
-        &self,
-        cx: &mut Context<Self>,
-    ) -> Option<impl IntoElement + use<>> {
-        if !self.help_menu {
-            return None;
-        }
-        let t = self.look.theme;
-        let item = |id: &'static str,
-                    label: &'static str,
-                    hint: &'static str,
-                    guide: Guide,
-                    cx: &mut Context<Self>| {
-            div()
-                .id(id)
-                .w_full()
-                .h(px(32.0))
-                .px(px(space(3)))
-                .flex()
-                .items_center()
-                .justify_between()
-                .gap(px(space(4)))
-                .rounded(px(RADIUS))
-                .cursor_pointer()
-                .hover(|s| s.bg(rgba(t.hover)))
-                .child(label)
-                .child(
-                    div()
-                        .text_size(px(CAPTION_SIZE))
-                        .text_color(rgba(t.text_secondary))
-                        .child(hint),
-                )
-                .on_click(cx.listener(move |view, _, _, cx| {
-                    view.help_menu = false;
-                    view.open_guide(guide, cx);
-                }))
-        };
-        let menu = div()
-            .id("help-menu")
-            .absolute()
-            .top(px(space(10)))
-            .right(px(space(2)))
-            .w(px(240.0))
-            .p(px(space(1)))
-            .flex()
-            .flex_col()
-            .rounded(px(RADIUS * 2.0))
-            .border_1()
-            .border_color(rgba(t.divider))
-            .bg(rgba(t.base))
-            .shadow_lg()
-            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(item(
-                "help-howto",
-                tr!("Como usar o fx", "How to use fx"),
-                "F1",
-                Guide::HowTo,
-                cx,
-            ))
-            .child(item(
-                "help-about",
-                tr!("Sobre o fx", "About fx"),
-                "",
-                Guide::About,
-                cx,
-            ));
-        Some(
-            deferred(crate::motion::enter(
-                "help-in",
-                div()
-                    .id("help-backdrop")
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|view, _: &MouseDownEvent, _, cx| {
-                            view.help_menu = false;
-                            cx.notify();
-                        }),
-                    )
-                    .child(menu),
-            ))
-            .with_priority(1),
-        )
-    }
-
-    fn open_link(&mut self, url: &'static str, cx: &mut Context<Self>) {
-        let tab = self.current();
-        tab.update(cx, |view, cx| view.open_url(url, cx));
-    }
-
     pub(super) fn render_guide(&self, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
         let guide = self.guide?;
         let t = self.look.theme;
         let card = match guide {
-            Guide::About => self.about_card(cx).into_any_element(),
             Guide::HowTo => self.howto_card().into_any_element(),
         };
         Some(
@@ -328,121 +226,6 @@ impl TabsView {
             .bg(rgba(t.base))
             .shadow_lg()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-    }
-
-    fn about_card(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        let t = self.look.theme;
-        let version = crate::VERSION
-            .split('+')
-            .next()
-            .unwrap_or(crate::VERSION)
-            .to_owned();
-        let commit = crate::VERSION.split_once('+').map(|(_, c)| c.to_owned());
-        let link =
-            |id: &'static str, label: &'static str, url: &'static str, cx: &mut Context<Self>| {
-                div()
-                    .id(id)
-                    .text_color(rgba(t.accent))
-                    .cursor_pointer()
-                    .hover(|s| s.underline())
-                    .child(label)
-                    .on_click(cx.listener(move |view, _, _, cx| view.open_link(url, cx)))
-            };
-        let logo = Arc::new(Image::from_bytes(ImageFormat::Png, LOGO.to_vec()));
-        self.card()
-            .w(px(520.0))
-            .p(px(space(8)))
-            .gap(px(space(4)))
-            .items_center()
-            .child(img(logo).size(px(72.0)))
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap(px(space(1)))
-                    .child(
-                        div()
-                            .text_size(px(24.0))
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child("fx"),
-                    )
-                    .child(
-                        div()
-                            .text_center()
-                            .text_color(rgba(t.text_secondary))
-                            .child(slogan()),
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap(px(space(1)))
-                    .text_size(px(CAPTION_SIZE))
-                    .text_color(rgba(t.text_secondary))
-                    .child(match &commit {
-                        Some(c) => trf!(
-                            "Versão {version} · compilação {c}",
-                            "Version {version} · build {c}"
-                        ),
-                        None => trf!("Versão {version}", "Version {version}"),
-                    })
-                    .child(tr!(
-                        "Software livre, sob as licenças MIT ou Apache 2.0.",
-                        "Free software, under the MIT or Apache 2.0 licenses."
-                    ))
-                    .child(tr!(
-                        "Feito em Rust, nativo do Windows.",
-                        "Made in Rust, native to Windows."
-                    )),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .justify_center()
-                    .gap(px(space(4)))
-                    .text_size(px(CAPTION_SIZE))
-                    .child(
-                        div()
-                            .id("about-update")
-                            .text_color(rgba(t.accent))
-                            .cursor_pointer()
-                            .hover(|s| s.underline())
-                            .child(tr!("Procurar atualizações", "Check for updates"))
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.guide = None;
-                                let tab = view.current();
-                                tab.update(cx, |tab, cx| tab.check_updates(false, cx));
-                                cx.notify();
-                            })),
-                    )
-                    .child(link(
-                        "about-news",
-                        tr!("Novidades", "What's new"),
-                        "https://github.com/heapwraith/fx/blob/main/CHANGELOG.md",
-                        cx,
-                    ))
-                    .child(link(
-                        "about-code",
-                        tr!("Código e sugestões", "Code and feedback"),
-                        REPO,
-                        cx,
-                    ))
-                    .child(
-                        div()
-                            .id("about-howto")
-                            .text_color(rgba(t.accent))
-                            .cursor_pointer()
-                            .hover(|s| s.underline())
-                            .child(tr!("Como usar (F1)", "How to use (F1)"))
-                            .on_click(
-                                cx.listener(|view, _, _, cx| view.open_guide(Guide::HowTo, cx)),
-                            ),
-                    ),
-            )
     }
 
     fn howto_card(&self) -> impl IntoElement + use<> {

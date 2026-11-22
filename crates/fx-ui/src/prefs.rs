@@ -30,3 +30,28 @@ pub fn switch_confirm_recycle() -> bool {
 pub fn chosen_confirm_recycle() -> Option<bool> {
     CHOSEN_RECYCLE.lock().ok().and_then(|c| *c)
 }
+
+/// Reopen the last windows and tabs when fx starts (`restaurar_sessao`).
+static RESTORE_SESSION: AtomicBool = AtomicBool::new(true);
+static CHOSEN_RESTORE: Mutex<Option<bool>> = Mutex::new(None);
+
+pub fn set_restore_session(on: bool) {
+    RESTORE_SESSION.store(on, Ordering::Relaxed);
+}
+
+pub fn restore_session() -> bool {
+    RESTORE_SESSION.load(Ordering::Relaxed)
+}
+
+pub fn switch_restore_session() -> bool {
+    let on = !restore_session();
+    set_restore_session(on);
+    if let Ok(mut c) = CHOSEN_RESTORE.lock() {
+        *c = Some(on);
+    }
+    on
+}
+
+pub fn chosen_restore_session() -> Option<bool> {
+    CHOSEN_RESTORE.lock().ok().and_then(|c| *c)
+}

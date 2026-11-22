@@ -233,6 +233,7 @@ pub const COMMANDS: &[Command] = &[
         ),
         Action::ConfirmRecycle,
     ),
+    window(("Configurações", "Settings"), "ctrl-,"),
 ];
 
 /// "ctrl-shift-n" → "Ctrl+Shift+N", "alt-up" → "Alt+↑", "space" → "Espaço".

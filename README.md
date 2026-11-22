@@ -36,13 +36,13 @@ Baixe a última versão em [Releases](../../releases):
 - **Instalador** (`fx-X.Y.Z-setup-x64.exe`, ou `-arm64.exe`): instala só para o seu usuário, sem pedir administrador, e coloca o fx no Menu Iniciar. Desinstala por Configurações › Aplicativos.
 - **Portátil** (`fx-X.Y.Z-windows-x64.zip`): descompacte e rode `fx.exe`.
 
-**Atualizações:** o fx procura uma versão nova uma vez por dia, baixa e confere em segundo plano, e aplica quando você fecha o programa. "Atualizar o fx" na paleta reinicia na hora; "Atualizações automáticas: ligar ou desligar" desliga.
+**Atualizações:** o fx procura uma versão nova uma vez por dia, baixa e confere em segundo plano, e aplica quando você fecha o programa. "Atualizar o fx" na paleta reinicia na hora; Configurações › Atualizações desliga.
 
 Enquanto a assinatura digital não está ativa, o Windows pode avisar "editor desconhecido": clique em "Mais informações" e depois em "Executar assim mesmo".
 
 ## Primeiros passos
 
-**F1** mostra como usar o fx, e **Ctrl+K** encontra qualquer comando pelo nome. Os atalhos principais:
+**F1** (ou "Ajuda", no rodapé da barra lateral) mostra como usar o fx, **Ctrl+K** encontra qualquer comando pelo nome e **Ctrl+,** abre as Configurações. Os atalhos principais:
 
 | Atalho | Ação | Atalho | Ação |
 |---|---|---|---|
@@ -62,7 +62,7 @@ Enquanto a assinatura digital não está ativa, o Windows pode avisar "editor de
 
 ## Privacidade
 
-O fx não envia nada sobre você. A verificação de atualizações só consulta a lista de versões no GitHub. Se o fx fechar com uma falha, ele grava um relatório local, sem caminhos nem nomes, e oferece abrir uma issue que você revisa antes de enviar. As duas coisas podem ser desligadas na paleta.
+O fx não envia nada sobre você. A verificação de atualizações só consulta a lista de versões no GitHub. Se o fx fechar com uma falha, ele grava um relatório local, sem caminhos nem nomes, e oferece abrir uma issue que você revisa antes de enviar. As duas coisas podem ser desligadas em Configurações.
 
 ## Relatar problemas
 

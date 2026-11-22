@@ -285,7 +285,7 @@ impl TabsView {
                     crate::i18n::switch();
                     cx.refresh_windows();
                 }
-                Action::About => self.open_guide(super::guide::Guide::About, cx),
+                Action::About => self.open_settings(super::settings::Section::About, cx),
             },
         }
     }

@@ -132,6 +132,7 @@ fn main() {
     motion::init();
     crash::set_enabled(settings.relatorio_falhas);
     prefs::set_confirm_recycle(settings.confirmar_lixeira);
+    prefs::set_restore_session(settings.restaurar_sessao);
     // Benchmarks and test runs never ask the network.
     update::set_enabled(persist && settings.verificar_atualizacoes);
     // A report left by the last run (T3.10): offered in the status bar.

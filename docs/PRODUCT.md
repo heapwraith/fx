@@ -12,7 +12,7 @@ Qualquer pessoa que usa o Explorador do Windows e o acha lento — do usuário c
 
 ## Layout
 - **Topo:** abas; voltar, avançar e subir; barra de caminho em migalhas (vira campo de texto ao clicar, com autocompletar); grade/lista, itens ocultos e status ("13 itens · lida em 34 ms").
-- **Esquerda (recolhível, Ctrl+B):** pasta pessoal, Acesso rápido (fixar e desafixar), unidades com espaço livre.
+- **Esquerda (recolhível, Ctrl+B):** pasta pessoal, Acesso rápido (fixar e desafixar), unidades com espaço livre; rodapé fixo com "Ajuda" (F1) e "Configurações" (Ctrl+,), que termina em "Sobre o fx".
 - **Centro:** lista, grade ou colunas (Ctrl+Shift+3); painel duplo com F3.
 - **Sobreposições:** paleta (Ctrl+K), busca (Ctrl+F), Quick Look (Espaço), histórico, renomear em lote, "Sobre" e "Como usar" (F1).
 - **Embaixo:** fila de operações e terminal embutido (Ctrl+J).
