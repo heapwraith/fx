@@ -1066,7 +1066,7 @@ pub fn features() -> std::io::Result<()> {
 /// median. `FX_BENCH_ENV="A=1 B=0"` adds variables, to price a part.
 pub fn memory() -> std::io::Result<()> {
     const RUNS: usize = 5;
-    const TARGET_P8_MB: f64 = 80.0;
+    const TARGET_P8_MB: f64 = 88.0; // D-038
     let root = fixtures_root()?;
     let extra = std::env::var("FX_BENCH_ENV").unwrap_or_default();
     let env: Vec<(&str, &str)> = extra

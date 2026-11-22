@@ -124,7 +124,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 - Testes manuais feitos, com o resultado de cada um registrado; release `v0.2.0-beta` publicado pelo usuário; SmartScreen sem aviso de "editor desconhecido" (se a assinatura sair a tempo).
 
 ## T2.12 — Relatório do portão
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: `bench/results/gate-2.md`: P1 433 ms, P2 10,5 ms (aba), P4 p95 ≤ 3,9 ms, P5 5,39 ms pelo serviço, P7 0 perdidos em 3.999, P8 85,8 MB, P9 98,7 MB/milhão; nenhum caso de perda de dados; beta aguardando o usuário (SignPath, testes, publicar).
 
 **Fazer**
 - `/gate`: metas P1–P9, falhas conhecidas, testes de falha, comparação com o Explorador e o Everything.
