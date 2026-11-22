@@ -89,6 +89,16 @@ fn main() {
     tags::init();
     // An empty argument counts as none (a shell command with "%1" and no item).
     let arg = std::env::args_os().nth(1).filter(|a| !a.is_empty());
+    // As the default file manager, fx also gets the folders that are not on
+    // disk (Recycle Bin, This PC, Control Panel): those go back to Explorer.
+    let arg = match arg.as_deref().map(fx_core::shell_arg::classify) {
+        Some(fx_core::shell_arg::ShellArgument::Virtual(name)) => {
+            let _ = fx_shell::launch(fx_shell::launch::Launch::Explore(name)).recv();
+            return;
+        }
+        Some(fx_core::shell_arg::ShellArgument::Path(p)) => Some(p.into_os_string()),
+        None => None,
+    };
     // No folder (Win+E, the Start Menu): the user's home, not the working
     // directory, which for those launches is System32.
     let path = arg

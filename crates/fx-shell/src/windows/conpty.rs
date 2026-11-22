@@ -157,9 +157,37 @@ impl Pty {
 
 impl Drop for Pty {
     fn drop(&mut self) {
-        // SAFETY: we own the console and the process handle; each is released
-        // once. Closing the console ends the shell's console; the process is
-        // terminated in case it lingers.
+        // Before Windows 11 24H2, ClosePseudoConsole waits until the console
+        // ends (Microsoft Learn): never on the caller's thread, which is often
+        // the UI thread (review, D-066). The output reader keeps draining, so
+        // the close completes. If the thread cannot start, the closure is
+        // dropped here, and `closing` with it: it closes on this thread
+        // instead of leaking.
+        let closing = Closing {
+            hpc: self.hpc,
+            process: self.process,
+        };
+        let _ = std::thread::Builder::new()
+            .name("fx-conpty-close".into())
+            .spawn(move || drop(closing));
+    }
+}
+
+/// What closing a terminal releases, handed to its own thread.
+struct Closing {
+    hpc: HPCON,
+    process: HANDLE,
+}
+
+// SAFETY: a console handle and a process handle are valid in the whole
+// process; after the `Pty` is gone, only the closing thread uses them.
+unsafe impl Send for Closing {}
+
+impl Drop for Closing {
+    fn drop(&mut self) {
+        // SAFETY: we own the console and the process handle (the `Pty` that
+        // held them is gone); each is released once. Closing the console ends
+        // the shell's console; the process is terminated in case it lingers.
         unsafe {
             ClosePseudoConsole(self.hpc);
             let _ = TerminateProcess(self.process, 0);

@@ -38,11 +38,7 @@ impl TabsView {
             let paused = job.paused;
             let finished = job.finished;
             let status = progress_text(job);
-            let fraction = if job.bytes == 0 {
-                0.0
-            } else {
-                (job.done as f32 / job.bytes as f32).clamp(0.0, 1.0)
-            };
+            let fraction = progress_fraction(job);
             let button = |name: SharedString, glyph: &'static str| {
                 div()
                     .id(name)
@@ -311,7 +307,20 @@ fn compare(
     ]
 }
 
+/// How full the bar is: done over total; a finished job is full even with
+/// nothing to copy (an empty folder).
+fn progress_fraction(job: &crate::ops::JobView) -> f32 {
+    if job.finished {
+        return 1.0;
+    }
+    if job.bytes == 0 {
+        return 0.0;
+    }
+    (job.done as f32 / job.bytes as f32).clamp(0.0, 1.0)
+}
+
 /// "1,0 GB de 3,0 GB · 33% · 850 MB/s · 3 s restantes", or "Concluído".
+/// Speed and time left use running time only (pauses excluded).
 fn progress_text(job: &crate::ops::JobView) -> String {
     if job.finished {
         return trf!("Concluído · {}", "Done · {}", size_short(job.bytes));
@@ -328,7 +337,7 @@ fn progress_text(job: &crate::ops::JobView) -> String {
         size_short(job.done),
         size_short(job.bytes)
     );
-    let secs = job.started.elapsed().as_secs_f64();
+    let secs = job.running_time().as_secs_f64();
     if !job.paused && secs > 0.5 && job.done > 0 {
         let speed = job.done as f64 / secs;
         let left = (job.bytes.saturating_sub(job.done) as f64 / speed).ceil() as u64;
@@ -348,6 +357,71 @@ fn progress_text(job: &crate::ops::JobView) -> String {
         });
     }
     text
+}
+
+#[cfg(test)]
+mod progress_tests {
+    use super::{progress_fraction, progress_text};
+    use crate::ops::JobView;
+    use std::time::Duration;
+
+    fn job(bytes: u64, done: u64, ran_secs: u64) -> JobView {
+        JobView {
+            id: Default::default(),
+            label: String::new(),
+            bytes,
+            done,
+            paused: false,
+            ran: Duration::from_secs(ran_secs),
+            running_since: None,
+            finished: false,
+        }
+    }
+
+    #[test]
+    fn speed_and_time_left_come_from_running_time() {
+        // 100 MB of 200 MB in 2 s of running: 50 MB/s, 2 s left.
+        let mb = 1 << 20;
+        let text = progress_text(&job(200 * mb, 100 * mb, 2));
+        assert!(text.contains("50%"), "{text}");
+        assert!(text.contains("50 MB/s"), "{text}");
+        assert!(text.contains("2 s"), "{text}");
+        // Long ones in minutes, rounded up.
+        let text = progress_text(&job(200 * mb, mb, 2));
+        assert!(text.contains("min"), "{text}");
+    }
+
+    #[test]
+    fn paused_and_finished_jobs() {
+        let mut paused = job(100, 40, 10);
+        paused.paused = true;
+        let text = progress_text(&paused);
+        assert!(
+            text.contains("40%") && !text.contains("/s"),
+            "no speed while paused: {text}"
+        );
+        let mut empty = job(0, 0, 1);
+        assert_eq!(progress_fraction(&empty), 0.0);
+        empty.finished = true;
+        assert_eq!(
+            progress_fraction(&empty),
+            1.0,
+            "an empty folder copied: full bar"
+        );
+        assert!(!progress_text(&empty).contains('%'));
+    }
+
+    #[test]
+    fn pauses_do_not_count_as_running() {
+        let mut j = job(100, 50, 3);
+        j.running_since = Some(std::time::Instant::now());
+        j.set_paused_for_test(true);
+        let ran = j.ran;
+        assert!(ran >= Duration::from_secs(3) && ran < Duration::from_secs(4));
+        assert!(j.running_since.is_none());
+        j.set_paused_for_test(false);
+        assert!(j.running_since.is_some());
+    }
 }
 
 #[cfg(test)]

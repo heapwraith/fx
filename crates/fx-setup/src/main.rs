@@ -302,7 +302,7 @@ impl Setup {
                 let _ = progress_tx.send(Ok(s));
             });
             if let Err(e) = result {
-                let _ = tx.send(Err(e.to_string()));
+                let _ = tx.send(Err(install_failure_text(&e)));
             }
         });
         self.begin(false, rx, cx);
@@ -323,7 +323,10 @@ impl Setup {
                     let _ = progress_tx.send(Ok(s));
                 }) {
                     Ok(()) => Ok(Step::Done),
-                    Err(e) => Err(e.to_string()),
+                    Err(e) => Err(trf!(
+                        "{e}. Feche todas as janelas do fx e tente de novo.",
+                        "{e}. Close every fx window and try again."
+                    )),
                 },
             );
         });
@@ -369,8 +372,8 @@ impl Setup {
                     .update(cx, |v, cx| {
                         let end = match message {
                             Some(Ok(step)) => v.advance(step, uninstall),
-                            Some(Err(e)) => {
-                                v.screen = Screen::Failed(failure_text(&e, uninstall));
+                            Some(Err(text)) => {
+                                v.screen = Screen::Failed(text);
                                 true
                             }
                             None => false,
@@ -460,17 +463,28 @@ impl Setup {
     }
 }
 
-fn failure_text(e: &str, uninstall: bool) -> String {
-    if uninstall {
-        trf!(
-            "{e}. Feche todas as janelas do fx e tente de novo.",
-            "{e}. Close every fx window and try again."
-        )
-    } else {
-        trf!(
-            "{e}. Nenhum arquivo foi alterado. Tente de novo; se o erro voltar, baixe o instalador outra vez.",
-            "{e}. No files were changed. Try again; if the error comes back, download the installer again."
-        )
+/// What the failure screen says: exactly what was left on disk.
+fn install_failure_text(e: &transaction::InstallError) -> String {
+    use transaction::{InstallError, Missing};
+    match e {
+        InstallError::NothingChanged(error) => trf!(
+            "{error}. Nenhum arquivo foi alterado. Tente de novo; se o erro voltar, baixe o instalador outra vez.",
+            "{error}. No files were changed. Try again; if the error comes back, download the installer again."
+        ),
+        InstallError::Incomplete {
+            missing: Missing::Shortcut,
+            error,
+        } => trf!(
+            "{error}. Os arquivos novos do fx já estão instalados, mas faltaram o atalho e o registro em Configurações › Aplicativos. Tente de novo para completar.",
+            "{error}. fx's new files are installed, but the shortcut and the entry in Settings › Apps are missing. Try again to finish."
+        ),
+        InstallError::Incomplete {
+            missing: Missing::AppsEntry,
+            error,
+        } => trf!(
+            "{error}. Os arquivos novos e o atalho do fx já estão instalados, mas faltou o registro em Configurações › Aplicativos. Tente de novo para completar.",
+            "{error}. fx's new files and shortcut are installed, but the entry in Settings › Apps is missing. Try again to finish."
+        ),
     }
 }
 

@@ -22,6 +22,7 @@ path = "src/main.rs"
 fx-core.workspace = true
 fx-shell.workspace = true
 gpui.workspace = true
+thiserror.workspace = true
 
 [build-dependencies]
 embed-resource.workspace = true

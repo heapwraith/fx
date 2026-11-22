@@ -67,10 +67,37 @@ pub struct JobView {
     pub bytes: u64,
     pub done: u64,
     pub paused: bool,
-    /// For the speed and the time left shown in the queue panel.
-    pub started: std::time::Instant,
+    /// Time spent running before the current stretch (pauses excluded), and
+    /// when the current stretch began (`None` while paused): the speed and
+    /// time left count only running time (review, D-066).
+    pub ran: std::time::Duration,
+    pub running_since: Option<std::time::Instant>,
     /// Set when it ends: the panel keeps it a moment, as "Concluído".
     pub finished: bool,
+}
+
+impl JobView {
+    /// How long it has been running, pauses excluded.
+    pub fn running_time(&self) -> std::time::Duration {
+        self.ran
+            + self
+                .running_since
+                .map_or_else(Default::default, |t| t.elapsed())
+    }
+
+    #[cfg(test)]
+    pub fn set_paused_for_test(&mut self, paused: bool) {
+        self.set_paused(paused);
+    }
+
+    fn set_paused(&mut self, paused: bool) {
+        if paused && let Some(since) = self.running_since.take() {
+            self.ran += since.elapsed();
+        } else if !paused && self.running_since.is_none() {
+            self.running_since = Some(std::time::Instant::now());
+        }
+        self.paused = paused;
+    }
 }
 
 /// A conflict waiting for the user's decision.
@@ -242,7 +269,8 @@ impl Ops {
             bytes,
             done: 0,
             paused: false,
-            started: std::time::Instant::now(),
+            ran: std::time::Duration::ZERO,
+            running_since: Some(std::time::Instant::now()),
             finished: false,
         });
     }
@@ -279,7 +307,7 @@ impl Ops {
             }
         }
         if let Some(j) = self.active.iter_mut().find(|j| j.id == id) {
-            j.paused = paused;
+            j.set_paused(paused);
         }
         cx.notify();
     }
@@ -585,7 +613,7 @@ mod tests {
         assert_eq!(history_label(&one, &r), "Copiou \"foto.jpg\" para b");
         let many = Job::recycle(vec![PathBuf::from(r"C:\a\x"), PathBuf::from(r"C:\a\y")]);
         assert_eq!(history_label(&many, &r), "Enviou 2 itens para a Lixeira");
-        let ren = Job::rename(PathBuf::from(r"C:\a\x.txt"), "y.txt".into());
+        let ren = Job::rename(PathBuf::from(r"C:\a\x.txt"), "y.txt");
         assert_eq!(history_label(&ren, &r), "Renomeou \"x.txt\" para \"y.txt\"");
     }
 }

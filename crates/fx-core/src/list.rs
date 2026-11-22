@@ -71,10 +71,9 @@ pub fn next_sort(current: (SortKey, Direction), clicked: SortKey) -> (SortKey, D
     }
 }
 
-/// The temporary file fx-ops writes while copying (`.name.fx-<pid>-<job>.tmp`,
-/// renamed to the real name at the end): not something to show.
+/// The temporary file of a copy in progress: not something to show.
 pub fn is_fx_temp(name: &str) -> bool {
-    name.starts_with('.') && name.ends_with(".tmp") && name.contains(".fx-")
+    crate::temp_name::is_temp_name(name)
 }
 
 /// "Type" column text: folders, then the extension ("Arquivo JPG"), or just
@@ -520,6 +519,10 @@ mod tests {
         assert!(is_fx_temp(".grande.bin.fx-2968-1.tmp"));
         assert!(!is_fx_temp("relatorio.tmp"));
         assert!(!is_fx_temp(".gitignore"));
+        assert!(
+            !is_fx_temp(".notas.fx-backup.tmp"),
+            "the user's file stays visible"
+        );
     }
 
     use super::*;

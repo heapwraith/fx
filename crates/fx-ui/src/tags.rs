@@ -6,7 +6,9 @@
 //!
 //! Keys are full paths in lower case (NTFS ignores case); the path as
 //! written is kept for display. Renames and moves done by fx carry the tags
-//! along (`moved`), folders with everything below.
+//! along (`moved`), folders with everything below: by path components, never
+//! by cutting text, since lower case can change a name's length ("İ" becomes
+//! two characters; review, D-066).
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -18,8 +20,6 @@ use rusqlite::{Connection, params};
 enum Write {
     /// Key, path as written, mask (0: delete).
     Set(String, String, u8),
-    /// Old key, new key, new path as written.
-    Move(String, String, String),
 }
 
 struct Store {
@@ -51,8 +51,21 @@ pub fn init() {
     let _ = store();
 }
 
+/// The lookup key of `path`: lower case, exact. A path that is not valid
+/// Unicode (a lone surrogate) keeps its odd bytes escaped, so two such paths
+/// never share a key.
 fn key(path: &Path) -> String {
-    path.to_string_lossy().to_lowercase()
+    if let Some(text) = path.to_str() {
+        return text.to_lowercase();
+    }
+    let mut out = String::new();
+    for chunk in path.as_os_str().as_encoded_bytes().utf8_chunks() {
+        out.push_str(&chunk.valid().to_lowercase());
+        for b in chunk.invalid() {
+            out.push_str(&format!("\\x{b:02x}"));
+        }
+    }
+    out
 }
 
 fn lock() -> std::sync::MutexGuard<'static, Store> {
@@ -111,32 +124,25 @@ fn set_locked(s: &mut Store, path: &Path, mask: u8) {
 /// `old` was renamed or moved to `new` (by fx): its tags, and those of
 /// everything below it, follow.
 pub fn moved(old: &Path, new: &Path) {
-    let (old_key, new_key) = (key(old), key(new));
-    let new_text = new.to_string_lossy().into_owned();
-    let mut s = lock();
+    let old_key = key(old);
     let prefix = format!("{old_key}\\");
+    let depth = old.components().count();
+    let mut s = lock();
     let moving: Vec<(String, u8, PathBuf)> = s
         .map
         .iter()
         .filter(|(k, _)| **k == old_key || k.starts_with(&prefix))
         .map(|(k, (m, p))| (k.clone(), *m, p.clone()))
         .collect();
-    if moving.is_empty() {
-        return;
-    }
-    let old_len = old_key.chars().count();
     for (k, m, p) in moving {
-        s.map.remove(&k);
-        let rest: String = k.chars().skip(old_len).collect();
         // What is below the moved item keeps its own spelling.
-        let below: String = p.to_string_lossy().chars().skip(old_len).collect();
-        s.map.insert(
-            format!("{new_key}{rest}"),
-            (m, PathBuf::from(format!("{new_text}{below}"))),
-        );
-    }
-    if let Some(w) = &s.writer {
-        let _ = w.send(Write::Move(old_key, new_key, new_text));
+        let mut to = new.to_path_buf();
+        to.extend(p.components().skip(depth));
+        s.map.remove(&k);
+        if let Some(w) = &s.writer {
+            let _ = w.send(Write::Set(k, String::new(), 0));
+        }
+        set_locked(&mut s, &to, m);
     }
 }
 
@@ -181,12 +187,6 @@ fn spawn_worker(db: PathBuf) -> std::io::Result<Sender<Write>> {
                          ON CONFLICT(key) DO UPDATE SET path = ?2, mask = ?3",
                         params![k, path, i64::from(mask)],
                     ),
-                    Write::Move(old, new, new_path) => conn.execute(
-                        "UPDATE tags SET key = ?2 || substr(key, length(?1) + 1), \
-                         path = ?3 || substr(path, length(?1) + 1) \
-                         WHERE key = ?1 OR substr(key, 1, length(?1) + 1) = ?1 || '\\'",
-                        params![old, new, new_path],
-                    ),
                 };
             }
         })?;
@@ -196,6 +196,32 @@ fn spawn_worker(db: PathBuf) -> std::io::Result<Sender<Write>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A name whose lower case is longer ("İ" → "i̇") still moves right.
+    #[test]
+    fn moving_a_folder_with_a_turkish_i_keeps_the_names_below() {
+        let inside = PathBuf::from(r"C:\fx-test-tags-i\İstanbul\fotos\a.jpg");
+        toggle(std::slice::from_ref(&inside), 1 << 2);
+        moved(
+            Path::new(r"C:\fx-test-tags-i\İstanbul"),
+            Path::new(r"C:\fx-test-tags-i\Ankara"),
+        );
+        let after = PathBuf::from(r"C:\fx-test-tags-i\Ankara\fotos\a.jpg");
+        assert_eq!(mask_of(&after), 1 << 2);
+        assert_eq!(mask_of(&inside), 0);
+        assert!(tagged(1 << 2).contains(&after), "{:?}", tagged(1 << 2));
+        toggle(std::slice::from_ref(&after), 1 << 2);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn paths_that_are_not_unicode_get_their_own_keys() {
+        use std::os::windows::ffi::OsStringExt;
+        let a = PathBuf::from(std::ffi::OsString::from_wide(&[0x43, 0x3A, 0x5C, 0xD800]));
+        let b = PathBuf::from(std::ffi::OsString::from_wide(&[0x43, 0x3A, 0x5C, 0xD801]));
+        assert_ne!(key(&a), key(&b));
+        assert_eq!(key(Path::new(r"C:\Pasta")), r"c:\pasta");
+    }
 
     // The process-wide store; FX_NO_STATE=1 in test runs keeps it in memory.
     #[test]

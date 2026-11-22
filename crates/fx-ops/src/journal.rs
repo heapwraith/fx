@@ -92,24 +92,12 @@ pub fn recover(dir: &Path) -> usize {
     removed
 }
 
-/// `.<name>.fx-<digits>-<digits>.tmp`: the only names [`recover`] deletes.
+/// Whether `path` is one of our temporary copies (the rule is in fx-core).
 pub(crate) fn is_temp_name(path: &Path) -> bool {
-    let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
-        // Our temporary names are built from the destination name; one that
-        // is not valid Unicode is not checked here and simply not deleted.
-        return false;
-    };
-    let Some(rest) = name.strip_prefix('.').and_then(|r| r.strip_suffix(".tmp")) else {
-        return false;
-    };
-    let Some(at) = rest.rfind(".fx-") else {
-        return false;
-    };
-    let (stem, ids) = (&rest[..at], &rest[at + 4..]);
-    let mut parts = ids.split('-');
-    let digits =
-        |p: Option<&str>| p.is_some_and(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()));
-    !stem.is_empty() && digits(parts.next()) && digits(parts.next()) && parts.next().is_none()
+    // A name that is not valid Unicode was never one of ours.
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(fx_core::temp_name::is_temp_name)
 }
 
 #[cfg(windows)]

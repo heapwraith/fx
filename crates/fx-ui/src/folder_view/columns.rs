@@ -16,14 +16,18 @@ use std::sync::mpsc::channel;
 use fx_core::miller::Miller;
 use fx_shell::launch::Launch;
 use gpui::{
-    Context, Keystroke, MouseButton, MouseDownEvent, ScrollHandle, SharedString, Window, div,
-    prelude::*, px, uniform_list,
+    Context, Keystroke, MouseButton, MouseDownEvent, SharedString, Window, div, prelude::*, px,
+    uniform_list,
 };
 
 use super::FolderView;
-use crate::theme::{CAPTION_SIZE, ICON_CHEVRON, ICON_FOLDER, RADIUS, rgba, space};
+use crate::theme::{
+    CAPTION_SIZE, ICON_CHEVRON, ICON_CHEVRON_LEFT, ICON_FOLDER, RADIUS, Theme, rgba, space,
+};
 
 const COLUMN_WIDTH: f32 = 260.0;
+/// The strip at an edge with hidden columns.
+const EDGE_WIDTH: f32 = 24.0;
 const ROW_HEIGHT: f32 = 28.0;
 /// Folders of the path shown when the columns open.
 const START_COLUMNS: usize = 3;
@@ -39,7 +43,6 @@ pub(super) struct Columns {
     model: Miller,
     entries: HashMap<PathBuf, Arc<Vec<ColEntry>>>,
     loading: HashSet<PathBuf>,
-    scroll: ScrollHandle,
 }
 
 impl Columns {
@@ -77,13 +80,7 @@ impl FolderView {
             model: Miller::new(&self.path, START_COLUMNS),
             entries: HashMap::new(),
             loading: HashSet::new(),
-            scroll: ScrollHandle::new(),
         });
-        // The current folder is the last column: keep it in view.
-        if let Some(c) = &self.miller {
-            c.scroll
-                .scroll_to_item(c.model.columns.len().saturating_sub(1));
-        }
         self.load_columns(cx);
         cx.notify();
     }
@@ -167,9 +164,6 @@ impl FolderView {
                 };
                 let e = &entries[next];
                 c.model.choose(k, &e.name, e.is_dir);
-                // A folder chosen opens a column: show it.
-                c.scroll
-                    .scroll_to_item(c.model.columns.len().saturating_sub(1));
                 self.load_columns(cx);
             }
             "right" => {
@@ -180,13 +174,11 @@ impl FolderView {
                     {
                         c.model.choose(k, &first.name, first.is_dir);
                     }
-                    c.scroll.scroll_to_item(c.model.focus);
                     self.load_columns(cx);
                 }
             }
             "left" => {
                 if c.model.left() {
-                    c.scroll.scroll_to_item(c.model.focus);
                     self.load_columns(cx);
                 }
             }
@@ -235,21 +227,30 @@ impl FolderView {
         let t = self.look.theme;
         let icon_font = self.look.icon_font;
         let view = cx.entity().downgrade();
-        let mut row = div()
-            .id("columns-row")
-            .size_full()
-            .flex()
-            .overflow_x_scroll()
-            .track_scroll(&c.scroll);
+        let mut row = div().id("columns-row").size_full().flex();
         // Only the columns that fit, always with the focused one and
-        // preferring the rightmost (the current folder), like Finder.
+        // preferring the rightmost (the current folder), like Finder. Strips
+        // at the edges show how many are hidden and bring the next one in
+        // (the mouse reaches every column; review, D-066).
         let len = c.model.columns.len();
         let fit = if self.last_list_width > 1.0 {
-            ((self.last_list_width / COLUMN_WIDTH).floor() as usize).max(1)
+            (((self.last_list_width - 2.0 * EDGE_WIDTH) / COLUMN_WIDTH).floor() as usize).max(1)
         } else {
             len
         };
         let start = first_visible(len, fit, c.model.focus);
+        let hidden_right = len.saturating_sub(start + fit);
+        if start > 0 {
+            row = row.child(edge_strip(
+                "columns-left",
+                ICON_CHEVRON_LEFT,
+                start,
+                start - 1,
+                &view,
+                t,
+                icon_font,
+            ));
+        }
         for (k, col) in c.model.columns.iter().enumerate().skip(start).take(fit) {
             let focused = k == c.model.focus;
             let chosen = c.chosen_index(k);
@@ -342,6 +343,17 @@ impl FolderView {
                     .child(div().flex_1().min_h_0().child(body)),
             );
         }
+        if hidden_right > 0 {
+            row = row.child(edge_strip(
+                "columns-right",
+                ICON_CHEVRON,
+                hidden_right,
+                start + fit,
+                &view,
+                t,
+                icon_font,
+            ));
+        }
         Some(
             div()
                 .id("columns")
@@ -355,6 +367,58 @@ impl FolderView {
                 .border_color(rgba(t.divider))
                 .child(row),
         )
+    }
+}
+
+/// A strip at an edge: the chevron and how many columns are hidden there;
+/// clicking it focuses column `reveal`, which brings it into view.
+fn edge_strip(
+    id: &'static str,
+    icon: &'static str,
+    hidden: usize,
+    reveal: usize,
+    view: &gpui::WeakEntity<FolderView>,
+    t: Theme,
+    icon_font: &'static str,
+) -> impl IntoElement {
+    let view = view.clone();
+    div()
+        .id(id)
+        .flex_none()
+        .w(px(EDGE_WIDTH))
+        .h_full()
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .gap(px(space(1)))
+        .border_r_1()
+        .border_color(rgba(t.divider))
+        .text_color(rgba(t.text_secondary))
+        .hover(|d| d.bg(rgba(t.hover)))
+        .cursor_pointer()
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            let _ = view.update(cx, |v, cx| v.focus_column(reveal, cx));
+        })
+        .child(
+            div()
+                .font_family(icon_font)
+                .text_size(px(CAPTION_SIZE))
+                .child(icon),
+        )
+        .child(div().text_size(px(CAPTION_SIZE)).child(hidden.to_string()))
+}
+
+impl FolderView {
+    /// Moves the focus to column `k` (an edge strip was clicked).
+    fn focus_column(&mut self, k: usize, cx: &mut Context<Self>) {
+        let Some(c) = self.miller.as_mut() else {
+            return;
+        };
+        while c.model.focus > k && c.model.left() {}
+        while c.model.focus < k && c.model.right() {}
+        self.load_columns(cx);
+        cx.notify();
     }
 }
 
@@ -376,9 +440,15 @@ fn read_column(dir: &Path, show_hidden: bool) -> Vec<ColEntry> {
         .into_iter()
         .flatten()
         .filter(|e| {
-            show_hidden
-                || !(e.attributes.contains(fx_core::Attributes::HIDDEN)
-                    || e.attributes.contains(fx_core::Attributes::SYSTEM))
+            // A copy in progress is never shown, like in the list.
+            let temp = e
+                .name
+                .to_str()
+                .is_some_and(fx_core::temp_name::is_temp_name);
+            !temp
+                && (show_hidden
+                    || !(e.attributes.contains(fx_core::Attributes::HIDDEN)
+                        || e.attributes.contains(fx_core::Attributes::SYSTEM)))
         })
         .map(|e| (e.attributes.is_dir(), e.name.to_string_lossy().into_owned()))
         .collect();

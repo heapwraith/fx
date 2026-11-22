@@ -14,14 +14,19 @@ pub fn scrub(text: &str, user: Option<&str>) -> String {
     while i < chars.len() {
         let c = chars[i];
         let next = chars.get(i + 1).copied();
-        // Quoted text: usually a file or folder name.
-        if matches!(c, '"' | '\'' | '`')
-            && let Some(end) = chars[i + 1..].iter().position(|&d| d == c)
-        {
+        // Quoted text: usually a file or folder name. An apostrophe inside a
+        // word (can't, it's, Ana's) is not a quote: ' opens only after a
+        // non-letter and closes only before one (review, D-066).
+        let opens =
+            matches!(c, '"' | '`') || (c == '\'' && (i == 0 || !chars[i - 1].is_alphanumeric()));
+        let closes = |j: usize| {
+            chars[j] == c && (c != '\'' || chars.get(j + 1).is_none_or(|d| !d.is_alphanumeric()))
+        };
+        if opens && let Some(end) = (i + 1..chars.len()).find(|&j| closes(j)) {
             out.push(c);
             out.push_str("<text>");
             out.push(c);
-            i += end + 2;
+            i = end + 1;
             continue;
         }
         // C:\..., \\server\..., \\?\..., /a/b
@@ -191,6 +196,14 @@ mod tests {
             "not a path: no leading slash"
         );
         assert_eq!(scrub("a (/tmp/x) b", None), "a (<path>) b");
+        // Apostrophes in words are not quotes.
+        assert_eq!(scrub("can't open 'x'", None), "can't open '<text>'");
+        assert_eq!(scrub("doesn't exist", None), "doesn't exist");
+        assert_eq!(
+            scrub("file 'Ana's notes.txt' missing", None),
+            "file '<text>' missing"
+        );
+        assert_eq!(scrub("say \"hi\" now", None), "say \"<text>\" now");
         assert_eq!(short_location("src/main.rs"), "main.rs");
         assert_eq!(
             short_location(r"C:\x\gpui-0.2.2\src\window.rs"),

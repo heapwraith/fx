@@ -369,7 +369,7 @@ fn guard_flags_roots_and_system_folders() {
         "drive root"
     );
     assert!(g(Job::delete_permanently(vec![PathBuf::from(r"D:\")])).is_some());
-    assert!(g(Job::rename(PathBuf::from(r"E:\"), "x".into())).is_some());
+    assert!(g(Job::rename(PathBuf::from(r"E:\"), "x")).is_some());
     assert!(
         g(Job::recycle(vec![PathBuf::from(
             r"c:\windows\system32\x.dll"
@@ -480,7 +480,7 @@ fn rename_undo_and_redo() {
     write(&a, b"x");
     let before = snapshot(t.path());
     let (e, rx) = engine();
-    let job = Job::rename(a.clone(), "novo ✓.txt".into());
+    let job = Job::rename(a.clone(), "novo ✓.txt");
     let report = run_ok(&e, &rx, job.clone());
     assert!(t.path().join("novo ✓.txt").exists() && !a.exists());
     let undo = undo_of(&job, &report).unwrap();
@@ -493,19 +493,42 @@ fn rename_undo_and_redo() {
     run_ok(
         &e,
         &rx,
-        Job::rename(t.path().join("novo ✓.txt"), "NOVO ✓.txt".into()),
+        Job::rename(t.path().join("novo ✓.txt"), "NOVO ✓.txt"),
     );
     write(&t.path().join("outro.txt"), b"keep me");
     let (_, outcome, _) = run(
         &e,
         &rx,
-        Job::rename(t.path().join("NOVO ✓.txt"), "outro.txt".into()),
+        Job::rename(t.path().join("NOVO ✓.txt"), "outro.txt"),
     );
     assert!(matches!(outcome, Outcome::Failed(_)));
     assert_eq!(
         std::fs::read(t.path().join("outro.txt")).unwrap(),
         b"keep me"
     );
+}
+
+/// Undo puts back the exact old name, even one that is not valid Unicode
+/// (NTFS allows a lone surrogate) or that starts with a space.
+#[cfg(windows)]
+#[test]
+fn undo_of_a_rename_restores_the_exact_name() {
+    use std::os::windows::ffi::OsStringExt;
+    let t = tempfile::tempdir().unwrap();
+    let odd = std::ffi::OsString::from_wide(&[0x20, 0x61, 0xD800, 0x62]);
+    let a = t.path().join(&odd);
+    write(&a, b"x");
+    let (e, rx) = engine();
+    let job = Job::rename(a.clone(), "claro.txt");
+    let report = run_ok(&e, &rx, job.clone());
+    assert!(!a.exists());
+    run_ok(&e, &rx, undo_of(&job, &report).unwrap());
+    assert!(a.exists(), "the old name came back exactly");
+    let names: Vec<_> = std::fs::read_dir(t.path())
+        .unwrap()
+        .map(|d| d.unwrap().file_name())
+        .collect();
+    assert_eq!(names, vec![odd]);
 }
 
 #[test]
@@ -968,7 +991,7 @@ fn batch_rename_swaps_cycles_and_undoes_in_one_step() {
     }
     let (e, rx) = engine();
     // a -> b, b -> c, c -> a (a cycle), plus a case-only rename.
-    let job = Job::batch_rename(vec![
+    let job = Job::batch_rename::<String>(vec![
         (d.join("a.txt"), "b.txt".into()),
         (d.join("b.txt"), "c.txt".into()),
         (d.join("c.txt"), "a.txt".into()),
@@ -1009,7 +1032,7 @@ fn batch_rename_onto_an_outside_name_changes_nothing() {
     write(&d.join("dois.txt"), b"2");
     write(&d.join("fora.txt"), b"F"); // not in the batch
     let (e, rx) = engine();
-    let job = Job::batch_rename(vec![
+    let job = Job::batch_rename::<String>(vec![
         (d.join("um.txt"), "novo.txt".into()),
         (d.join("dois.txt"), "fora.txt".into()),
     ]);

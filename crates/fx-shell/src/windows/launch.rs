@@ -39,6 +39,7 @@ pub fn launch(what: Launch) -> Receiver<io::Result<()>> {
             Launch::OpenWith(path) => {
                 shell_execute(Some("openas"), path.as_os_str(), None, None, 0)
             }
+            Launch::Explore(name) => shell_execute(Some("explore"), &name, None, None, 0),
             Launch::Terminal(dir) => terminal(&dir),
             Launch::Properties(items) => properties(&items),
             Launch::Elevated { exe, args } => run_elevated(&exe, &args),

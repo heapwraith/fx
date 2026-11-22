@@ -136,22 +136,45 @@ pub fn swap(staging: &Path, dir: &Path, names: &[String]) -> io::Result<()> {
     result
 }
 
+/// Why an install stopped and what it left behind, so the screen says exactly
+/// that (status is always real; review, D-066).
+#[derive(Debug, thiserror::Error)]
+pub enum InstallError {
+    /// Stopped before replacing anything: what is on disk is as before.
+    #[error(transparent)]
+    NothingChanged(io::Error),
+    /// The new files are in place; `missing` (and what comes after it) was
+    /// not done.
+    #[error("{error}")]
+    Incomplete { missing: Missing, error: io::Error },
+}
+
+/// The step that failed after the files were replaced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Missing {
+    /// The shortcuts (so the Settings › Apps entry is missing too).
+    Shortcut,
+    /// The Settings › Apps entry (and with it the uninstaller).
+    AppsEntry,
+}
+
 /// Installs `pkg` at `t`.
 pub fn install(
     pkg: &Package,
     t: &Target,
     opts: Options,
     progress: &mut dyn FnMut(Step),
-) -> io::Result<()> {
+) -> Result<(), InstallError> {
     let parent = t
         .dir
         .parent()
-        .ok_or_else(|| io::Error::other("install folder has no parent"))?;
-    std::fs::create_dir_all(parent)?;
+        .ok_or_else(|| io::Error::other("install folder has no parent"))
+        .map_err(InstallError::NothingChanged)?;
+    std::fs::create_dir_all(parent).map_err(InstallError::NothingChanged)?;
     clean_old(&t.dir);
     let staging = parent.join(format!(".fx-setup-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&staging);
-    std::fs::create_dir_all(&staging)?;
+    std::fs::create_dir_all(&staging).map_err(InstallError::NothingChanged)?;
     let total = pkg.files.len();
     let staged = (|| {
         for (k, (name, bytes)) in pkg.files.iter().enumerate() {
@@ -162,15 +185,17 @@ pub fn install(
         swap(&staging, &t.dir, &names)
     })();
     let _ = std::fs::remove_dir_all(&staging);
-    staged?;
+    // A failed swap put everything back.
+    staged.map_err(InstallError::NothingChanged)?;
 
+    let incomplete = |missing| move |error| InstallError::Incomplete { missing, error };
     progress(Step::Shortcuts);
     let exe = t.exe();
     if let Some(lnk) = &t.start_menu {
-        win::create_shortcut(lnk, &exe, "fx")?;
+        win::create_shortcut(lnk, &exe, "fx").map_err(incomplete(Missing::Shortcut))?;
     }
     if let Some(lnk) = t.desktop.as_ref().filter(|_| opts.desktop_shortcut) {
-        win::create_shortcut(lnk, &exe, "fx")?;
+        win::create_shortcut(lnk, &exe, "fx").map_err(incomplete(Missing::Shortcut))?;
     }
 
     progress(Step::Registering);
@@ -189,7 +214,8 @@ pub fn install(
             size_kb,
             url: "https://github.com/heapwraith/fx".into(),
         },
-    )?;
+    )
+    .map_err(incomplete(Missing::AppsEntry))?;
     // An install by the old Inno Setup installer in the same place.
     if let Some(legacy) = &t.legacy_key
         && win::is_registered(legacy)
@@ -323,6 +349,37 @@ mod tests {
     fn cleanup_key(tag: &str) {
         let _ =
             win::unregister_uninstall(&format!(r"Software\fx-test-{}-{tag}", std::process::id()));
+    }
+
+    /// A step that fails after the swap is reported as incomplete, never as
+    /// "nothing changed": the new files are already there.
+    #[test]
+    fn a_failed_shortcut_is_reported_as_incomplete() {
+        let root = tempfile::tempdir().unwrap();
+        let mut t = target(root.path(), "incomplete");
+        // A shortcut inside a file cannot be created.
+        let blocker = root.path().join("not-a-folder");
+        std::fs::write(&blocker, b"x").unwrap();
+        t.start_menu = Some(blocker.join("fx.lnk"));
+        let opts = Options {
+            desktop_shortcut: false,
+        };
+        let e = install(&package("1.0.0"), &t, opts, &mut |_| {}).unwrap_err();
+        assert!(
+            matches!(
+                e,
+                InstallError::Incomplete {
+                    missing: Missing::Shortcut,
+                    ..
+                }
+            ),
+            "{e:?}"
+        );
+        assert_eq!(std::fs::read_to_string(t.exe()).unwrap(), "fx.exe 1.0.0");
+        assert!(
+            !win::is_registered(&t.uninstall_key),
+            "registering comes after"
+        );
     }
 
     #[test]

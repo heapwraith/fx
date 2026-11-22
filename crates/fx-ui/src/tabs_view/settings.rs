@@ -3,7 +3,7 @@
 //! the left; "Sobre" is the last category). Every control shows the real
 //! state and acts on it; nothing here is a copy of a setting.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 #[allow(unused_imports)]
 use fx_core::{tr, trf};
@@ -16,6 +16,14 @@ use super::TabsView;
 use crate::theme::{CAPTION_SIZE, Density, RADIUS, rgba, space};
 
 const LOGO: &[u8] = include_bytes!("../../resources/logo-128.png");
+
+/// The logo, made once (not copied and decoded again on every frame).
+fn logo() -> Arc<Image> {
+    static IMAGE: OnceLock<Arc<Image>> = OnceLock::new();
+    IMAGE
+        .get_or_init(|| Arc::new(Image::from_bytes(ImageFormat::Png, LOGO.to_vec())))
+        .clone()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Section {
@@ -442,7 +450,7 @@ impl TabsView {
                     .unwrap_or(crate::VERSION)
                     .to_owned();
                 let commit = crate::VERSION.split_once('+').map(|(_, c)| c.to_owned());
-                let logo = Arc::new(Image::from_bytes(ImageFormat::Png, LOGO.to_vec()));
+                let logo = logo();
                 body = body
                     .child(
                         div()

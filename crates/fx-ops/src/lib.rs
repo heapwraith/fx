@@ -23,6 +23,7 @@
 //! See docs/ARCHITECTURE.md. Every `unsafe` block needs a `// SAFETY:` comment.
 
 use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 use std::io;
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
@@ -86,7 +87,9 @@ pub struct Job {
     dest: PathBuf,
     on_conflict: Resolution,
     /// New name (rename) or folder name (new folder).
-    name: String,
+    /// New name (rename) or folder name (new folder), exact: an undo puts
+    /// back a name that may not be valid Unicode (review, D-066).
+    name: OsString,
     pairs: Vec<(PathBuf, PathBuf)>,
     restore: Vec<Recycled>,
     /// The user confirmed an operation on a system folder or drive root.
@@ -125,7 +128,7 @@ impl Job {
     /// reverts at once (T2.8). Two phases (all to temporary names, then to
     /// the final ones), so swaps and cycles (a→b, b→a) work; if a step
     /// fails, what was done is put back.
-    pub fn batch_rename(pairs: Vec<(PathBuf, String)>) -> Self {
+    pub fn batch_rename<N: AsRef<OsStr>>(pairs: Vec<(PathBuf, N)>) -> Self {
         let mut job = Self::new(OpKind::BatchRename, Vec::new(), PathBuf::new());
         job.pairs = pairs
             .into_iter()
@@ -138,16 +141,17 @@ impl Job {
     }
 
     /// Renames `item` to `new_name` in the same folder (never replacing).
-    pub fn rename(item: PathBuf, new_name: String) -> Self {
+    /// The name is used exactly as given (the interface trims what is typed).
+    pub fn rename(item: PathBuf, new_name: impl AsRef<OsStr>) -> Self {
         let mut job = Self::new(OpKind::Rename, vec![item], PathBuf::new());
-        job.name = new_name;
+        job.name = new_name.as_ref().to_os_string();
         job
     }
 
     /// Creates folder `name` in `parent` ("keep both" if taken).
     pub fn new_folder(parent: PathBuf, name: String) -> Self {
         let mut job = Self::new(OpKind::NewFolder, Vec::new(), parent);
-        job.name = name;
+        job.name = name.into();
         job
     }
 
@@ -177,7 +181,7 @@ impl Job {
             sources,
             dest,
             on_conflict: Resolution::KeepBoth,
-            name: String::new(),
+            name: OsString::new(),
             pairs: Vec::new(),
             restore: Vec::new(),
             confirmed: false,
@@ -206,7 +210,7 @@ impl Job {
             Some((from, to)) => (name(from), name(to)),
             None => (
                 self.sources.first().and_then(|p| name(p)),
-                (self.kind == OpKind::Rename).then(|| self.name.clone()),
+                (self.kind == OpKind::Rename).then(|| self.name.to_string_lossy().into_owned()),
             ),
         }
     }
@@ -286,18 +290,16 @@ pub fn undo_of(job: &Job, report: &Report) -> Option<Job> {
         OpKind::Restore => {
             (!report.restored.is_empty()).then(|| Job::recycle(report.restored.clone()))
         }
-        OpKind::Rename => report.renamed.as_ref().and_then(|(old, new)| {
-            let name = old.file_name()?.to_string_lossy().into_owned();
-            Some(Job::rename(new.clone(), name))
-        }),
+        OpKind::Rename => report
+            .renamed
+            .as_ref()
+            .and_then(|(old, new)| Some(Job::rename(new.clone(), old.file_name()?))),
         OpKind::BatchRename => (!report.batch_renamed.is_empty()).then(|| {
             Job::batch_rename(
                 report
                     .batch_renamed
                     .iter()
-                    .filter_map(|(old, new)| {
-                        Some((new.clone(), old.file_name()?.to_string_lossy().into_owned()))
-                    })
+                    .filter_map(|(old, new)| Some((new.clone(), old.file_name()?.to_os_string())))
                     .collect(),
             )
         }),
@@ -840,8 +842,13 @@ impl Run<'_> {
 
     fn rename_item(&mut self) -> Result<(), Stop> {
         let from = std::path::absolute(&self.job.sources[0])?;
-        let name = self.job.name.trim();
-        if name.is_empty() || name.contains(['\\', '/']) || name == "." || name == ".." {
+        let name = self.job.name.as_os_str();
+        // ASCII bytes stand for themselves in the encoded form: exact.
+        let separator = name
+            .as_encoded_bytes()
+            .iter()
+            .any(|&b| b == b'\\' || b == b'/');
+        if name.is_empty() || separator || name == "." || name == ".." {
             return Err(Stop::Failed(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 fx_core::tr!("nome inválido", "invalid name"),
@@ -950,7 +957,8 @@ impl Run<'_> {
 
     fn new_folder(&mut self) -> Result<(), Stop> {
         let dir = std::path::absolute(&self.job.dest)?;
-        let name = self.job.name.trim();
+        // Always a typed name (a String), so valid Unicode.
+        let name = self.job.name.to_str().unwrap_or_default().trim();
         let mut target = dir.join(name);
         if exists(&target) {
             target = keep_both_name(&dir, name, exists);
@@ -1145,10 +1153,12 @@ impl Run<'_> {
         size: u64,
     ) -> Result<(), Stop> {
         let dir = target.parent().unwrap_or(Path::new("."));
-        let name = target
-            .file_name()
-            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-        let temp = dir.join(format!(".{name}.fx-{}-{}.tmp", std::process::id(), self.id));
+        let name = target.file_name().unwrap_or_default();
+        let temp = dir.join(fx_core::temp_name::temp_name(
+            name,
+            std::process::id(),
+            self.id,
+        ));
         if let Some(journal) = self.journal {
             // Before the file exists: if fx dies while copying, the next start
             // finds and deletes it. No journal entry, no copy.

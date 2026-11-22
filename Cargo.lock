@@ -2076,6 +2076,7 @@ dependencies = [
  "fx-shell",
  "gpui",
  "tempfile",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

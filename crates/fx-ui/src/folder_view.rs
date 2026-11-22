@@ -1297,7 +1297,9 @@ impl FolderView {
             let _ = this.update(cx, |view, cx| match found {
                 Some((path, url)) => {
                     view.launch(Launch::Open(PathBuf::from(url)), cx);
-                    crate::crash::mark_seen(&path);
+                    // A rename on disk: not on the UI thread.
+                    cx.background_spawn(async move { crate::crash::mark_seen(&path) })
+                        .detach();
                     view.show_notice(
                         tr!(
                             "Página da issue aberta no navegador: confira o texto e envie se quiser",
@@ -1614,6 +1616,7 @@ impl FolderView {
                 )
             }
             Launch::Properties(_) => tr!("as Propriedades", "Properties").to_owned(),
+            Launch::Explore(name) => name.to_string_lossy().into_owned(),
             Launch::Elevated { .. } => tr!("o serviço de índice", "the index service").to_owned(),
         };
         let rx = fx_shell::launch(what);
