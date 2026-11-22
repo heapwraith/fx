@@ -69,6 +69,7 @@ fn overlay(message: &str, detail: Option<&str>, labels: &[String]) -> Overlay {
         items: labels.iter().cloned().map(Item::Button).collect(),
         focus: (!labels.is_empty()).then_some(0),
         positions: None,
+        modal: true,
     }
 }
 

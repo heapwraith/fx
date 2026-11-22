@@ -407,6 +407,7 @@ impl FolderView {
             items,
             focus,
             positions: Some((first, entries.len())),
+            modal: true,
         })
     }
 }

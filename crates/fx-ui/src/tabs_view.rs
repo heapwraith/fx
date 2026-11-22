@@ -18,6 +18,7 @@ mod settings;
 mod sidebar;
 
 use futures::StreamExt;
+use fx_core::tr;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -31,7 +32,7 @@ use gpui::{
     SharedString, Window, div, prelude::*, px,
 };
 
-use crate::a11y::{A11yHandle, Layer, Overlay, overlay_item, row_entry};
+use crate::a11y::{A11yHandle, Layer, Overlay, overlay_item, row_entry, tool_index};
 use crate::folder_view::{FolderView, Look, ViewEvent, window_title};
 use crate::icons::Media;
 use crate::places::Places;
@@ -80,6 +81,11 @@ pub struct TabsView {
     settings: Option<settings::Section>,
     /// The Settings control with the keyboard (Tab order).
     settings_focus: usize,
+    /// The sidebar place with the keyboard (F6), in `sidebar_targets` order.
+    sidebar_focus: Option<usize>,
+    /// Tab was used in Settings: the focus ring shows and Space/Enter act
+    /// (focus-visible: nothing changes unseen for someone using the mouse).
+    settings_keyboard: bool,
     /// What a screen reader's click on each item of the window's overlay
     /// does (built with the overlay).
     a11y_acts: Vec<Option<WindowAct>>,
@@ -150,7 +156,7 @@ impl TabsView {
         );
         cx.observe(&places, |_, _, cx| cx.notify()).detach();
         cx.observe(&media.ops, |_, _, cx| cx.notify()).detach();
-        let view = Self {
+        let mut view = Self {
             tabs: Tabs::new(first),
             look,
             trace,
@@ -165,12 +171,50 @@ impl TabsView {
             guide: false,
             settings: None,
             settings_focus: 0,
+            settings_keyboard: false,
+            sidebar_focus: None,
             a11y_acts: Vec::new(),
             palette: None,
             seconds: std::collections::HashMap::new(),
         };
         view.focus_active(window, cx);
+        // Visual checks without sending input (debug builds only):
+        // `FX_OPEN=settings[:section]|palette|guide|history|search|columns`.
+        if cfg!(debug_assertions)
+            && let Ok(what) = std::env::var("FX_OPEN")
+        {
+            view.debug_open(&what, window, cx);
+        }
         view
+    }
+
+    /// Opens a dialog or panel at startup, for screenshots (`FX_OPEN`).
+    fn debug_open(&mut self, what: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let (kind, arg) = what.split_once(':').unwrap_or((what, ""));
+        match kind {
+            "settings" => {
+                let name = arg.split('@').next().unwrap_or(arg);
+                let section = settings::Section::ALL
+                    .into_iter()
+                    .find(|s| format!("{s:?}").eq_ignore_ascii_case(name))
+                    .unwrap_or(settings::Section::General);
+                self.open_settings(section, cx);
+                // `settings:general@2`: the ring on the third control.
+                if let Some(k) = arg.rsplit_once('@').and_then(|(_, k)| k.parse().ok()) {
+                    self.settings_focus = k;
+                    self.settings_keyboard = true;
+                }
+            }
+            "palette" => self.open_palette(cx),
+            "sidebar" => self.sidebar_focus = Some(arg.parse().unwrap_or(0)),
+            "guide" => self.open_guide(cx),
+            "history" => self.history_open = true,
+            "search" | "columns" => {
+                let tab = self.current();
+                tab.update(cx, |tab, cx| tab.debug_open(kind, window, cx));
+            }
+            _ => {}
+        }
     }
 
     fn new_tab(
@@ -274,6 +318,11 @@ impl TabsView {
                         (request.action, overlay_item(request.target_node))
                     {
                         view.a11y_click(k, window, cx);
+                    } else if let (Action::Click, Some(k)) =
+                        (request.action, tool_index(request.target_node))
+                    {
+                        let tab = view.current();
+                        tab.update(cx, |tab, cx| tab.a11y_tool(k, window, cx));
                     }
                 });
                 if alive.is_err() {
@@ -453,6 +502,43 @@ impl TabsView {
             cx.notify();
             return;
         }
+        // F6: the sidebar by keyboard (as in Explorer); ↑/↓ choose, Enter
+        // opens, Esc or F6 go back to the list.
+        let plain = !m.control && !m.alt && !m.shift && !m.platform;
+        if ks.key == "f6" && plain {
+            let wide = f32::from(window.viewport_size().width) >= SIDEBAR_MIN_WINDOW;
+            self.sidebar_focus = match self.sidebar_focus {
+                Some(_) => None,
+                None if self.sidebar_open && wide => Some(self.sidebar_current(cx)),
+                None => None,
+            };
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
+        if let Some(k) = self.sidebar_focus {
+            let targets = self.sidebar_targets(cx);
+            let n = targets.len().max(1);
+            match ks.key.as_str() {
+                "up" => self.sidebar_focus = Some((k + n - 1) % n),
+                "down" => self.sidebar_focus = Some((k + 1) % n),
+                "home" => self.sidebar_focus = Some(0),
+                "end" => self.sidebar_focus = Some(n - 1),
+                "enter" => {
+                    self.sidebar_focus = None;
+                    if let Some((_, path)) = targets.get(k) {
+                        self.open_in_active(path.clone(), window, cx);
+                    }
+                }
+                "escape" => self.sidebar_focus = None,
+                // Shortcuts still work; other keys do not reach the list.
+                _ if m.control || m.alt => return,
+                _ => {}
+            }
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
         if ks.key == "f1" && !m.control && !m.alt && !m.shift {
             // Never behind another dialog.
             self.settings = None;
@@ -550,6 +636,11 @@ impl TabsView {
                     .text_color(rgba(t.text_secondary))
                     .hover(|s| s.bg(rgba(t.hover)))
                     .child(ICON_MENU)
+                    .tooltip(crate::tooltip::tip(
+                        tr!("Barra lateral", "Sidebar"),
+                        Some("Ctrl+B"),
+                        t,
+                    ))
                     .on_click(cx.listener(|view, _: &ClickEvent, _, cx| {
                         view.sidebar_open = !view.sidebar_open;
                         cx.notify();
@@ -663,6 +754,11 @@ impl TabsView {
                     .text_color(rgba(t.text_secondary))
                     .hover(|s| s.bg(rgba(t.hover)))
                     .child(ICON_ADD)
+                    .tooltip(crate::tooltip::tip(
+                        tr!("Nova aba", "New tab"),
+                        Some("Ctrl+T"),
+                        t,
+                    ))
                     .on_click(cx.listener(|view, _: &ClickEvent, window, cx| {
                         view.open_tab(window, cx);
                     })),
@@ -684,6 +780,11 @@ impl TabsView {
                     .hover(|s| s.bg(rgba(t.hover)))
                     .when(self.history_open, |d| d.bg(rgba(t.selected)))
                     .child(ICON_HISTORY)
+                    .tooltip(crate::tooltip::tip(
+                        tr!("Histórico de operações", "Operation history"),
+                        Some("Ctrl+Shift+H"),
+                        t,
+                    ))
                     .on_click(cx.listener(|view, _: &ClickEvent, _, cx| {
                         view.history_open = !view.history_open;
                         cx.notify();
@@ -771,6 +872,7 @@ enum WindowAct {
     ApplyAll,
     Palette(usize),
     Undo(usize),
+    Place(usize),
 }
 
 impl TabsView {
@@ -791,6 +893,8 @@ impl TabsView {
             } else if let Some((o, a)) = self.palette_overlay() {
                 (Some(o), a)
             } else if let Some((o, a)) = self.history_overlay(cx) {
+                (Some(o), a)
+            } else if let Some((o, a)) = self.sidebar_overlay(cx) {
                 (Some(o), a)
             } else {
                 (None, Vec::new())
@@ -827,6 +931,12 @@ impl TabsView {
                     WindowAct::Palette(i) => self.palette_run(i, window, cx),
                     WindowAct::Undo(index) => {
                         self.media.ops.update(cx, |ops, cx| ops.undo_at(index, cx));
+                    }
+                    WindowAct::Place(k) => {
+                        self.sidebar_focus = None;
+                        if let Some((_, path)) = self.sidebar_targets(cx).get(k) {
+                            self.open_in_active(path.clone(), window, cx);
+                        }
                     }
                 }
             }

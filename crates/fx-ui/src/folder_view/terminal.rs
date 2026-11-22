@@ -65,6 +65,7 @@ impl FolderView {
             }],
             focus: Some(0),
             positions: None,
+            modal: true,
         })
     }
 }

@@ -73,6 +73,7 @@ impl FolderView {
             items,
             focus: None,
             positions: None,
+            modal: true,
         })
     }
 }

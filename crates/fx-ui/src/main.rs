@@ -36,6 +36,7 @@ mod tabs_view;
 mod tags;
 mod theme;
 mod thumbs;
+mod tooltip;
 mod trace;
 mod update;
 

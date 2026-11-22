@@ -24,7 +24,6 @@ const RECENT_MAX: usize = 15;
 const RECENT_FIRST: usize = 5;
 /// A folder matched only through its full path ranks below name matches.
 const PATH_PENALTY: i32 = 30;
-const ICON_COMMAND: &str = "\u{E756}";
 
 #[derive(Debug, Clone)]
 enum Item {
@@ -255,6 +254,7 @@ impl TabsView {
                 items,
                 focus,
                 positions: None,
+                modal: true,
             },
             acts,
         ))
@@ -368,7 +368,7 @@ impl TabsView {
             .iter()
             .map(|&i| match &p.items[i] {
                 Item::Command(c) => Row {
-                    glyph: ICON_COMMAND,
+                    glyph: c.icon(),
                     label: c.label().into(),
                     detail: SharedString::default(),
                     shortcut: c.shortcut().unwrap_or_default().into(),
@@ -440,13 +440,11 @@ impl TabsView {
         .track_scroll(p.scroll.clone())
         .flex_1()
         .px(px(space(1)));
+        // Centered at the top of the window (the backdrop lays it out: margins
+        // do not center an absolute element).
         let card = div()
             .id("palette")
-            .absolute()
-            .top(px(space(12)))
-            .left(px(space(4)))
-            .right(px(space(4)))
-            .mx_auto()
+            .w_full()
             .max_w(px(PANEL_WIDTH))
             .h(px(400.0))
             .flex()
@@ -523,6 +521,11 @@ impl TabsView {
                     .top_0()
                     .left_0()
                     .size_full()
+                    .flex()
+                    .justify_center()
+                    .items_start()
+                    .pt(px(space(12)))
+                    .px(px(space(4)))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|view, _: &MouseDownEvent, _, cx| {

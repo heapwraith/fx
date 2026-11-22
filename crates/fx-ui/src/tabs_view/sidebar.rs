@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use fx_core::format::size_short;
 use fx_shell::places::{DriveKind, KnownFolder};
-use gpui::{ClickEvent, Context, SharedString, div, prelude::*, px, relative};
+use gpui::{App, ClickEvent, Context, SharedString, div, prelude::*, px, relative};
 
 use super::TabsView;
 use crate::places::drive_label;
@@ -44,11 +44,80 @@ fn drive_icon(kind: DriveKind) -> &'static str {
 
 impl TabsView {
     /// Opens `path` in the active tab.
-    fn open_in_active(&mut self, path: PathBuf, window: &mut gpui::Window, cx: &mut Context<Self>) {
+    pub(super) fn open_in_active(
+        &mut self,
+        path: PathBuf,
+        window: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) {
         let tab = self.current();
         tab.update(cx, |view, cx| view.open(path, window, cx));
         self.focus_active(window, cx);
         cx.notify();
+    }
+
+    /// The places of the sidebar in order (home, pinned, drives), for the
+    /// keyboard (F6) and screen readers.
+    pub(super) fn sidebar_targets(&self, cx: &App) -> Vec<(SharedString, PathBuf)> {
+        let places = self.places.read(cx);
+        let mut out = Vec::new();
+        if let Some(home) = places.home() {
+            out.push((places.label(home), home.to_path_buf()));
+        }
+        for path in places.pinned.paths() {
+            out.push((places.label(path), path.clone()));
+        }
+        for d in &places.drives {
+            out.push((drive_label(d), d.root.clone()));
+        }
+        out
+    }
+
+    /// Where F6 starts: the folder shown, if it is in the sidebar.
+    pub(super) fn sidebar_current(&self, cx: &App) -> usize {
+        let current = self.current().read(cx).path().to_path_buf();
+        self.sidebar_targets(cx)
+            .iter()
+            .position(|(_, p)| *p == current)
+            .unwrap_or(0)
+    }
+
+    /// The sidebar, while it has the keyboard, as a screen reader reads it.
+    pub(super) fn sidebar_overlay(
+        &self,
+        cx: &App,
+    ) -> Option<(crate::a11y::Overlay, Vec<Option<super::WindowAct>>)> {
+        let k = self.sidebar_focus?;
+        let targets = self.sidebar_targets(cx);
+        let items = targets
+            .iter()
+            .enumerate()
+            .map(|(i, (label, path))| crate::a11y::Item::Choice {
+                label: label.to_string(),
+                description: Some(path.display().to_string()),
+                selected: i == k,
+            })
+            .collect();
+        let acts = (0..targets.len())
+            .map(|i| Some(super::WindowAct::Place(i)))
+            .collect();
+        Some((
+            crate::a11y::Overlay {
+                title: tr!("Barra lateral", "Sidebar").to_owned(),
+                description: Some(
+                    tr!(
+                        "↑ e ↓ escolhem, Enter abre, Esc ou F6 voltam à lista.",
+                        "↑ and ↓ choose, Enter opens, Esc or F6 go back to the list."
+                    )
+                    .to_owned(),
+                ),
+                items,
+                focus: Some(k),
+                positions: None,
+                modal: false,
+            },
+            acts,
+        ))
     }
 
     pub(super) fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
@@ -58,11 +127,23 @@ impl TabsView {
         let current = self.current().read(cx).path().to_path_buf();
         let pinned_here = places.pinned.contains(&current);
 
+        // The place with the keyboard (F6) gets the focus ring.
+        let focused: Option<PathBuf> = self
+            .sidebar_focus
+            .and_then(|k| self.sidebar_targets(cx).into_iter().nth(k))
+            .map(|(_, p)| p);
+        let ring = move |d: gpui::Stateful<gpui::Div>, path: &Path| {
+            d.border_2()
+                .border_color(rgba(if focused.as_deref() == Some(path) {
+                    t.accent
+                } else {
+                    0x0000_0000
+                }))
+        };
         let item = |id: SharedString, icon: &'static str, label: SharedString, path: &Path| {
             let active = path == current;
             let target = path.to_path_buf();
-            div()
-                .id(id)
+            ring(div().id(id), path)
                 .h(px(ITEM_HEIGHT))
                 .mx(px(space(1)))
                 .px(px(space(3)))
@@ -209,8 +290,7 @@ impl TabsView {
                     );
             }
             col = col.child(
-                div()
-                    .id(("drive", k))
+                ring(div().id(("drive", k)), &d.root)
                     .mx(px(space(1)))
                     .px(px(space(3)))
                     .py(px(space(2)))

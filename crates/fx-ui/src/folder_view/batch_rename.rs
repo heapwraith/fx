@@ -84,6 +84,7 @@ impl FolderView {
             items,
             focus: Some(b.field.min(FIELDS - 1)),
             positions: None,
+            modal: true,
         })
     }
 }

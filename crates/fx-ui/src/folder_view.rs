@@ -709,7 +709,60 @@ impl FolderView {
             total: self.rows().len(),
             rows,
             cursor: self.selection.cursor(),
+            tools: vec![
+                crate::a11y::Tool {
+                    label: tr!("Voltar (Alt+←)", "Back (Alt+←)").to_owned(),
+                    enabled: self.history.can_go_back(),
+                },
+                crate::a11y::Tool {
+                    label: tr!("Avançar (Alt+→)", "Forward (Alt+→)").to_owned(),
+                    enabled: self.history.can_go_forward(),
+                },
+                crate::a11y::Tool {
+                    label: tr!("Pasta acima (Alt+↑)", "Up one folder (Alt+↑)").to_owned(),
+                    enabled: self.path.parent().is_some(),
+                },
+                crate::a11y::Tool {
+                    label: if self.grid {
+                        tr!("Ver em lista", "Show as list")
+                    } else {
+                        tr!("Ver em grade", "Show as grid")
+                    }
+                    .to_owned(),
+                    enabled: true,
+                },
+                crate::a11y::Tool {
+                    label: tr!(
+                        "Exibir: ordem, densidade, ocultos",
+                        "View: order, density, hidden"
+                    )
+                    .to_owned(),
+                    enabled: true,
+                },
+            ],
         });
+    }
+
+    /// A screen reader clicked button `k` of the navigation bar (in the order
+    /// of `publish_a11y`'s tools).
+    pub fn a11y_tool(&mut self, k: usize, window: &mut Window, cx: &mut Context<Self>) {
+        match k {
+            0 => {
+                self.go_back(window, cx);
+            }
+            1 => {
+                self.go_forward(window, cx);
+            }
+            2 => {
+                self.go_up(window, cx);
+            }
+            3 => {
+                self.set_grid(!self.grid);
+                cx.notify();
+            }
+            4 => self.toggle_view_menu(cx),
+            _ => {}
+        }
     }
 
     /// A screen reader asked to focus or activate the row of `entry`.
@@ -1608,6 +1661,15 @@ impl FolderView {
 }
 
 impl FolderView {
+    /// Opens a panel at startup, for screenshots (`FX_OPEN`, debug builds).
+    pub fn debug_open(&mut self, what: &str, window: &mut Window, cx: &mut Context<Self>) {
+        match what {
+            "search" => self.open_search(cx),
+            "columns" => self.toggle_columns(window, cx),
+            _ => {}
+        }
+    }
+
     /// The tab's panel with the keyboard, for the accessibility tree.
     fn tab_overlay(&self) -> Option<crate::a11y::Overlay> {
         self.batch_rename_overlay()

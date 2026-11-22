@@ -24,8 +24,11 @@ const PATH: NodeId = NodeId(2);
 const LIST: NodeId = NodeId(3);
 const OVERLAY: NodeId = NodeId(4);
 const OVERLAY_LIST: NodeId = NodeId(5);
+const TOOLBAR: NodeId = NodeId(6);
 /// Overlay item nodes are `ITEM_BASE + index`.
 const ITEM_BASE: u64 = 1 << 16;
+/// Toolbar buttons are `TOOL_BASE + index`.
+const TOOL_BASE: u64 = 1 << 24;
 /// Row nodes are `ROW_BASE + entry index`.
 const ROW_BASE: u64 = 1 << 32;
 
@@ -51,6 +54,8 @@ pub struct Overlay {
     /// When the choices are a window of a longer list (search results):
     /// the position of the first one and the total, for "x de N".
     pub positions: Option<(usize, usize)>,
+    /// A dialog (modal) or a region with the keyboard, like the sidebar.
+    pub modal: bool,
 }
 
 /// One thing in an overlay.
@@ -105,6 +110,12 @@ pub struct Row {
     pub selected: bool,
 }
 
+/// A button of the navigation bar.
+pub struct Tool {
+    pub label: String,
+    pub enabled: bool,
+}
+
 /// What the tree shows.
 pub struct Snapshot {
     pub title: String,
@@ -115,6 +126,8 @@ pub struct Snapshot {
     pub rows: Vec<Row>,
     /// Entry with the keyboard cursor.
     pub cursor: Option<u32>,
+    /// The navigation bar's buttons (back, forward, up, view...).
+    pub tools: Vec<Tool>,
 }
 
 thread_local! {
@@ -215,7 +228,15 @@ impl A11yHandle {
 pub fn overlay_item(node: NodeId) -> Option<usize> {
     node.0
         .checked_sub(ITEM_BASE)
-        .filter(|&k| k < ROW_BASE - ITEM_BASE)
+        .filter(|&k| k < TOOL_BASE - ITEM_BASE)
+        .and_then(|k| usize::try_from(k).ok())
+}
+
+/// Toolbar button index of a node, if `node` is one.
+pub fn tool_index(node: NodeId) -> Option<usize> {
+    node.0
+        .checked_sub(TOOL_BASE)
+        .filter(|&k| k < ROW_BASE - TOOL_BASE)
         .and_then(|k| usize::try_from(k).ok())
 }
 
@@ -229,7 +250,11 @@ pub fn row_entry(node: NodeId) -> Option<u32> {
 pub fn build(s: &Snapshot, overlay: Option<&Overlay>) -> TreeUpdate {
     let mut window = Node::new(Role::Window);
     window.set_label(s.title.clone());
-    let mut children = vec![PATH, LIST];
+    let mut children = Vec::with_capacity(4);
+    if !s.tools.is_empty() {
+        children.push(TOOLBAR);
+    }
+    children.extend([PATH, LIST]);
     if overlay.is_some() {
         children.push(OVERLAY);
     }
@@ -282,6 +307,26 @@ pub fn build(s: &Snapshot, overlay: Option<&Overlay>) -> TreeUpdate {
         }
         nodes.push((id, n));
     }
+    if !s.tools.is_empty() {
+        let mut bar = Node::new(Role::Toolbar);
+        bar.set_label(tr!("Navegação", "Navigation"));
+        bar.set_children(
+            (0..s.tools.len())
+                .map(|k| NodeId(TOOL_BASE + k as u64))
+                .collect::<Vec<_>>(),
+        );
+        nodes.push((TOOLBAR, bar));
+        for (k, tool) in s.tools.iter().enumerate() {
+            let mut b = Node::new(Role::Button);
+            b.set_label(tool.label.clone());
+            if tool.enabled {
+                b.add_action(Action::Click);
+            } else {
+                b.set_disabled();
+            }
+            nodes.push((NodeId(TOOL_BASE + k as u64), b));
+        }
+    }
     if let Some(o) = overlay {
         focus = overlay_nodes(o, &mut nodes);
     }
@@ -300,8 +345,14 @@ pub fn build(s: &Snapshot, overlay: Option<&Overlay>) -> TreeUpdate {
 /// choices); returns the node with the focus.
 fn overlay_nodes(o: &Overlay, nodes: &mut Vec<(NodeId, Node)>) -> NodeId {
     let id = |k: usize| NodeId(ITEM_BASE + k as u64);
-    let mut dialog = Node::new(Role::Dialog);
-    dialog.set_modal();
+    let mut dialog = Node::new(if o.modal {
+        Role::Dialog
+    } else {
+        Role::Navigation
+    });
+    if o.modal {
+        dialog.set_modal();
+    }
     dialog.set_label(o.title.clone());
     if let Some(d) = &o.description {
         dialog.set_description(d.clone());
@@ -405,6 +456,7 @@ mod tests {
                 })
                 .collect(),
             cursor,
+            tools: Vec::new(),
         }
     }
 
@@ -461,6 +513,7 @@ mod tests {
             ],
             focus: Some(2),
             positions: None,
+            modal: true,
         };
         let t = build(&snapshot(Some(11), None), Some(&o));
         let node = |id: NodeId| &t.nodes.iter().find(|(n, _)| *n == id).unwrap().1;

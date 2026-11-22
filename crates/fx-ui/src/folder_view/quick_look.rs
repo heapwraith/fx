@@ -207,6 +207,7 @@ impl FolderView {
                 .collect(),
             focus: None,
             positions: None,
+            modal: true,
         })
     }
 }

@@ -59,6 +59,55 @@ impl Command {
         }
     }
 
+    /// A glyph (Segoe Fluent Icons / MDL2 Assets, present in both) that says
+    /// what the command does: a palette where every row has the same icon
+    /// gives the eye nothing to find (review of the interface, D-067).
+    pub fn icon(&self) -> &'static str {
+        match self.action {
+            Action::Key(_, keys) => match keys {
+                "ctrl-f" | "ctrl-k" => "\u{E721}",            // Search
+                "space" => "\u{E7B3}",                        // RedEye (preview)
+                "ctrl-shift-n" => "\u{E8F4}",                 // NewFolder
+                "f2" => "\u{E8AC}",                           // Rename
+                "delete" => "\u{E74D}",                       // Delete (bin)
+                "shift-delete" | "ctrl-w" => "\u{E711}",      // Cancel
+                "ctrl-c" => "\u{E8C8}",                       // Copy
+                "ctrl-x" => "\u{E8C6}",                       // Cut
+                "ctrl-v" => "\u{E77F}",                       // Paste
+                "ctrl-shift-c" => "\u{E71B}",                 // Link
+                "ctrl-z" => "\u{E7A7}",                       // Undo
+                "ctrl-y" => "\u{E7A6}",                       // Redo
+                "ctrl-a" => "\u{E8B3}",                       // SelectAll
+                "alt-enter" => "\u{E946}",                    // Info
+                "shift-enter" => "\u{E7AC}",                  // OpenWith
+                "shift-f10" => "\u{E700}",                    // Menu
+                "ctrl-l" => "\u{E70F}",                       // Edit
+                "alt-up" => "\u{E74A}",                       // Up
+                "alt-left" => "\u{E72B}",                     // Back
+                "alt-right" => "\u{E72A}",                    // Forward
+                "ctrl-t" => "\u{E710}",                       // Add
+                "ctrl-tab" | "ctrl-shift-tab" => "\u{E7C4}",  // TaskView
+                "ctrl-1" | "ctrl-2" | "ctrl-3" => "\u{E8FD}", // BulletedList
+                "ctrl-b" => "\u{E8A0}",                       // OpenPane
+                "ctrl-h" => "\u{E890}",                       // View
+                "ctrl-shift-h" => "\u{E81C}",                 // History
+                "f1" => "\u{E897}",                           // Help
+                "ctrl-j" => "\u{E756}",                       // CommandPrompt
+                _ => "\u{E756}",
+            },
+            Action::ToggleGrid => "\u{E80A}", // ViewAll
+            Action::Sort(_) => "\u{E8CB}",    // Sort
+            Action::About => "\u{E946}",      // Info
+            Action::IndexService(_) => "\u{E721}",
+            Action::DefaultManager(_) => "\u{E8B7}", // Folder
+            Action::Language => "\u{E774}",          // Globe
+            Action::CloudPin(_) => "\u{E753}",       // Cloud
+            Action::ReportCrash | Action::CrashReports => "\u{E7BA}", // Warning
+            Action::Update | Action::UpdateChecks => "\u{E895}", // Sync
+            Action::ConfirmRecycle => "\u{E74D}",
+        }
+    }
+
     /// The shortcut as shown next to the command ("Ctrl+Shift+N").
     pub fn shortcut(&self) -> Option<String> {
         match self.action {

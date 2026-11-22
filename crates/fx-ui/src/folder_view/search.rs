@@ -178,6 +178,7 @@ impl FolderView {
             items,
             focus,
             positions: Some((first, s.hits.len())),
+            modal: true,
         })
     }
 }
@@ -665,6 +666,20 @@ impl FolderView {
                 ),
             }
         });
+        // Before typing: what to type, instead of an empty box.
+        let first_steps = (s.query.trim().is_empty() && s.hits.is_empty()).then(|| {
+            [
+                tr!(
+                    "Digite parte do nome: \"relat\" acha relatório-2026.pdf.",
+                    "Type part of the name: \"repo\" finds report-2026.pdf."
+                ),
+                tr!(
+                    "Filtros: tipo:imagem · ext:pdf · tamanho:>10mb · data:semana · etiqueta:vermelho",
+                    "Filters: type:image · ext:pdf · size:>10mb · date:week · tag:red"
+                ),
+            ]
+        });
+        let any_hit = !s.hits.is_empty();
         let hits: Arc<Vec<Found>> = Arc::new(s.hits.clone());
         let cursor = s.cursor;
         let (accent, secondary, hover) = (t.selected, t.text_secondary, t.hover);
@@ -896,7 +911,8 @@ impl FolderView {
                         .children(chips),
                 )
             })
-            .child(header)
+            // Column titles only over results.
+            .children(any_hit.then_some(header))
             .child(if empty_message.is_some() {
                 div()
                     .flex_1()
@@ -906,6 +922,17 @@ impl FolderView {
                     .px(px(space(4)))
                     .text_color(rgba(t.text_secondary))
                     .children(empty_message)
+                    .into_any_element()
+            } else if let Some(steps) = first_steps {
+                div()
+                    .flex_1()
+                    .flex()
+                    .flex_col()
+                    .gap(px(space(2)))
+                    .pt(px(space(6)))
+                    .px(px(space(6)))
+                    .text_color(rgba(t.text_secondary))
+                    .children(steps)
                     .into_any_element()
             } else {
                 list.into_any_element()

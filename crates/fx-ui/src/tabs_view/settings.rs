@@ -91,6 +91,9 @@ impl TabsView {
         if self.settings != Some(section) {
             self.settings_focus = 0;
         }
+        if self.settings.is_none() {
+            self.settings_keyboard = false;
+        }
         self.settings = Some(section);
         cx.notify();
     }
@@ -101,7 +104,11 @@ impl TabsView {
             return;
         };
         let n = controls(&self.setting_rows(section)).len();
-        if n > 0 {
+        if n > 0 && !self.settings_keyboard {
+            // The first Tab shows where the focus is.
+            self.settings_keyboard = true;
+            cx.notify();
+        } else if n > 0 {
             self.settings_focus = if forward {
                 (self.settings_focus + 1) % n
             } else {
@@ -111,9 +118,9 @@ impl TabsView {
         }
     }
 
-    /// Space / Enter: uses the focused control.
+    /// Space / Enter: uses the focused control (only once it is visible).
     pub(super) fn settings_activate(&mut self, cx: &mut Context<Self>) {
-        let Some(section) = self.settings else {
+        let Some(section) = self.settings.filter(|_| self.settings_keyboard) else {
             return;
         };
         let act = controls(&self.setting_rows(section))
@@ -406,7 +413,7 @@ impl TabsView {
                     control: Control::None,
                 },
                 Row {
-                    title: tr!("Mais", "More"),
+                    title: "",
                     detail: "",
                     control: Control::Buttons(
                         None,
@@ -459,13 +466,16 @@ impl TabsView {
         let mut focus = None;
         let mut control = 0usize;
         for row in &rows {
-            let text = if row.detail.is_empty() {
-                row.title.to_owned()
-            } else {
-                format!("{}. {}", row.title, row.detail)
+            let text = match (row.title.is_empty(), row.detail.is_empty()) {
+                (true, true) => None,
+                (_, true) => Some(row.title.to_owned()),
+                (true, _) => Some(row.detail.to_owned()),
+                _ => Some(format!("{}. {}", row.title, row.detail)),
             };
-            items.push(Item::Text(text));
-            acts.push(None);
+            if let Some(text) = text {
+                items.push(Item::Text(text));
+                acts.push(None);
+            }
             if let Control::Buttons(Some(value), _) = &row.control {
                 items.push(Item::Text(value.clone()));
                 acts.push(None);
@@ -496,6 +506,7 @@ impl TabsView {
             items,
             focus,
             positions: None,
+            modal: true,
         };
         (overlay, acts)
     }
@@ -535,7 +546,12 @@ impl TabsView {
             .collect();
 
         let rows = self.setting_rows(section);
-        let focus = self.settings_focus;
+        // No ring until the keyboard is used (focus-visible).
+        let focus = if self.settings_keyboard {
+            self.settings_focus
+        } else {
+            usize::MAX
+        };
         // The keyboard focus: a 2 px accent ring; the others get the same
         // ring, transparent, so nothing moves when it changes.
         let ring = move |focused: bool, el: gpui::AnyElement| {
@@ -547,7 +563,8 @@ impl TabsView {
                 .child(el)
                 .into_any_element()
         };
-        let switch = |id: SharedString, on: bool, act: Act, cx: &mut Context<Self>| {
+        // The whole row takes the click (a bigger target, WCAG 2.5.8).
+        let switch = |id: SharedString, on: bool| {
             div()
                 .id(id)
                 .w(px(40.0))
@@ -564,7 +581,6 @@ impl TabsView {
                 } else {
                     t.text_secondary
                 })))
-                .on_click(cx.listener(move |view, _, _, cx| view.act(act, cx)))
                 .into_any_element()
         };
         let button = |id: SharedString, label: &'static str, act: Act, cx: &mut Context<Self>| {
@@ -590,11 +606,18 @@ impl TabsView {
             body = body.child(about_header(t));
         }
         for (r, row) in rows.into_iter().enumerate() {
+            // Two or more buttons go under the text, across the row (they do
+            // not fit beside it in a narrow window).
+            let stacked = matches!(&row.control, Control::Buttons(_, b) if b.len() > 1);
+            let row_act = match row.control {
+                Control::Switch(_, act) => Some(act),
+                _ => None,
+            };
             let control: gpui::AnyElement = match row.control {
                 Control::None => div().into_any_element(),
-                Control::Switch(on, act) => {
+                Control::Switch(on, _) => {
                     let id = SharedString::from(format!("set-{r}-switch"));
-                    let el = ring(next == focus, switch(id, on, act, cx));
+                    let el = ring(next == focus, switch(id, on));
                     next += 1;
                     el
                 }
@@ -644,39 +667,54 @@ impl TabsView {
                     line.into_any_element()
                 }
             };
-            body = body.child(
-                div()
-                    .py(px(space(3)))
-                    .flex()
-                    .items_center()
-                    .gap(px(space(4)))
-                    .border_b_1()
-                    .border_color(rgba(t.divider))
-                    .child(
+            let text = div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(2.0))
+                .when(!row.title.is_empty(), |d| d.child(row.title))
+                .when(!row.detail.is_empty(), |d| {
+                    d.child(
                         div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .gap(px(2.0))
-                            .child(row.title)
-                            .when(!row.detail.is_empty(), |d| {
-                                d.child(
-                                    div()
-                                        .text_size(px(CAPTION_SIZE))
-                                        .text_color(rgba(t.text_secondary))
-                                        .child(row.detail),
-                                )
-                            }),
+                            .text_size(px(CAPTION_SIZE))
+                            .text_color(rgba(t.text_secondary))
+                            .child(row.detail),
                     )
-                    .child(div().flex_none().child(control)),
-            );
+                });
+            let line = div()
+                .id(SharedString::from(format!("set-row-{r}")))
+                .py(px(space(3)))
+                .flex()
+                .border_b_1()
+                .border_color(rgba(t.divider));
+            let line = if stacked {
+                line.flex_col().gap(px(space(2))).child(text).child(control)
+            } else {
+                line.items_center()
+                    .gap(px(space(4)))
+                    .child(text)
+                    .child(div().flex_none().child(control))
+            };
+            let line = match row_act {
+                Some(act) => line
+                    .cursor_pointer()
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.settings_keyboard = false;
+                        view.act(act, cx)
+                    })),
+                None => line,
+            };
+            body = body.child(line);
         }
 
+        // Never wider or taller than the window.
         let card = div()
             .id("settings")
             .w(px(780.0))
+            .max_w(gpui::relative(0.94))
             .h(px(520.0))
+            .max_h(gpui::relative(0.9))
             .flex()
             .rounded(px(RADIUS * 2.0))
             .border_1()
@@ -711,10 +749,8 @@ impl TabsView {
                             .py(px(space(2)))
                             .text_size(px(CAPTION_SIZE))
                             .text_color(rgba(t.text_secondary))
-                            .child(tr!(
-                                "Tab passa · Espaço usa · Esc fecha",
-                                "Tab moves · Space uses · Esc closes"
-                            )),
+                            .child(tr!("Tab e Espaço: teclado", "Tab and Space: keyboard"))
+                            .child(tr!("Esc fecha", "Esc closes")),
                     ),
             )
             .child(
@@ -769,9 +805,13 @@ fn about_header(t: crate::theme::Theme) -> gpui::AnyElement {
         .flex()
         .items_center()
         .gap(px(space(4)))
-        .child(img(logo()).size(px(64.0)))
+        // The logo keeps its size; the text shrinks and wraps (the long
+        // slogan used to squeeze the logo to nothing and run off the card).
+        .child(img(logo()).flex_none().size(px(64.0)))
         .child(
             div()
+                .flex_1()
+                .min_w_0()
                 .flex()
                 .flex_col()
                 .gap(px(space(1)))

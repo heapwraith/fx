@@ -7,6 +7,7 @@
 //! filters that cache in memory, so it never waits for the disk; while the
 //! listing runs, the field simply shows no suggestions yet.
 
+use crate::tooltip::tip;
 use fx_core::tr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -358,34 +359,54 @@ impl FolderView {
             .items_center()
             .gap(px(space(1)))
             .px(px(space(2)))
-            .child(button("back", ICON_BACK, can_back).on_click(cx.listener(
-                |view, _: &ClickEvent, window, cx| {
-                    view.go_back(window, cx);
-                },
-            )))
             .child(
-                button("forward", ICON_FORWARD, can_forward).on_click(cx.listener(
-                    |view, _: &ClickEvent, window, cx| {
-                        view.go_forward(window, cx);
-                    },
-                )),
+                button("back", ICON_BACK, can_back)
+                    .tooltip(tip(tr!("Voltar", "Back"), Some("Alt+←"), t))
+                    .on_click(cx.listener(|view, _: &ClickEvent, window, cx| {
+                        view.go_back(window, cx);
+                    })),
             )
-            .child(button("up", ICON_UP, can_up).on_click(cx.listener(
-                |view, _: &ClickEvent, window, cx| {
-                    view.go_up(window, cx);
-                },
-            )))
+            .child(
+                button("forward", ICON_FORWARD, can_forward)
+                    .tooltip(tip(tr!("Avançar", "Forward"), Some("Alt+→"), t))
+                    .on_click(cx.listener(|view, _: &ClickEvent, window, cx| {
+                        view.go_forward(window, cx);
+                    })),
+            )
+            .child(
+                button("up", ICON_UP, can_up)
+                    .tooltip(tip(tr!("Pasta acima", "Up one folder"), Some("Alt+↑"), t))
+                    .on_click(cx.listener(|view, _: &ClickEvent, window, cx| {
+                        view.go_up(window, cx);
+                    })),
+            )
             .child(bar)
             .child(
-                button("view", if self.grid { ICON_LIST } else { ICON_GRID }, true).on_click(
-                    cx.listener(|view, _: &ClickEvent, _, cx| {
+                button("view", if self.grid { ICON_LIST } else { ICON_GRID }, true)
+                    .tooltip(tip(
+                        if self.grid {
+                            tr!("Ver em lista", "Show as list")
+                        } else {
+                            tr!("Ver em grade", "Show as grid")
+                        },
+                        None,
+                        t,
+                    ))
+                    .on_click(cx.listener(|view, _: &ClickEvent, _, cx| {
                         view.set_grid(!view.grid);
                         cx.notify();
-                    }),
-                ),
+                    })),
             )
             .child(
                 button("view-menu", ICON_VIEW, true)
+                    .tooltip(tip(
+                        tr!(
+                            "Exibir: ordem, densidade, ocultos",
+                            "View: order, density, hidden"
+                        ),
+                        None,
+                        t,
+                    ))
                     .when(self.view_menu, |d| d.bg(rgba(t.selected)))
                     .on_click(cx.listener(|view, _: &ClickEvent, _, cx| {
                         view.toggle_view_menu(cx);

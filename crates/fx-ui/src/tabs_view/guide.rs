@@ -39,6 +39,19 @@ pub fn slogan() -> &'static str {
 }
 
 /// The shortcuts of "Como usar", by subject: (title, [(keys, what)]).
+/// The keys of a guide row, one cap each: "Ctrl+C X V" is Ctrl+C, Ctrl+X
+/// and Ctrl+V (the modifiers of the first apply to the rest).
+fn keycaps(keys: &str) -> Vec<String> {
+    let mut parts = keys.split(' ').filter(|p| !p.is_empty());
+    let Some(first) = parts.next() else {
+        return Vec::new();
+    };
+    let prefix = first.rfind('+').map_or("", |i| &first[..=i]);
+    std::iter::once(first.to_owned())
+        .chain(parts.map(|p| format!("{prefix}{p}")))
+        .collect()
+}
+
 pub fn sections() -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
     vec![
         (
@@ -48,6 +61,10 @@ pub fn sections() -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
                 ("Alt+↑", tr!("pasta acima", "up one folder")),
                 ("Alt+← →", tr!("voltar e avançar", "back and forward")),
                 ("Ctrl+L", tr!("digitar um caminho", "type a path")),
+                (
+                    "F6",
+                    tr!("barra lateral pelo teclado", "the sidebar by keyboard"),
+                ),
                 (
                     tr!("letras", "letters"),
                     tr!("filtrar a pasta", "filter the folder"),
@@ -193,6 +210,7 @@ impl TabsView {
             items,
             focus: None,
             positions: None,
+            modal: true,
         })
     }
 
@@ -201,7 +219,7 @@ impl TabsView {
             return None;
         }
         let t = self.look.theme;
-        let card = self.howto_card().into_any_element();
+        let card = self.howto_card(cx).into_any_element();
         Some(
             deferred(crate::motion::enter(
                 "guide-in",
@@ -248,27 +266,33 @@ impl TabsView {
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
     }
 
-    fn howto_card(&self) -> impl IntoElement + use<> {
+    fn howto_card(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let t = self.look.theme;
-        let key = |k: &str| {
-            div().flex_none().w(px(108.0)).flex().child(
-                div()
-                    .px(px(space(1) + 2.0))
-                    .py(px(1.0))
-                    .rounded(px(RADIUS))
-                    .border_1()
-                    .border_color(rgba(t.divider))
-                    .bg(rgba(t.layer))
-                    .text_size(px(CAPTION_SIZE))
-                    .child(SharedString::from(k.to_owned())),
-            )
+        let keycap = move |k: String| {
+            div()
+                .px(px(space(1) + 2.0))
+                .py(px(1.0))
+                .rounded(px(RADIUS))
+                .border_1()
+                .border_color(rgba(t.divider))
+                .bg(rgba(t.layer))
+                .text_size(px(CAPTION_SIZE))
+                .child(SharedString::from(k))
+        };
+        let keys = move |k: &str| {
+            div()
+                .flex_none()
+                .w(px(150.0))
+                .flex()
+                .gap(px(space(1)))
+                .children(keycaps(k).into_iter().map(keycap))
         };
         let sections = sections().into_iter().map(|(title, rows)| {
             div()
                 .flex()
                 .flex_col()
                 .gap(px(space(2)))
-                .w(px(300.0))
+                .w(px(356.0))
                 .child(
                     div()
                         .text_size(px(CAPTION_SIZE))
@@ -281,45 +305,96 @@ impl TabsView {
                         .flex()
                         .items_center()
                         .gap(px(space(2)))
-                        .child(key(k))
+                        .child(keys(k))
                         .child(div().min_w_0().truncate().child(what))
                 }))
         });
+        // Header and footer stay; only the sections scroll (the footer used
+        // to hide at the end of the scroll, with nothing saying there was
+        // more).
         self.card()
-            .w(px(720.0))
-            .max_h(px(560.0))
-            .overflow_y_scroll()
-            .p(px(space(6)))
-            .gap(px(space(5)))
+            .w(px(816.0))
+            .max_w(gpui::relative(0.94))
+            .max_h(gpui::relative(0.9))
             .child(
                 div()
+                    .flex_none()
+                    .px(px(space(6)))
+                    .pt(px(space(6)))
+                    .pb(px(space(4)))
                     .flex()
-                    .flex_col()
-                    .gap(px(space(1)))
+                    .items_start()
+                    .gap(px(space(4)))
+                    .border_b_1()
+                    .border_color(rgba(t.divider))
                     .child(
                         div()
-                            .text_size(px(20.0))
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child(tr!("Como usar o fx", "How to use fx")),
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap(px(space(1)))
+                            .child(
+                                div()
+                                    .text_size(px(20.0))
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .child(tr!("Como usar o fx", "How to use fx")),
+                            )
+                            .child(div().text_color(rgba(t.text_secondary)).child(tr!(
+                                "Tudo se faz pelo teclado. Na dúvida, Ctrl+K encontra qualquer comando pelo nome.",
+                                "Everything works from the keyboard. When in doubt, Ctrl+K finds any command by name."
+                            ))),
                     )
-                    .child(div().text_color(rgba(t.text_secondary)).child(tr!(
-                        "Tudo se faz pelo teclado. Na dúvida, Ctrl+K encontra qualquer comando pelo nome.",
-                        "Everything works from the keyboard. When in doubt, Ctrl+K finds any command by name."
-                    ))),
+                    .child(
+                        div()
+                            .id("guide-close")
+                            .flex_none()
+                            .size(px(28.0))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(px(RADIUS))
+                            .cursor_pointer()
+                            .hover(|d| d.bg(rgba(t.hover)))
+                            .font_family(self.look.icon_font)
+                            .text_size(px(CAPTION_SIZE))
+                            .child(crate::theme::ICON_CLOSE)
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.guide = false;
+                                cx.notify();
+                            })),
+                    ),
             )
             .child(
                 div()
-                    .flex()
-                    .flex_wrap()
-                    .gap_x(px(space(8)))
-                    .gap_y(px(space(5)))
-                    .children(sections),
+                    .id("guide-body")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .px(px(space(6)))
+                    .py(px(space(5)))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .gap_x(px(space(8)))
+                            .gap_y(px(space(5)))
+                            .children(sections),
+                    ),
             )
             .child(
                 div()
+                    .flex_none()
+                    .px(px(space(6)))
+                    .py(px(space(3)))
+                    .border_t_1()
+                    .border_color(rgba(t.divider))
                     .text_size(px(CAPTION_SIZE))
                     .text_color(rgba(t.text_secondary))
-                    .child(tr!("F1 abre esta tela de novo · Esc fecha", "F1 opens this screen again · Esc closes")),
+                    .child(tr!(
+                        "Role para ver tudo · F1 abre esta tela de novo · Esc fecha",
+                        "Scroll to see everything · F1 opens this screen again · Esc closes"
+                    )),
             )
     }
 }
@@ -327,6 +402,15 @@ impl TabsView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn combined_keys_become_separate_caps() {
+        assert_eq!(keycaps("Ctrl+C X V"), ["Ctrl+C", "Ctrl+X", "Ctrl+V"]);
+        assert_eq!(keycaps("Alt+← →"), ["Alt+←", "Alt+→"]);
+        assert_eq!(keycaps("Enter"), ["Enter"]);
+        assert_eq!(keycaps("Alt+1…7"), ["Alt+1…7"]);
+        assert!(keycaps("").is_empty());
+    }
 
     #[test]
     fn every_shortcut_has_a_text() {

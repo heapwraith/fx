@@ -53,6 +53,7 @@ impl TabsView {
                 items,
                 focus,
                 positions: None,
+                modal: true,
             },
             acts,
         ))
