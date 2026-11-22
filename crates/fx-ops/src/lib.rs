@@ -1280,6 +1280,7 @@ fn copy_file(
     fx_fs::copy_file(src, dst, cancel, report)
 }
 
+mod codec;
 mod journal;
 pub use journal::recover;
 
