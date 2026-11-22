@@ -66,6 +66,8 @@ mod tests {
         "padrão",
         "confortável",
         "compacta",
+        // Language names are written in their own language in both UIs.
+        "Português",
         "português",
         "portugues",
         "inglês",
