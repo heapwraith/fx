@@ -87,6 +87,7 @@ fn status() {
             &fx_index::protocol::Request {
                 query: String::new(),
                 limit: 0,
+                ..Default::default()
             },
             2000,
         )
@@ -107,10 +108,16 @@ fn status() {
 fn query(text: &str) -> std::io::Result<()> {
     use std::os::windows::ffi::OsStringExt;
     let started = std::time::Instant::now();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64);
+    // Filters as in the app (`tipo:`, `tamanho:`...); relative dates in UTC.
+    let filters = fx_core::search_filter::Filters::parse(text, now, 0);
     let r = fx_index::pipe::query(
         &fx_index::protocol::Request {
-            query: text.to_owned(),
+            query: filters.text.clone(),
             limit: 20,
+            filter: fx_index::protocol::SearchFilter::from_filters(&filters),
         },
         2000,
     )?;

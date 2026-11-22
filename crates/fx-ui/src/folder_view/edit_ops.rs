@@ -310,12 +310,24 @@ impl FolderView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let folder = self.path.clone();
+        self.open_menu_in(items, folder, window, cx);
+    }
+
+    /// [`Self::open_menu`] for items of another folder (search results).
+    pub(super) fn open_menu_in(
+        &mut self,
+        items: Vec<PathBuf>,
+        folder: PathBuf,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(owner) = fx_shell::window_id(window) else {
             return;
         };
         let request = fx_shell::menu::MenuRequest {
             items: items.clone(),
-            folder: self.path.clone(),
+            folder,
             fx_items: vec!["Abrir no Terminal aqui".into(), "Copiar caminho".into()],
             owner,
             started: std::time::Instant::now(),

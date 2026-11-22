@@ -49,11 +49,24 @@ pub fn search_tree(
     cancel: &AtomicBool,
     tx: &Sender<Vec<SearchHit>>,
 ) -> SearchSummary {
+    if fold(query).is_empty() {
+        return SearchSummary::default();
+    }
+    search_tree_where(root, query, limit, cancel, tx, &|_| true)
+}
+
+/// [`search_tree`] keeping only the hits `keep` accepts (filters, T2.6);
+/// only those count toward `limit`. An empty `query` matches every name.
+pub fn search_tree_where(
+    root: &Path,
+    query: &str,
+    limit: usize,
+    cancel: &AtomicBool,
+    tx: &Sender<Vec<SearchHit>>,
+    keep: &dyn Fn(&SearchHit) -> bool,
+) -> SearchSummary {
     let mut summary = SearchSummary::default();
     let needle = fold(query);
-    if needle.is_empty() {
-        return summary;
-    }
     let mut pending: Vec<SearchHit> = Vec::new();
     let mut last_flush = Instant::now();
     let mut queue = VecDeque::from([root.to_path_buf()]);
@@ -75,13 +88,17 @@ pub fn search_tree(
             if is_dir && !entry.attributes.contains(Attributes::LINK) {
                 queue.push_back(path.clone());
             }
-            if fold(&entry.name.to_string_lossy()).contains(&needle) {
-                pending.push(SearchHit {
-                    path,
-                    is_dir,
-                    size: entry.size,
-                    modified: entry.modified,
-                });
+            if !fold(&entry.name.to_string_lossy()).contains(&needle) {
+                continue;
+            }
+            let hit = SearchHit {
+                path,
+                is_dir,
+                size: entry.size,
+                modified: entry.modified,
+            };
+            if keep(&hit) {
+                pending.push(hit);
                 summary.hits += 1;
                 if summary.hits >= limit {
                     summary.capped = true;
@@ -227,5 +244,37 @@ mod tests {
         let (names, summary) = run(&dir.path().join("sumiu"), "a", 10);
         assert!(names.is_empty());
         assert_eq!(summary.skipped, 1);
+    }
+}
+
+#[cfg(all(test, windows))]
+mod filter_tests {
+    use super::*;
+
+    #[test]
+    fn a_filter_keeps_only_its_hits_and_works_without_a_name() {
+        let t = tempfile::tempdir().unwrap();
+        std::fs::create_dir(t.path().join("sub")).unwrap();
+        for f in ["a.txt", "b.pdf", "sub/c.pdf", "sub/d.txt"] {
+            std::fs::write(t.path().join(f), b"x").unwrap();
+        }
+        let pdf = |h: &SearchHit| h.path.extension().is_some_and(|e| e == "pdf");
+        let (tx, rx) = channel();
+        let s = search_tree_where(t.path(), "", 10, &AtomicBool::new(false), &tx, &pdf);
+        drop(tx);
+        let mut names: Vec<String> = rx
+            .into_iter()
+            .flatten()
+            .map(|h| h.path.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        assert_eq!(names, ["b.pdf", "c.pdf"]);
+        assert_eq!(s.hits, 2);
+        // The limit counts kept hits only.
+        let (tx, rx) = channel();
+        let s = search_tree_where(t.path(), "", 1, &AtomicBool::new(false), &tx, &pdf);
+        drop(tx);
+        assert!(s.capped);
+        assert_eq!(rx.into_iter().flatten().count(), 1);
     }
 }

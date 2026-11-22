@@ -192,3 +192,72 @@ mod tests {
         assert_eq!(prefixes("😀a").collect::<Vec<_>>(), ["😀", "😀a"]);
     }
 }
+
+/// P5 through the `fx-indexd` service (T2.6): what the app pays per key in
+/// "Disco inteiro" (pipe round trip + search of every volume + filters).
+/// Types each query one character at a time, 3 rounds. Needs the service
+/// running (palette: "Ativar a busca no disco inteiro").
+pub fn service() -> std::io::Result<()> {
+    use fx_core::search_filter::Filters;
+    use fx_index::protocol::{Request, SearchFilter};
+    const QUERIES: [&str; 6] = [
+        "relatorio",
+        "notepad",
+        "windows system32",
+        "foto tipo:imagem",
+        "tamanho:>100mb",
+        "data:semana ext:txt",
+    ];
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64);
+    let first = fx_index::pipe::query(&Request::default(), 2000)?;
+    println!("service: {:?}, {} items indexed", first.status, first.items);
+    let mut samples = Vec::new();
+    for _ in 0..3 {
+        for q in QUERIES {
+            let chars: Vec<char> = q.chars().collect();
+            for n in 1..=chars.len() {
+                let typed: String = chars[..n].iter().collect();
+                let filters = Filters::parse(&typed, now, 0);
+                let request = Request {
+                    query: filters.text.clone(),
+                    limit: 1000,
+                    filter: SearchFilter::from_filters(&filters),
+                };
+                let started = Instant::now();
+                fx_index::pipe::query(&request, 2000)?;
+                samples.push(started.elapsed());
+            }
+        }
+    }
+    let (median, p95) = median_p95(&samples);
+    let max = samples.iter().max().map_or(0.0, |d| d.as_secs_f64() * 1000.0);
+    let pass = p95 <= TARGET_P5_MS;
+    println!("P5: key -> results from fx-indexd (pipe, every NTFS volume, up to 1000 results)");
+    println!(
+        "  {} keystrokes: median {median:.2} ms  p95 {p95:.2} ms  max {max:.2} ms   target ≤ {TARGET_P5_MS} ms  {}",
+        samples.len(),
+        if pass { "pass" } else { "FAIL" }
+    );
+    let date = utc_date(SystemTime::now());
+    let json = format!(
+        concat!(
+            "{{\n  \"id\": \"P5-service\",\n  \"task\": \"T2.6\",\n  \"items\": {items},\n",
+            "  \"keys\": {n},\n  \"latency_ms\": {{ \"median\": {m:.3}, \"p95\": {p:.3}, \"max\": {x:.3}, \"target\": {t} }},\n",
+            "  \"pass\": {pass},\n  \"machine\": {machine},\n  \"commit\": {commit},\n  \"date\": {date}\n}}\n"
+        ),
+        items = first.items,
+        n = samples.len(),
+        m = median,
+        p = p95,
+        x = max,
+        t = TARGET_P5_MS,
+        pass = pass,
+        machine = json_string(&machine()),
+        commit = json_string(commit()),
+        date = json_string(&date),
+    );
+    std::fs::write(results_dir()?.join(format!("{date}-T2.6-P5.json")), json)?;
+    Ok(())
+}

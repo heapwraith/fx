@@ -101,7 +101,9 @@ impl Engine {
         } else {
             Status::Indexing
         };
-        if request.query.trim().is_empty() || request.limit == 0 {
+        let filters = request.filter.to_filters();
+        let text = request.query.trim();
+        if (text.is_empty() && !filters.is_active()) || request.limit == 0 {
             return Response {
                 status,
                 items,
@@ -112,7 +114,26 @@ impl Engine {
         let never = AtomicBool::new(false);
         let mut scored: Vec<(i32, RemoteHit)> = Vec::new();
         for v in volumes.iter() {
-            let Some(hits) = fx_index::search(&v.index, &request.query, &never, None) else {
+            let index = &v.index;
+            // Filters run inside the scan. Without a name, the newest first.
+            let keep = |slot: u32| {
+                let modified = unix_seconds(index.modified(slot));
+                filters
+                    .matches(
+                        index.name(slot),
+                        index.is_dir(slot),
+                        index.size(slot),
+                        modified,
+                    )
+                    .then(|| {
+                        if text.is_empty() {
+                            (modified / 60).clamp(0, i64::from(i32::MAX)) as i32
+                        } else {
+                            0
+                        }
+                    })
+            };
+            let Some(hits) = fx_index::search_where(index, text, &never, None, &keep) else {
                 continue;
             };
             for h in hits {
@@ -149,6 +170,11 @@ impl Engine {
         let p = prefix(path);
         self.hidden.iter().any(|h| p.starts_with(h.as_str()))
     }
+}
+
+/// FILETIME ticks to Unix seconds.
+fn unix_seconds(filetime: u64) -> i64 {
+    (filetime / 10_000_000) as i64 - 11_644_473_600
 }
 
 /// Lowercase path with a trailing `\` (so `C:\Users\an` does not hide
@@ -244,6 +270,7 @@ mod tests {
         let r = engine().answer(&Request {
             query: "notas".into(),
             limit: 50,
+            ..Default::default()
         });
         assert_eq!(r.status, Status::Ready);
         assert_eq!(
@@ -265,16 +292,74 @@ mod tests {
     }
 
     #[test]
+    fn filters_apply_inside_the_search_and_alone() {
+        use fx_index::protocol::SearchFilter;
+        let e = engine();
+        let docs = SearchFilter {
+            exts: vec!["md".into(), "doc".into()],
+            ..Default::default()
+        };
+        let r = e.answer(&Request {
+            query: "notas".into(),
+            limit: 50,
+            filter: docs.clone(),
+        });
+        assert_eq!(
+            paths(&r),
+            vec![
+                r"C:\Dados\notas.md".to_owned(),
+                r"C:\Users\anabela\notas.doc".to_owned()
+            ]
+        );
+        // No name, only the filter: still answered (and still no hidden profile).
+        let r = e.answer(&Request {
+            query: String::new(),
+            limit: 50,
+            filter: SearchFilter {
+                dirs: Some(true),
+                ..Default::default()
+            },
+        });
+        assert_eq!(
+            paths(&r),
+            vec![
+                r"C:\Dados".to_owned(),
+                r"C:\Users".to_owned(),
+                r"C:\Users\anabela".to_owned(),
+                r"C:\Users\bruno".to_owned(),
+            ]
+        );
+        let big = SearchFilter {
+            size_min: Some(150),
+            ..Default::default()
+        };
+        let r = e.answer(&Request {
+            query: String::new(),
+            limit: 50,
+            filter: big,
+        });
+        assert_eq!(
+            paths(&r),
+            vec![
+                r"C:\Dados\notas.md".to_owned(),
+                r"C:\Users\anabela\notas.doc".to_owned()
+            ]
+        );
+    }
+
+    #[test]
     fn limit_status_and_empty_queries() {
         let e = engine();
         let r = e.answer(&Request {
             query: "notas".into(),
             limit: 1,
+            ..Default::default()
         });
         assert_eq!(r.hits.len(), 1);
         let r = e.answer(&Request {
             query: String::new(),
             limit: 10,
+            ..Default::default()
         });
         assert!(r.hits.is_empty());
         assert_eq!(r.items, 9);
@@ -282,7 +367,8 @@ mod tests {
         assert_eq!(
             e.answer(&Request {
                 query: "x".into(),
-                limit: 1
+                limit: 1,
+                ..Default::default()
             })
             .status,
             Status::Indexing

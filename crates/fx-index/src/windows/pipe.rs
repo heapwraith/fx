@@ -228,6 +228,7 @@ mod tests {
             let request = Request {
                 query: q.into(),
                 limit: 3,
+                ..Default::default()
             };
             for _ in 0..100 {
                 match query_on(&name, &request, 1000) {
@@ -264,7 +265,8 @@ mod tests {
                 &name,
                 &Request {
                     query: "x".into(),
-                    limit: 1
+                    limit: 1,
+                    ..Default::default()
                 },
                 10
             )

@@ -4,7 +4,11 @@
 //! limits, so a malformed or hostile request cannot make it allocate much or
 //! read past the message. All integers are little-endian.
 //!
-//! Request:  `FXQ1` · limit u32 · query length u32 · query (UTF-8)
+//! Request:  `FXQ2` · limit u32 · query length u32 · query (UTF-8) · filter
+//! Filter:   extension count u8 · (length u8 · extension)* · folders u8
+//!           (0 any, 1 files, 2 folders) · size min u64 · size max u64
+//!           · modified min i64 · modified max i64 (Unix seconds; the
+//!           extremes mean "no bound")
 //! Response: total length u32 · `FXR1` · status u8 · items u64 · index bytes u64
 //!           · count u32 · hits
 //! Hit:      flags u8 (bit 0: folder) · size u64 · modified u64 (FILETIME)
@@ -12,7 +16,10 @@
 
 use std::io::{self, Read, Write};
 
-const REQUEST_MAGIC: &[u8; 4] = b"FXQ1";
+const REQUEST_MAGIC: &[u8; 4] = b"FXQ2";
+/// Most extensions in a filter, and the longest one.
+const MAX_EXTS: usize = 64;
+const MAX_EXT_LEN: usize = 16;
 const RESPONSE_MAGIC: &[u8; 4] = b"FXR1";
 /// Longest query accepted, in bytes.
 pub const MAX_QUERY: usize = 1024;
@@ -23,11 +30,109 @@ const MAX_PATH_UNITS: u32 = 32_767;
 /// Largest response accepted by the client.
 const MAX_RESPONSE: u32 = 64 * 1024 * 1024;
 
-/// A search for `query`, at most `limit` hits.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A search for `query`, at most `limit` hits, keeping only what `filter`
+/// accepts (T2.6).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Request {
     pub query: String,
     pub limit: u32,
+    pub filter: SearchFilter,
+}
+
+/// The non-name part of `fx_core::search_filter::Filters`.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SearchFilter {
+    pub exts: Vec<String>,
+    pub dirs: Option<bool>,
+    pub size_min: Option<u64>,
+    pub size_max: Option<u64>,
+    pub modified_min: Option<i64>,
+    pub modified_max: Option<i64>,
+}
+
+impl SearchFilter {
+    pub fn from_filters(f: &fx_core::search_filter::Filters) -> Self {
+        Self {
+            exts: f.exts.clone(),
+            dirs: f.dirs,
+            size_min: f.size_min,
+            size_max: f.size_max,
+            modified_min: f.modified_min,
+            modified_max: f.modified_max,
+        }
+    }
+
+    pub fn to_filters(&self) -> fx_core::search_filter::Filters {
+        fx_core::search_filter::Filters {
+            exts: self.exts.clone(),
+            dirs: self.dirs,
+            size_min: self.size_min,
+            size_max: self.size_max,
+            modified_min: self.modified_min,
+            modified_max: self.modified_max,
+            ..Default::default()
+        }
+    }
+
+    fn write(&self, buf: &mut Vec<u8>) -> io::Result<()> {
+        if self.exts.len() > MAX_EXTS || self.exts.iter().any(|e| e.len() > MAX_EXT_LEN) {
+            return Err(invalid("filter too large"));
+        }
+        buf.push(self.exts.len() as u8);
+        for e in &self.exts {
+            buf.push(e.len() as u8);
+            buf.extend_from_slice(e.as_bytes());
+        }
+        buf.push(match self.dirs {
+            None => 0,
+            Some(false) => 1,
+            Some(true) => 2,
+        });
+        buf.extend_from_slice(&self.size_min.unwrap_or(0).to_le_bytes());
+        buf.extend_from_slice(&self.size_max.unwrap_or(u64::MAX).to_le_bytes());
+        buf.extend_from_slice(&self.modified_min.unwrap_or(i64::MIN).to_le_bytes());
+        buf.extend_from_slice(&self.modified_max.unwrap_or(i64::MAX).to_le_bytes());
+        Ok(())
+    }
+
+    fn read(r: &mut impl Read) -> io::Result<Self> {
+        let mut byte = [0u8; 1];
+        r.read_exact(&mut byte)?;
+        let count = byte[0] as usize;
+        if count > MAX_EXTS {
+            return Err(invalid("filter too large"));
+        }
+        let mut exts = Vec::with_capacity(count);
+        for _ in 0..count {
+            r.read_exact(&mut byte)?;
+            let len = byte[0] as usize;
+            if len > MAX_EXT_LEN {
+                return Err(invalid("extension too long"));
+            }
+            let mut e = vec![0u8; len];
+            r.read_exact(&mut e)?;
+            exts.push(String::from_utf8(e).map_err(|_| invalid("extension is not UTF-8"))?);
+        }
+        r.read_exact(&mut byte)?;
+        let dirs = match byte[0] {
+            0 => None,
+            1 => Some(false),
+            2 => Some(true),
+            _ => return Err(invalid("bad folder filter")),
+        };
+        let size_min = Some(read_u64(r)?).filter(|&v| v != 0);
+        let size_max = Some(read_u64(r)?).filter(|&v| v != u64::MAX);
+        let modified_min = Some(read_u64(r)? as i64).filter(|&v| v != i64::MIN);
+        let modified_max = Some(read_u64(r)? as i64).filter(|&v| v != i64::MAX);
+        Ok(Self {
+            exts,
+            dirs,
+            size_min,
+            size_max,
+            modified_min,
+            modified_max,
+        })
+    }
 }
 
 /// Whether the service could answer.
@@ -47,6 +152,15 @@ pub struct RemoteHit {
     pub size: u64,
     /// FILETIME ticks.
     pub modified: u64,
+}
+
+impl RemoteHit {
+    /// The path as a `PathBuf` (lossless on Windows).
+    #[cfg(windows)]
+    pub fn path_buf(&self) -> std::path::PathBuf {
+        use std::os::windows::ffi::OsStringExt;
+        std::path::PathBuf::from(std::ffi::OsString::from_wide(&self.path))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,6 +203,7 @@ impl Request {
         buf.extend_from_slice(&self.limit.min(MAX_HITS).to_le_bytes());
         buf.extend_from_slice(&(query.len() as u32).to_le_bytes());
         buf.extend_from_slice(query);
+        self.filter.write(&mut buf)?;
         w.write_all(&buf)?;
         w.flush()
     }
@@ -109,7 +224,12 @@ impl Request {
         let mut query = vec![0u8; len];
         r.read_exact(&mut query)?;
         let query = String::from_utf8(query).map_err(|_| invalid("query is not UTF-8"))?;
-        Ok(Self { query, limit })
+        let filter = SearchFilter::read(r)?;
+        Ok(Self {
+            query,
+            limit,
+            filter,
+        })
     }
 }
 
@@ -216,6 +336,14 @@ mod tests {
         let req = Request {
             query: "relatório 2026".into(),
             limit: 50,
+            filter: SearchFilter {
+                exts: vec!["pdf".into(), "docx".into()],
+                dirs: Some(false),
+                size_min: Some(10 << 20),
+                size_max: None,
+                modified_min: Some(1_795_000_000),
+                modified_max: Some(-5),
+            },
         };
         let mut buf = Vec::new();
         req.write_to(&mut buf).unwrap();
@@ -239,7 +367,16 @@ mod tests {
         let long = Request {
             query: "x".repeat(MAX_QUERY + 1),
             limit: 1,
+            ..Default::default()
         };
+        let many = Request {
+            filter: SearchFilter {
+                exts: vec!["x".into(); MAX_EXTS + 1],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(many.write_to(&mut Vec::new()).is_err());
         assert!(long.write_to(&mut Vec::new()).is_err());
         // A hand-made request claiming a huge query is refused before reading it.
         let mut evil = Vec::new();
@@ -253,6 +390,7 @@ mod tests {
         buf.extend_from_slice(&u32::MAX.to_le_bytes());
         buf.extend_from_slice(&1u32.to_le_bytes());
         buf.push(b'a');
+        SearchFilter::default().write(&mut buf).unwrap();
         assert_eq!(
             Request::read_from(&mut buf.as_slice()).unwrap().limit,
             MAX_HITS

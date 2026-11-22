@@ -13,6 +13,7 @@ mod list;
 pub mod natural;
 mod pinned;
 pub mod preview;
+pub mod search_filter;
 mod selection;
 mod tabs;
 mod undo;

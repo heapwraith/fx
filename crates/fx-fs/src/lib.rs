@@ -19,7 +19,7 @@ pub use windows::{Watcher, enumerate, watch};
 #[cfg(windows)]
 mod search;
 #[cfg(windows)]
-pub use search::{SearchHit, SearchSummary, search_tree};
+pub use search::{SearchHit, SearchSummary, search_tree, search_tree_where};
 
 /// How a folder is read. All strategies deliver the same entries; they differ
 /// only in speed (task T0.3, docs/DECISIONS.md D-009).

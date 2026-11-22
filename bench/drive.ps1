@@ -2,7 +2,7 @@
 # separated by ';', each one of
 #   key:ctrl+shift+p   press a key combination (modifiers ctrl shift alt win; keys a-z 0-9 f1-f12 enter esc
 #                      space tab up down left right home end pgup pgdn back del)
-#   type:texto         types letters, digits, '-', '.' and spaces
+#   type:texto         types any text the keyboard layout can (via VkKeyScanW); no ';'
 #   click:x,y          left click at client coordinates (px)
 #   rclick:x,y         right click
 #   move:x,y           moves the pointer
@@ -27,6 +27,7 @@ public static class Drv {
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern void mouse_event(uint f, int dx, int dy, int d, UIntPtr e);
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte s, uint f, UIntPtr e);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern short VkKeyScanW(char c);
   [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int a, out RECT r, int size);
 }
 "@
@@ -61,6 +62,22 @@ function Press([string]$combo) {
     foreach ($m in $held) { [Drv]::keybd_event($m, 0, 2, [UIntPtr]::Zero) }
     Start-Sleep -Milliseconds 40
 }
+# Any character the current keyboard layout can type (':' '>' 'ç'...).
+function TypeChar([char]$c) {
+    if ($c -eq ' ') { Press 'space'; return }
+    $scan = [Drv]::VkKeyScanW($c)
+    if ($scan -eq -1) { throw "cannot type: $c" }
+    $vkc = [byte]($scan -band 0xFF); $state = ($scan -shr 8) -band 0xFF
+    $held = @()
+    if ($state -band 1) { $held += [byte]0x10 }
+    if ($state -band 2) { $held += [byte]0x11 }
+    if ($state -band 4) { $held += [byte]0x12 }
+    foreach ($m in $held) { [Drv]::keybd_event($m, 0, 0, [UIntPtr]::Zero) }
+    [Drv]::keybd_event($vkc, 0, 0, [UIntPtr]::Zero); [Drv]::keybd_event($vkc, 0, 2, [UIntPtr]::Zero)
+    [array]::Reverse($held)
+    foreach ($m in $held) { [Drv]::keybd_event($m, 0, 2, [UIntPtr]::Zero) }
+    Start-Sleep -Milliseconds 40
+}
 function ToScreen([string]$xy) {
     $a = $xy.Split(','); $o = New-Object Drv+POINT; $o.X = [int]$a[0]; $o.Y = [int]$a[1]
     [Drv]::ClientToScreen($h, [ref]$o) | Out-Null; return $o
@@ -71,7 +88,7 @@ foreach ($step in $Steps.Split(';')) {
     $i = $step.IndexOf(':'); $op = $step.Substring(0, $i); $arg = $step.Substring($i + 1)
     switch ($op) {
         'key' { Press $arg }
-        'type' { foreach ($c in $arg.ToCharArray()) { if ($c -eq ' ') { Press 'space' } else { Press ([string]$c) } } }
+        'type' { foreach ($c in $arg.ToCharArray()) { TypeChar $c } }
         'move' { $s = ToScreen $arg; [Drv]::SetCursorPos($s.X, $s.Y) | Out-Null; Start-Sleep -Milliseconds 80 }
         'click' {
             $s = ToScreen $arg; [Drv]::SetCursorPos($s.X, $s.Y) | Out-Null; Start-Sleep -Milliseconds 80

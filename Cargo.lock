@@ -2042,6 +2042,7 @@ dependencies = [
 name = "fx-indexd"
 version = "0.1.0"
 dependencies = [
+ "fx-core",
  "fx-index",
 ]
 

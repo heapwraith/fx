@@ -9,7 +9,7 @@ pub mod protocol;
 mod search;
 
 pub use index::{FileId, Index, IndexFull, Record};
-pub use search::{Hit, MAX_RESULTS, search};
+pub use search::{Hit, MAX_RESULTS, search, search_where};
 
 #[cfg(windows)]
 mod windows;

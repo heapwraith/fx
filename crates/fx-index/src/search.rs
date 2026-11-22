@@ -71,10 +71,25 @@ pub fn search(
     cancel: &AtomicBool,
     partial: Option<&Sender<Vec<Hit>>>,
 ) -> Option<Vec<Hit>> {
-    let q = fold(query);
-    if q.is_empty() {
+    if fold(query).is_empty() {
         return Some(Vec::new());
     }
+    search_where(index, query, cancel, partial, &|_| Some(0))
+}
+
+/// [`search`] keeping only the slots `keep` accepts (filters, T2.6), whose
+/// returned bonus is added to the name score. The predicate runs inside the
+/// scan, so filtered-out names never take one of the [`MAX_RESULTS`] places.
+/// An empty `query` matches every name: with a predicate, that lists the
+/// filtered entries, best bonus first (e.g. the newest).
+pub fn search_where(
+    index: &Index,
+    query: &str,
+    cancel: &AtomicBool,
+    partial: Option<&Sender<Vec<Hit>>>,
+    keep: &(dyn Fn(u32) -> Option<i32> + Sync),
+) -> Option<Vec<Hit>> {
+    let q = fold(query);
     let pattern = Pattern::new(&q);
     let slots = index.slots();
     let next_unit = AtomicUsize::new(0);
@@ -102,7 +117,10 @@ pub fn search(
                             continue;
                         }
                         let name = index.folded(slot);
-                        if let Some(score) = pattern.score(name) {
+                        if let Some(score) = pattern.score(name)
+                            && let Some(bonus) = keep(slot)
+                        {
+                            let score = score.saturating_add(bonus);
                             top.push(Hit { slot, score }, name.len() as u32);
                         }
                     }
@@ -145,6 +163,7 @@ impl Pattern {
 
     fn score(&self, name: &str) -> Option<i32> {
         match self {
+            Pattern::Ascii(q) if q.is_empty() => Some(0),
             Pattern::Ascii(q) => score_seq(name.as_bytes(), q, |&b| is_boundary(b as char)),
             Pattern::Chars(q, bytes) => {
                 // If the chars are a subsequence, so are their UTF-8 bytes: reject
@@ -280,6 +299,28 @@ mod tests {
         assert_eq!(run(&index, "relatório"), ["Relatório Final.pdf"]);
         assert!(run(&index, "zzz").is_empty());
         assert!(run(&index, "").is_empty());
+    }
+
+    #[test]
+    fn a_predicate_filters_inside_the_scan() {
+        // 1000 "notas" files that a filter drops, and one it keeps: the kept
+        // one is found although the dropped ones would fill the top places.
+        let mut names: Vec<String> = (0..1000).map(|i| format!("notas {i}.txt")).collect();
+        names.push("notas finais.pdf".into());
+        let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+        let index = index_of(&refs);
+        let pdf = |slot: u32| index.name(slot).ends_with(".pdf").then_some(0);
+        let hits = search_where(&index, "notas", &AtomicBool::new(false), None, &pdf).unwrap();
+        assert_eq!(names_of(&index, &hits), ["notas finais.pdf"]);
+        // No text: every entry the predicate accepts, best bonus first.
+        let newest = |slot: u32| Some(i32::try_from(slot).unwrap());
+        let hits = search_where(&index, "", &AtomicBool::new(false), None, &newest).unwrap();
+        assert_eq!(hits.len(), MAX_RESULTS);
+        assert_eq!(index.name(hits[0].slot), "notas finais.pdf");
+    }
+
+    fn names_of(index: &Index, hits: &[Hit]) -> Vec<String> {
+        names(index, hits)
     }
 
     #[test]

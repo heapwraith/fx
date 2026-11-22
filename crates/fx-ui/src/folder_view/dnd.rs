@@ -14,7 +14,7 @@ use gpui::{Context, MouseMoveEvent, Pixels, Point, Window};
 use super::FolderView;
 
 /// The pointer must travel this far with the button down to start a drag.
-const DRAG_THRESHOLD: f32 = 6.0;
+pub(super) const DRAG_THRESHOLD: f32 = 6.0;
 
 impl FolderView {
     /// A row was pressed: a drag may start from here.
