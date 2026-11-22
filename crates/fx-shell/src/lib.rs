@@ -22,4 +22,4 @@ pub use windows::{
     start_thumb_service, supports_mica, utc_offset_at, watch_drives, window_id, windows_build,
 };
 #[cfg(windows)]
-pub use windows::{default_manager, preview_host};
+pub use windows::{conpty, default_manager, preview_host};

@@ -5,6 +5,7 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 ## [Não lançado]
 
 ### Adicionado
+- Terminal embutido (Ctrl+J) com PowerShell na pasta atual.
 - Etiquetas coloridas (Alt+1…7) e busca por `etiqueta:`.
 - Vista em colunas (Ctrl+Shift+3).
 - Painel duplo (F3): Tab troca de painel, F5 copia e F6 move para o outro painel.

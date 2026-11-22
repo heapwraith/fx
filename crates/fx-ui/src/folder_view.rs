@@ -25,6 +25,7 @@ mod grid;
 mod path_bar;
 mod quick_look;
 mod search;
+mod terminal;
 mod view_menu;
 
 pub use view_menu::ViewEvent;
@@ -211,6 +212,8 @@ pub struct FolderView {
     batch_rename: Option<batch_rename::BatchRename>,
     /// The column view (Ctrl+Shift+3, T3.3).
     miller: Option<columns::Columns>,
+    /// The embedded terminal (Ctrl+J, T3.5).
+    terminal: Option<terminal::Terminal>,
     /// Width of the breadcrumb area in the last frame (T2.3), and whether
     /// the menu of the collapsed leading crumbs ("…") is open.
     crumb_room: std::rc::Rc<std::cell::Cell<f32>>,
@@ -389,6 +392,7 @@ impl FolderView {
             dir_sizes: dir_sizes::DirSizes::default(),
             batch_rename: None,
             miller: None,
+            terminal: None,
             crumb_room: std::rc::Rc::default(),
             crumb_menu: false,
             quick_look: None,
@@ -1654,6 +1658,13 @@ impl FolderView {
         if self.notice.take().is_some() {
             cx.notify();
         }
+        if ks.key == "j" && m.control && !m.alt && !m.shift {
+            self.toggle_terminal(cx);
+            return;
+        }
+        if self.terminal_key(ks, cx) {
+            return;
+        }
         if self.batch_rename_key(ks, window, cx) {
             return;
         }
@@ -2134,6 +2145,7 @@ impl Render for FolderView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.trace_frame(window);
         self.sync_quick_look(window, cx);
+        self.sync_terminal_size();
         let t = self.look.theme;
         let focused = self.focus.is_focused(window);
         let row_h = self.look.density.row_height();
@@ -2167,6 +2179,17 @@ impl Render for FolderView {
 
         div()
             .track_focus(&self.focus)
+            // A click outside the terminal panel gives the keys back to the
+            // list (the panel stops its own clicks).
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|view, _: &MouseDownEvent, _, cx| {
+                    if let Some(t) = view.terminal.as_mut().filter(|t| t.focused) {
+                        t.focused = false;
+                        cx.notify();
+                    }
+                }),
+            )
             .on_key_down(cx.listener(Self::on_key_down))
             // Anchor for the View menu.
             .relative()
@@ -2312,6 +2335,7 @@ impl Render for FolderView {
             .children(self.render_quick_look(cx))
             .children(self.render_search(cx))
             .children(self.render_columns(cx))
+            .children(self.render_terminal(cx))
             .children(self.render_batch_rename(cx))
             .children(self.render_view_menu(cx))
     }

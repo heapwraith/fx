@@ -49,7 +49,7 @@
 - Testes do banco (atribuir, remover, renomear arquivo, mover); filtro na busca.
 
 ## T3.5 — Terminal embutido (opcional)
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: Ctrl+J abre o PowerShell na pasta atual num painel (ConPTY em `fx-shell::conpty`, tela VT em `fx-core::vt`: texto, UTF-8, cursor, apagar, cores ANSI e negrito, rolagem com histórico); teclas vão para o terminal enquanto ele tem o foco (clique alterna); o console acompanha o tamanho do painel; fechar encerra o shell (D-050). Testes: 5 da tela VT, ConPTY com `cmd` de verdade, codificação de teclas; conferido na janela. Não segue a pasta quando ela muda (abre na pasta da hora).
 
 **Fazer**
 - Ctrl+J abre um painel de terminal na pasta atual (ConPTY + um emulador VT mínimo: texto, cores, cursor, rolagem), que segue a pasta quando ela muda (`cd`). Desligado por padrão.

@@ -380,3 +380,10 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Busca:** `etiqueta:verde` (ou `tag:`) responde direto das etiquetas, em qualquer pasta, e aplica depois o nome e os outros filtros.
 - **Pendente:** etiquetas na grade e nas colunas; editar os nomes das etiquetas; filtro por etiqueta na paleta.
 
+## D-050 — Terminal embutido (T3.5)
+- **Data:** 2026-11-22 · **Status:** aceita
+- **ConPTY** (`fx-shell/src/windows/conpty.rs`): `CreatePseudoConsole` sobre dois pipes, o shell iniciado com o atributo `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE`. Armadilha: com as saídas do processo pai redirecionadas (testes pelo WSL), o filho herdava esses handles em vez do console; `STARTF_USESTDHANDLES` com handles nulos resolve. Fechar o painel fecha o console e encerra o processo.
+- **Tela** (`fx-core/src/vt.rs`, sem dependências): UTF-8 (inclusive caractere dividido entre leituras), CR/LF/BS/TAB, CSI de cursor (A B C D G H f), apagar (J K X), SGR (16 cores, negrito; 256 cores e RGB são pulados), OSC ignorado, quebra de linha automática, 2.000 linhas de histórico. O que não conhece é ignorado.
+- **Painel** (`folder_view/terminal.rs`): Ctrl+J abre o PowerShell na pasta atual (280 px, embaixo da aba, sobre a lista) e fecha; enquanto tem o foco recebe todas as teclas (Esc inclusive), codificadas em VT (setas, Home/End, Delete, PgUp/PgDn, Ctrl+letra); clicar na lista devolve o foco a ela. Cores Campbell (as do Windows Terminal). Um `canvas` mede o painel e o console é redimensionado. A saída repinta a vista em rajadas agrupadas.
+- **Pendente:** seguir a pasta da aba (`cd`), rolar o histórico com a roda, copiar texto, escolher o shell.
+
