@@ -4,6 +4,8 @@
 //! the shell (Esc too), except Ctrl+J, which closes it. Clicking the list
 //! gives the focus back to the list; clicking the panel, to the shell.
 
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use std::io::Read;
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -49,7 +51,10 @@ impl FolderView {
         let (pty, mut output) = match fx_shell::conpty::spawn(SHELL, &self.path, cols, rows) {
             Ok(p) => p,
             Err(e) => {
-                self.notice = Some(format!("não foi possível abrir o terminal: {e}"));
+                self.notice = Some(trf!(
+                    "não foi possível abrir o terminal: {e}",
+                    "could not open the terminal: {e}"
+                ));
                 cx.notify();
                 return;
             }
@@ -191,7 +196,10 @@ impl FolderView {
                         .py(px(2.0))
                         .text_size(px(CAPTION_SIZE))
                         .text_color(rgba(0x9A9A9AFF))
-                        .child("PowerShell · Ctrl+J fecha · clique na lista para voltar a ela"),
+                        .child(tr!(
+                            "PowerShell · Ctrl+J fecha · clique na lista para voltar a ela",
+                            "PowerShell · Ctrl+J closes · click the list to go back to it"
+                        )),
                 )
                 .child(
                     div()

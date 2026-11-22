@@ -31,6 +31,8 @@ mod theme;
 mod thumbs;
 mod trace;
 
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;

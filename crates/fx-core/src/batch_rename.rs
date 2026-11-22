@@ -31,10 +31,10 @@ impl Case {
 
     pub fn label(self) -> &'static str {
         match self {
-            Case::Keep => "manter",
-            Case::Lower => "minúsculas",
-            Case::Upper => "MAIÚSCULAS",
-            Case::Title => "Título",
+            Case::Keep => crate::tr!("manter", "keep"),
+            Case::Lower => crate::tr!("minúsculas", "lowercase"),
+            Case::Upper => crate::tr!("MAIÚSCULAS", "UPPERCASE"),
+            Case::Title => crate::tr!("Título", "Title Case"),
         }
     }
 }
@@ -80,8 +80,8 @@ impl Problem {
     pub fn text(self) -> &'static str {
         match self {
             Problem::Invalid(why) => why,
-            Problem::Duplicate => "repetido no lote",
-            Problem::Exists => "já existe na pasta",
+            Problem::Duplicate => crate::tr!("repetido no lote", "repeated in the batch"),
+            Problem::Exists => crate::tr!("já existe na pasta", "already in the folder"),
         }
     }
 }
@@ -233,19 +233,25 @@ fn apply_case(s: &str, case: Case) -> String {
 /// Why `name` is not a valid Windows file name.
 fn invalid(name: &str) -> Option<&'static str> {
     if name.trim().is_empty() {
-        return Some("nome vazio");
+        return Some(crate::tr!("nome vazio", "empty name"));
     }
     if name
         .chars()
         .any(|c| c.is_control() || r#"<>:"/\|?*"#.contains(c))
     {
-        return Some("caractere não permitido");
+        return Some(crate::tr!(
+            "caractere não permitido",
+            "character not allowed"
+        ));
     }
     if name.ends_with('.') || name.ends_with(' ') {
-        return Some("termina com ponto ou espaço");
+        return Some(crate::tr!(
+            "termina com ponto ou espaço",
+            "ends with a dot or space"
+        ));
     }
     if name.encode_utf16().count() > 255 {
-        return Some("nome longo demais");
+        return Some(crate::tr!("nome longo demais", "name too long"));
     }
     let stem = name
         .split('.')
@@ -258,7 +264,10 @@ fn invalid(name: &str) -> Option<&'static str> {
             && (stem.starts_with("COM") || stem.starts_with("LPT"))
             && stem.as_bytes()[3].is_ascii_digit()
             && stem.as_bytes()[3] != b'0');
-    reserved.then_some("nome reservado do Windows")
+    reserved.then_some(crate::tr!(
+        "nome reservado do Windows",
+        "name reserved by Windows"
+    ))
 }
 
 #[cfg(test)]

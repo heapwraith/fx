@@ -7,6 +7,8 @@
 //! runs the original job again and records its new reversal. A reversal that
 //! fails keeps its entry where it was, so nothing is silently lost.
 
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::mpsc::channel;
@@ -150,10 +152,10 @@ impl Ops {
         {
             return Err(reason);
         }
-        let engine = self
-            .engine
-            .as_ref()
-            .ok_or("fila de operações indisponível")?;
+        let engine = self.engine.as_ref().ok_or(tr!(
+            "fila de operações indisponível",
+            "operation queue unavailable"
+        ))?;
         let id = engine.submit(job.clone());
         self.pending.insert(id, Pending::Do(job));
         self.show_if_started(id);
@@ -196,7 +198,7 @@ impl Ops {
                 self.pending.insert(id, Pending::Undo(entry));
                 self.show_if_started(id);
             }
-            None => self.say("nada para desfazer"),
+            None => self.say(tr!("nada para desfazer", "nothing to undo")),
         }
         cx.notify();
     }
@@ -209,7 +211,7 @@ impl Ops {
                 self.pending.insert(id, Pending::Redo(entry.forward));
                 self.show_if_started(id);
             }
-            None => self.say("nada para refazer"),
+            None => self.say(tr!("nada para refazer", "nothing to redo")),
         }
         cx.notify();
     }
@@ -375,10 +377,20 @@ impl Ops {
             }
             Pending::Undo(entry) => {
                 if outcome == Outcome::Done {
-                    self.say(describe(&entry.backward, &outcome, &report, "desfeito: "));
+                    self.say(describe(
+                        &entry.backward,
+                        &outcome,
+                        &report,
+                        tr!("desfeito: ", "undone: "),
+                    ));
                     self.history.push_redo(entry);
                 } else {
-                    self.say(describe(&entry.backward, &outcome, &report, "desfazer: "));
+                    self.say(describe(
+                        &entry.backward,
+                        &outcome,
+                        &report,
+                        tr!("desfazer: ", "undo: "),
+                    ));
                     self.history.push_undo(entry);
                 }
             }
@@ -387,7 +399,12 @@ impl Ops {
                     self.history
                         .push_undo(Entry::new(job.clone(), backward, &report));
                 }
-                self.say(describe(&job, &outcome, &report, "refeito: "));
+                self.say(describe(
+                    &job,
+                    &outcome,
+                    &report,
+                    tr!("refeito: ", "redone: "),
+                ));
             }
         }
         cx.notify();
@@ -401,8 +418,8 @@ fn start_label(pending: &Pending) -> Option<String> {
         Pending::Undo(e) => &e.backward,
     };
     let verb = match job.kind() {
-        OpKind::Copy => "Copiando",
-        OpKind::Move | OpKind::MoveBack => "Movendo",
+        OpKind::Copy => tr!("Copiando", "Copying"),
+        OpKind::Move | OpKind::MoveBack => tr!("Movendo", "Moving"),
         _ => return None,
     };
     Some(format!(
@@ -424,51 +441,98 @@ fn history_label(job: &Job, report: &Report) -> String {
         (n, _) => count(n),
     };
     match job.kind() {
-        OpKind::Copy => format!("Copiou {what} para {}", job.dest_name()),
-        OpKind::Move | OpKind::MoveBack => format!("Moveu {what} para {}", job.dest_name()),
-        OpKind::Recycle => format!("Enviou {what} para a Lixeira"),
+        OpKind::Copy => trf!(
+            "Copiou {what} para {}",
+            "Copied {what} to {}",
+            job.dest_name()
+        ),
+        OpKind::Move | OpKind::MoveBack => trf!(
+            "Moveu {what} para {}",
+            "Moved {what} to {}",
+            job.dest_name()
+        ),
+        OpKind::Recycle => trf!(
+            "Enviou {what} para a Lixeira",
+            "Sent {what} to the Recycle Bin"
+        ),
         OpKind::Rename => match renamed {
-            Some(new) => format!("Renomeou {what} para \"{new}\""),
-            None => format!("Renomeou {what}"),
+            Some(new) => trf!(
+                "Renomeou {what} para \"{new}\"",
+                "Renamed {what} to \"{new}\""
+            ),
+            None => trf!("Renomeou {what}", "Renamed {what}"),
         },
-        OpKind::BatchRename => format!("Renomeou {} em lote", count(job.source_count())),
+        OpKind::BatchRename => trf!(
+            "Renomeou {} em lote",
+            "Batch renamed {}",
+            count(job.source_count())
+        ),
         OpKind::NewFolder => match report.created.as_ref().and_then(|p| p.file_name()) {
-            Some(n) => format!("Criou a pasta \"{}\"", n.to_string_lossy()),
-            None => "Criou uma pasta".to_owned(),
+            Some(n) => trf!(
+                "Criou a pasta \"{}\"",
+                "Created the folder \"{}\"",
+                n.to_string_lossy()
+            ),
+            None => tr!("Criou uma pasta", "Created a folder").to_owned(),
         },
-        OpKind::Restore => format!("Restaurou {what} da Lixeira"),
-        OpKind::DeletePermanent => format!("Excluiu {what} permanentemente"),
+        OpKind::Restore => trf!(
+            "Restaurou {what} da Lixeira",
+            "Restored {what} from the Recycle Bin"
+        ),
+        OpKind::DeletePermanent => trf!(
+            "Excluiu {what} permanentemente",
+            "Permanently deleted {what}"
+        ),
     }
 }
 
 /// Status message for a finished job.
 fn describe(job: &Job, outcome: &Outcome, report: &Report, prefix: &str) -> String {
     let what = match job.kind() {
-        OpKind::Copy => format!("copiado: {}", count(report.copied.len())),
-        OpKind::Move | OpKind::MoveBack => format!("movido: {}", count(report.moved.len())),
+        OpKind::Copy => trf!("copiado: {}", "copied: {}", count(report.copied.len())),
+        OpKind::Move | OpKind::MoveBack => {
+            trf!("movido: {}", "moved: {}", count(report.moved.len()))
+        }
         OpKind::Recycle => {
             let sent = report.recycled.len() + report.untracked.len();
-            let mut s = format!("enviado para a Lixeira: {}", count(sent));
+            let mut s = trf!(
+                "enviado para a Lixeira: {}",
+                "sent to the Recycle Bin: {}",
+                count(sent)
+            );
             if !report.untracked.is_empty() {
-                s.push_str(&format!(
+                s.push_str(&trf!(
                     " ({} não localizados na Lixeira: o Windows pode tê-los excluído de vez)",
+                    " ({} not found in the Recycle Bin: Windows may have deleted them for good)",
                     report.untracked.len()
                 ));
             }
             s
         }
         OpKind::DeletePermanent => {
-            format!("excluído permanentemente: {}", count(report.deleted.len()))
+            trf!(
+                "excluído permanentemente: {}",
+                "permanently deleted: {}",
+                count(report.deleted.len())
+            )
         }
         OpKind::Rename => "renomeado".into(),
-        OpKind::BatchRename => format!("renomeado: {}", count(report.batch_renamed.len())),
-        OpKind::NewFolder => "pasta criada".into(),
-        OpKind::Restore => format!("restaurado da Lixeira: {}", count(report.restored.len())),
+        OpKind::BatchRename => trf!(
+            "renomeado: {}",
+            "renamed: {}",
+            count(report.batch_renamed.len())
+        ),
+        OpKind::NewFolder => tr!("pasta criada", "folder created").into(),
+        OpKind::Restore => trf!(
+            "restaurado da Lixeira: {}",
+            "restored from the Recycle Bin: {}",
+            count(report.restored.len())
+        ),
     };
     match outcome {
         Outcome::Done => format!("{prefix}{what}"),
-        Outcome::Cancelled => format!("{prefix}cancelado ({what})"),
-        Outcome::Failed(why) => format!("{prefix}erro: {why}"),
+        Outcome::Cancelled => trf!("{prefix}cancelado ({what})", "{prefix}canceled ({what})"),
+        Outcome::Failed(why) => trf!("{prefix}erro: {why}", "{prefix}error: {why}"),
     }
 }
 

@@ -7,6 +7,8 @@
 //! (a few dozen nodes, microseconds) and sent to the adapter only when a
 //! screen reader is listening.
 
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -82,14 +84,14 @@ pub fn build(s: &Snapshot) -> TreeUpdate {
     let path = match &s.editing {
         Some(text) => {
             let mut n = Node::new(Role::TextInput);
-            n.set_label("Caminho");
+            n.set_label(tr!("Caminho", "Path"));
             n.set_value(text.clone());
             n
         }
         None => {
             // A Label's text is its value (that is what UIA exposes as Name).
             let mut n = Node::new(Role::Label);
-            let text = format!("Caminho: {}", s.path);
+            let text = trf!("Caminho: {}", "Path: {}", s.path);
             n.set_label(text.clone());
             n.set_value(text);
             n
@@ -97,7 +99,7 @@ pub fn build(s: &Snapshot) -> TreeUpdate {
     };
 
     let mut list = Node::new(Role::ListBox);
-    list.set_label("Arquivos");
+    list.set_label(tr!("Arquivos", "Files"));
     list.set_description(fx_core::format::items(s.total));
     list.set_size_of_set(s.total);
     list.set_children(

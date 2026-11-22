@@ -5,6 +5,8 @@
 //! executor, drives on fx-shell's watcher thread, which sends a new list within
 //! ~250 ms of a drive letter appearing or disappearing.
 
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -154,12 +156,12 @@ impl Places {
     pub fn label(&self, path: &Path) -> SharedString {
         let known = self.known.iter().find(|(_, p)| p == path).map(|(k, _)| *k);
         let name = match known {
-            Some(KnownFolder::Desktop) => "Área de Trabalho",
-            Some(KnownFolder::Downloads) => "Downloads",
-            Some(KnownFolder::Documents) => "Documentos",
-            Some(KnownFolder::Pictures) => "Imagens",
-            Some(KnownFolder::Music) => "Músicas",
-            Some(KnownFolder::Videos) => "Vídeos",
+            Some(KnownFolder::Desktop) => tr!("Área de Trabalho", "Desktop"),
+            Some(KnownFolder::Downloads) => tr!("Downloads", "Downloads"),
+            Some(KnownFolder::Documents) => tr!("Documentos", "Documents"),
+            Some(KnownFolder::Pictures) => tr!("Imagens", "Pictures"),
+            Some(KnownFolder::Music) => tr!("Músicas", "Music"),
+            Some(KnownFolder::Videos) => tr!("Vídeos", "Videos"),
             Some(KnownFolder::Home) | None => {
                 return path
                     .file_name()
@@ -184,11 +186,11 @@ pub fn drive_label(d: &Drive) -> SharedString {
     let letter = letter.trim_end_matches('\\');
     let name = if d.label.is_empty() {
         match d.kind {
-            DriveKind::Fixed => "Disco Local",
-            DriveKind::Removable => "Unidade removível",
-            DriveKind::Network => "Unidade de rede",
-            DriveKind::Optical => "Unidade de DVD",
-            DriveKind::Other => "Unidade",
+            DriveKind::Fixed => tr!("Disco Local", "Local Disk"),
+            DriveKind::Removable => tr!("Unidade removível", "Removable Drive"),
+            DriveKind::Network => tr!("Unidade de rede", "Network Drive"),
+            DriveKind::Optical => tr!("Unidade de DVD", "DVD Drive"),
+            DriveKind::Other => tr!("Unidade", "Drive"),
         }
     } else {
         d.label.as_str()

@@ -7,6 +7,8 @@
 //! `IMAGE_LIMIT`; text and code: the first 256 KB in a virtualized list;
 //! everything else: the shell's large thumbnail (or its big icon).
 
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -90,7 +92,13 @@ impl Host {
                 .ok()
                 .and_then(|p| p.parent().map(|d| d.join("fx-preview.exe")));
             let Some(exe) = exe.filter(|p| p.exists()) else {
-                *lock(&self.failed) = Some("fx-preview.exe não está ao lado do fx.exe".into());
+                *lock(&self.failed) = Some(
+                    tr!(
+                        "fx-preview.exe não está ao lado do fx.exe",
+                        "fx-preview.exe is not next to fx.exe"
+                    )
+                    .into(),
+                );
                 return;
             };
             let mut cmd = std::process::Command::new(exe);
@@ -254,7 +262,7 @@ impl FolderView {
         let bytes = self.list.size(entry);
         let kind = preview_kind(&name, is_dir);
         let detail = if is_dir {
-            "Pasta".to_owned()
+            tr!("Pasta", "Folder").to_owned()
         } else {
             format!(
                 "{} · {}",
@@ -283,7 +291,10 @@ impl FolderView {
             });
         if spawned.is_err() {
             if let Some(q) = &mut self.quick_look {
-                q.content = Content::Nothing("Não foi possível abrir a pré-visualização.");
+                q.content = Content::Nothing(tr!(
+                    "Não foi possível abrir a pré-visualização.",
+                    "Could not open the preview."
+                ));
             }
             return;
         }
@@ -346,19 +357,27 @@ impl FolderView {
         let q = self.quick_look.as_ref()?;
         let t = self.look.theme;
         let body = match q.content.clone() {
-            Content::Loading => message("Carregando…", t.text_secondary).into_any_element(),
+            Content::Loading => {
+                message(tr!("Carregando…", "Loading…"), t.text_secondary).into_any_element()
+            }
             Content::Handler(path, host) => {
                 let failed = lock(&host.failed).clone();
                 match failed {
-                    Some(why) => message_owned(format!("Sem prévia: {why}"), t.text_secondary)
-                        .into_any_element(),
+                    Some(why) => message_owned(
+                        trf!("Sem prévia: {why}", "No preview: {why}"),
+                        t.text_secondary,
+                    )
+                    .into_any_element(),
                     None => {
                         let waiting = host.waiting();
                         div()
                             .size_full()
                             .relative()
                             .child(message(
-                                "Abrindo o visualizador do Windows…",
+                                tr!(
+                                    "Abrindo o visualizador do Windows…",
+                                    "Opening the Windows viewer…"
+                                ),
                                 t.text_secondary,
                             ))
                             .child(
@@ -485,7 +504,10 @@ impl FolderView {
                                 .border_color(rgba(t.divider))
                                 .text_size(px(CAPTION_SIZE))
                                 .text_color(rgba(t.text_secondary))
-                                .child("Mostrando o começo do arquivo (256 KB)."),
+                                .child(tr!(
+                                    "Mostrando o começo do arquivo (256 KB).",
+                                    "Showing the start of the file (256 KB)."
+                                )),
                         )
                     })
                     .into_any_element()
@@ -530,7 +552,11 @@ impl FolderView {
                             .flex_none()
                             .text_size(px(CAPTION_SIZE))
                             .text_color(rgba(t.text_secondary))
-                            .child(format!("{} · Espaço ou Esc fecha", q.detail)),
+                            .child(trf!(
+                                "{} · Espaço ou Esc fecha",
+                                "{} · Space or Esc closes",
+                                q.detail
+                            )),
                     ),
             )
             .child(div().flex_1().min_h_0().child(body));
@@ -582,9 +608,12 @@ type Decode = dyn Fn(Image) -> Option<Arc<RenderImage>>;
 /// Runs on the preview worker.
 fn load(path: &Path, kind: PreviewKind, bytes: u64, is_dir: bool, decode: &Decode) -> Content {
     let caption = if is_dir {
-        "Enter abre a pasta."
+        tr!("Enter abre a pasta.", "Enter opens the folder.")
     } else {
-        "Sem pré-visualização para este tipo de arquivo."
+        tr!(
+            "Sem pré-visualização para este tipo de arquivo.",
+            "No preview for this file type."
+        )
     };
     let shell = |path: &Path, decode: &Decode| shell(path, decode, caption);
     match kind {
@@ -601,7 +630,10 @@ fn load(path: &Path, kind: PreviewKind, bytes: u64, is_dir: bool, decode: &Decod
                 Some(image) => Content::Image(image),
                 None => shell(path, decode),
             },
-            Err(_) => Content::Nothing("Não foi possível ler este arquivo."),
+            Err(_) => Content::Nothing(tr!(
+                "Não foi possível ler este arquivo.",
+                "Could not read this file."
+            )),
         },
         PreviewKind::Zip => zip_listing(path).unwrap_or_else(|| shell(path, decode)),
         PreviewKind::Text => match read_start(path) {
@@ -625,7 +657,10 @@ fn load(path: &Path, kind: PreviewKind, bytes: u64, is_dir: bool, decode: &Decod
                 // Binary after all (a file without extension): a thumbnail.
                 None => shell(path, decode),
             },
-            Err(_) => Content::Nothing("Não foi possível ler este arquivo."),
+            Err(_) => Content::Nothing(tr!(
+                "Não foi possível ler este arquivo.",
+                "Could not read this file."
+            )),
         },
         // Folders and other files: a Windows preview handler when the type
         // has one (PDF...), else the shell's thumbnail.
@@ -670,13 +705,17 @@ fn zip_listing(path: &Path) -> Option<Content> {
             (e.name.clone().into(), size.into())
         })
         .collect();
-    let mut summary = format!(
+    let mut summary = trf!(
         "{} · {} descompactado",
+        "{} · {} uncompressed",
         fx_core::format::items(listing.total as usize),
         size_short(unpacked)
     );
     if listing.truncated {
-        summary.push_str(&format!(" · mostrando os primeiros {ZIP_MAX}"));
+        summary.push_str(&trf!(
+            " · mostrando os primeiros {ZIP_MAX}",
+            " · showing the first {ZIP_MAX}"
+        ));
     }
     Some(Content::Zip(Arc::new(rows), summary.into()))
 }
@@ -779,7 +818,10 @@ fn markdown_view(
                 .pt(px(space(2)))
                 .text_size(px(CAPTION_SIZE))
                 .text_color(rgba(t.text_secondary))
-                .child("Mostrando o começo do arquivo (256 KB)."),
+                .child(tr!(
+                    "Mostrando o começo do arquivo (256 KB).",
+                    "Showing the start of the file (256 KB)."
+                )),
         );
     }
     body.into_any_element()
@@ -798,12 +840,18 @@ fn read_start(path: &Path) -> std::io::Result<(Vec<u8>, bool)> {
 
 fn shell(path: &Path, decode: &Decode, caption: &'static str) -> Content {
     let Some(preview) = fx_shell::preview_image(path, SHELL_PREVIEW, Some(ICON_PREVIEW)) else {
-        return Content::Nothing("Sem pré-visualização para este tipo de arquivo.");
+        return Content::Nothing(tr!(
+            "Sem pré-visualização para este tipo de arquivo.",
+            "No preview for this file type."
+        ));
     };
     match decode(Image::from_bytes(ImageFormat::Bmp, preview.bmp)) {
         Some(image) if preview.is_icon => Content::Icon(image, caption),
         Some(image) => Content::Image(image),
-        None => Content::Nothing("Sem pré-visualização para este tipo de arquivo."),
+        None => Content::Nothing(tr!(
+            "Sem pré-visualização para este tipo de arquivo.",
+            "No preview for this file type."
+        )),
     }
 }
 

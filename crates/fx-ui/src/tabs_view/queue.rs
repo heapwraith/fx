@@ -6,6 +6,8 @@
 //! "apply to all" for the rest of that job.
 
 use fx_core::format::size_short;
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use fx_ops::Resolution;
 use gpui::{ClickEvent, Context, SharedString, deferred, div, prelude::*, px, relative};
 
@@ -73,9 +75,14 @@ impl TabsView {
                                     .child(div().truncate().child(job.label.clone()))
                                     .child(
                                         div().flex_none().text_color(rgba(t.text_secondary)).child(
-                                            format!(
+                                            trf!(
                                                 "{}{} de {}",
-                                                if paused { "pausado · " } else { "" },
+                                                "{}{} of {}",
+                                                if paused {
+                                                    tr!("pausado · ", "paused · ")
+                                                } else {
+                                                    ""
+                                                },
                                                 size_short(job.done),
                                                 size_short(job.bytes)
                                             ),
@@ -154,16 +161,16 @@ impl TabsView {
             .border_color(rgba(t.divider))
             .bg(rgba(t.base))
             .shadow_lg()
-            .child(
-                div()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child("Já existe um item com esse nome"),
-            )
-            .child(
-                div()
-                    .text_color(rgba(t.text_secondary))
-                    .child(format!("\"{}\" já existe em {}.", ask.name, ask.folder)),
-            )
+            .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(tr!(
+                "Já existe um item com esse nome",
+                "An item with that name already exists"
+            )))
+            .child(div().text_color(rgba(t.text_secondary)).child(trf!(
+                "\"{}\" já existe em {}.",
+                "\"{}\" already exists in {}.",
+                ask.name,
+                ask.folder
+            )))
             .children(
                 compare(ask.existing, ask.incoming)
                     .into_iter()
@@ -195,7 +202,10 @@ impl TabsView {
                             .border_color(rgba(t.text_secondary))
                             .when(apply_all, |d| d.bg(rgba(t.accent))),
                     )
-                    .child("Aplicar a todos os conflitos desta operação")
+                    .child(tr!(
+                        "Aplicar a todos os conflitos desta operação",
+                        "Apply to all conflicts in this operation"
+                    ))
                     .on_click(cx.listener(|view, _: &ClickEvent, _, cx| {
                         view.apply_all = !view.apply_all;
                         cx.notify();
@@ -206,11 +216,21 @@ impl TabsView {
                     .flex()
                     .justify_end()
                     .gap(px(space(2)))
-                    .child(choice("skip", "Pular", Resolution::Skip, false))
-                    .child(choice("replace", "Substituir", Resolution::Replace, false))
+                    .child(choice(
+                        "skip",
+                        tr!("Pular", "Skip"),
+                        Resolution::Skip,
+                        false,
+                    ))
+                    .child(choice(
+                        "replace",
+                        tr!("Substituir", "Replace"),
+                        Resolution::Replace,
+                        false,
+                    ))
                     .child(choice(
                         "keep-both",
-                        "Manter os dois",
+                        tr!("Manter os dois", "Keep both"),
                         Resolution::KeepBoth,
                         true,
                     )),
@@ -249,7 +269,7 @@ fn compare(
     };
     let line = |info: Option<fx_ops::ItemInfo>, is_newer: bool| {
         let Some(info) = info else {
-            return "não foi possível ler".to_owned();
+            return tr!("não foi possível ler", "could not read").to_owned();
         };
         let mut parts = Vec::new();
         parts.push(if info.is_dir {
@@ -261,7 +281,7 @@ fn compare(
             parts.push(fx_core::format::date_time(m, fx_shell::utc_offset_at(m)));
         }
         if is_newer {
-            parts.push("mais recente".to_owned());
+            parts.push(tr!("mais recente", "most recent").to_owned());
         }
         parts.join(" · ")
     };
@@ -269,8 +289,11 @@ fn compare(
         return Vec::new();
     }
     vec![
-        ("Existente", line(existing, newer == Some(false))),
-        ("Novo", line(incoming, newer == Some(true))),
+        (
+            tr!("Existente", "Existing"),
+            line(existing, newer == Some(false)),
+        ),
+        (tr!("Novo", "New"), line(incoming, newer == Some(true))),
     ]
 }
 

@@ -12,6 +12,8 @@
 //! [`Session`] value. Paths are stored as text (lossy only for names that are
 //! not valid Unicode, which Windows practically never has).
 
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, channel};

@@ -2,11 +2,13 @@
 
 use std::time::{Duration, SystemTime};
 
+use crate::locale::english;
+
 /// Explorer-style size: bytes are shown in whole KB, rounded up ("0 KB" only for
 /// empty files), with thousands separators: `1 KB`, `12.345 KB`.
 pub fn size_kb(bytes: u64) -> String {
     let kb = bytes.div_ceil(1024);
-    format!("{} KB", group_thousands(kb))
+    format!("{} KB", group_thousands(kb, english()))
 }
 
 /// Short size for capacities: "931 GB", "1,8 TB", "512 MB" (binary units,
@@ -20,7 +22,8 @@ pub fn size_short(bytes: u64) -> String {
         unit += 1;
     }
     let text = if unit > 0 && value < 10.0 {
-        format!("{value:.1}").replace('.', ",")
+        let t = format!("{value:.1}");
+        if english() { t } else { t.replace('.', ",") }
     } else {
         format!("{value:.0}")
     };
@@ -29,23 +32,27 @@ pub fn size_short(bytes: u64) -> String {
 
 /// Item count with the Brazilian thousands separator: "1 item", "100.000 itens".
 pub fn items(n: usize) -> String {
-    match n {
-        1 => "1 item".to_owned(),
-        n => format!("{} itens", group_thousands(n as u64)),
+    let en = english();
+    match (n, en) {
+        (1, _) => "1 item".to_owned(),
+        (n, false) => format!("{} itens", group_thousands(n as u64, en)),
+        (n, true) => format!("{} items", group_thousands(n as u64, en)),
     }
 }
 
 /// A number with the Brazilian thousands separator: `100.000`.
 pub fn count(n: usize) -> String {
-    group_thousands(n as u64)
+    group_thousands(n as u64, english())
 }
 
-fn group_thousands(n: u64) -> String {
+/// Thousands separator: "." in Portuguese, "," in English.
+fn group_thousands(n: u64, en: bool) -> String {
+    let sep = if en { ',' } else { '.' };
     let digits = n.to_string();
     let mut out = String::with_capacity(digits.len() + digits.len() / 3);
     for (i, c) in digits.chars().enumerate() {
         if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push('.');
+            out.push(sep);
         }
         out.push(c);
     }
@@ -66,7 +73,7 @@ pub fn civil_from_days(days: i64) -> (i64, u32, u32) {
     (yoe + era * 400 + i64::from(month <= 2), month, day)
 }
 
-/// `DD/MM/YYYY HH:MM`, shifted by `offset` seconds from UTC (the local
+/// `DD/MM/YYYY HH:MM` (`MM/DD/YYYY` in English), shifted by `offset` seconds from UTC (the local
 /// offset for that instant comes from the platform: fx-shell `utc_offset_at`).
 pub fn date_time(t: SystemTime, offset: i64) -> String {
     let secs = match t.duration_since(SystemTime::UNIX_EPOCH) {
@@ -75,11 +82,12 @@ pub fn date_time(t: SystemTime, offset: i64) -> String {
     } + offset;
     let (y, m, d) = civil_from_days(secs.div_euclid(86_400));
     let s = secs.rem_euclid(86_400);
-    format!(
-        "{d:02}/{m:02}/{y:04} {:02}:{:02}",
-        s / 3600,
-        (s % 3600) / 60
-    )
+    let (h, min) = (s / 3600, (s % 3600) / 60);
+    if english() {
+        format!("{m:02}/{d:02}/{y:04} {h:02}:{min:02}")
+    } else {
+        format!("{d:02}/{m:02}/{y:04} {h:02}:{min:02}")
+    }
 }
 
 /// Milliseconds as `f64`, for traces and reports.
@@ -99,6 +107,12 @@ mod tests {
         assert_eq!(size_kb(1025), "2 KB");
         assert_eq!(size_kb(12_345 * 1024), "12.345 KB");
         assert_eq!(size_kb(1_234_567 * 1024), "1.234.567 KB");
+    }
+
+    #[test]
+    fn english_separators() {
+        assert_eq!(group_thousands(1_234_567, true), "1,234,567");
+        assert_eq!(group_thousands(1_234_567, false), "1.234.567");
     }
 
     #[test]

@@ -16,6 +16,8 @@
 //! with Enter or a double click, show in their folder with Ctrl+Enter, drag
 //! out, and have the Windows context menu.
 
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::{Component, Path, PathBuf, Prefix};
@@ -304,7 +306,7 @@ impl FolderView {
                     (Scope::Folder, Disk::Service | Disk::OwnIndex) => search.scope = Scope::Disk,
                     (Scope::Folder, _) => {
                         search.summary = Some(
-                            "Para buscar no disco inteiro, ative o serviço na paleta (Ctrl+K)"
+                            tr!("Para buscar no disco inteiro, ative o serviço na paleta (Ctrl+K)", "To search the whole disk, turn on the service in the palette (Ctrl+K)")
                                 .into(),
                         );
                         cx.notify();
@@ -405,7 +407,13 @@ impl FolderView {
             });
         if spawned.is_err() {
             search.running = false;
-            search.summary = Some("não foi possível iniciar a busca".into());
+            search.summary = Some(
+                tr!(
+                    "não foi possível iniciar a busca",
+                    "could not start the search"
+                )
+                .into(),
+            );
             return;
         }
         cx.spawn(async move |this, cx| {
@@ -510,7 +518,10 @@ impl FolderView {
             let result = fx_shell::drag_files(hwnd, &paths);
             if let Err(e) = result {
                 let _ = this.update(cx, |view, cx| {
-                    view.notice = Some(format!("não foi possível arrastar: {e}"));
+                    view.notice = Some(trf!(
+                        "não foi possível arrastar: {e}",
+                        "could not drag: {e}"
+                    ));
                     cx.notify();
                 });
             }
@@ -565,18 +576,24 @@ impl FolderView {
             |n| n.to_string_lossy().into_owned(),
         );
         let scope_label = match s.scope {
-            Scope::Disk => "Disco inteiro".to_owned(),
-            Scope::Folder => format!("Em \"{where_}\""),
+            Scope::Disk => tr!("Disco inteiro", "Whole disk").to_owned(),
+            Scope::Folder => trf!("Em \"{where_}\"", "In \"{where_}\""),
         };
         let placeholder = match s.scope {
-            Scope::Disk => "Buscar no disco inteiro — tipo:imagem, tamanho:>10mb, data:semana",
-            Scope::Folder => "Buscar nesta pasta e subpastas — tipo:, ext:, tamanho:, data:",
+            Scope::Disk => tr!(
+                "Buscar no disco inteiro — tipo:imagem, tamanho:>10mb, data:semana",
+                "Search the whole disk — type:image, size:>10mb, date:week"
+            ),
+            Scope::Folder => tr!(
+                "Buscar nesta pasta e subpastas — tipo:, ext:, tamanho:, data:",
+                "Search this folder and subfolders — type:, ext:, size:, date:"
+            ),
         };
         let status = match (&s.summary, s.running) {
-            (_, true) => format!("procurando… {}", fx_core::format::items(s.hits.len())),
+            (_, true) => trf!("procurando… {}", "searching… {}", fx_core::format::items(s.hits.len())),
             (Some(text), false) => text.clone(),
             (None, false) => {
-                "Enter abre · Ctrl+Enter mostra na pasta · Tab muda onde buscar · Esc fecha"
+                tr!("Enter abre · Ctrl+Enter mostra na pasta · Tab muda onde buscar · Esc fecha", "Enter opens · Ctrl+Enter shows in folder · Tab changes where to search · Esc closes")
                     .to_owned()
             }
         };
@@ -695,20 +712,20 @@ impl FolderView {
             .border_color(rgba(t.divider))
             // Lines up with the rows: icon column, then name.
             .child(div().flex_none().w(px(16.0)))
-            .child(header_cell("Nome", Order::Name).flex_1())
+            .child(header_cell(tr!("Nome", "Name"), Order::Name).flex_1())
             .child(
                 div()
                     .flex_none()
                     .w(px(SIZE_COL))
                     .flex()
                     .justify_end()
-                    .child(header_cell("Tamanho", Order::Size)),
+                    .child(header_cell(tr!("Tamanho", "Size"), Order::Size)),
             )
             .child(
                 div()
                     .flex_none()
                     .w(px(DATE_COL))
-                    .child(header_cell("Modificado", Order::Modified)),
+                    .child(header_cell(tr!("Modificado", "Modified"), Order::Modified)),
             );
 
         // Filters understood (chips) and words fx could not read.
@@ -731,7 +748,7 @@ impl FolderView {
                 s.filters
                     .problems
                     .iter()
-                    .map(|p| chip(format!("não entendi: {p}"), true)),
+                    .map(|p| chip(trf!("não entendi: {p}", "not understood: {p}"), true)),
             )
             .collect();
 
@@ -903,8 +920,9 @@ fn tag_search(filters: &Filters, tx: &std::sync::mpsc::Sender<Vec<Found>>) -> St
     }
     let n = found.len();
     let _ = tx.send(found);
-    format!(
+    trf!(
         "{} com essa etiqueta{}",
+        "{} with that tag{}",
         fx_core::format::items(n),
         filter_suffix(filters)
     )
@@ -919,9 +937,11 @@ fn service_search(filters: &Filters, tx: &std::sync::mpsc::Sender<Vec<Found>>) -
         sizes_of: Vec::new(),
     };
     match fx_index::pipe::query(&request, 2000) {
-        Ok(r) if r.status == Status::Indexing => {
-            "o serviço ainda está lendo os discos: tente em alguns segundos".into()
-        }
+        Ok(r) if r.status == Status::Indexing => tr!(
+            "o serviço ainda está lendo os discos: tente em alguns segundos",
+            "the service is still reading the disks: try again in a few seconds"
+        )
+        .into(),
         Ok(r) => {
             let n = r.hits.len();
             let found = r
@@ -930,18 +950,25 @@ fn service_search(filters: &Filters, tx: &std::sync::mpsc::Sender<Vec<Found>>) -
                 .map(|h| Found::new(h.path_buf(), h.is_dir, h.size, filetime_to_unix(h.modified)))
                 .collect();
             let _ = tx.send(found);
-            let mut text = format!(
+            let mut text = trf!(
                 "{} no disco inteiro ({} indexados){}",
+                "{} on the whole disk ({} indexed){}",
                 fx_core::format::items(n),
                 fx_core::format::count(r.items as usize),
                 filter_suffix(filters)
             );
             if n as u32 >= SERVICE_LIMIT {
-                text.push_str(" · os mais relevantes: digite mais para refinar");
+                text.push_str(tr!(
+                    " · os mais relevantes: digite mais para refinar",
+                    " · the most relevant: type more to narrow it"
+                ));
             }
             text
         }
-        Err(e) => format!("serviço de índice indisponível: {e} (Tab busca nesta pasta)"),
+        Err(e) => trf!(
+            "serviço de índice indisponível: {e} (Tab busca nesta pasta)",
+            "index service unavailable: {e} (Tab searches this folder)"
+        ),
     }
 }
 
@@ -981,16 +1008,24 @@ fn tree_search(
 
 fn tree_summary(s: &SearchSummary) -> String {
     let folders = match s.folders {
-        1 => "1 pasta".to_owned(),
-        n => format!("{} pastas", fx_core::format::count(n)),
+        1 => tr!("1 pasta", "1 folder").to_owned(),
+        n => trf!("{} pastas", "{} folders", fx_core::format::count(n)),
     };
-    let mut text = format!("{} em {folders}", fx_core::format::items(s.hits));
+    let mut text = trf!(
+        "{} em {folders}",
+        "{} in {folders}",
+        fx_core::format::items(s.hits)
+    );
     if s.capped {
-        text.push_str(" (parou no limite: digite mais para refinar)");
+        text.push_str(tr!(
+            " (parou no limite: digite mais para refinar)",
+            " (stopped at the limit: type more to narrow it)"
+        ));
     }
     if s.skipped > 0 {
-        text.push_str(&format!(
+        text.push_str(&trf!(
             " · {} sem acesso",
+            " · {} without access",
             fx_core::format::count(s.skipped)
         ));
     }
@@ -1041,8 +1076,9 @@ fn index_search(
         .collect();
     let n = found.len();
     let _ = tx.send(found);
-    format!(
+    trf!(
         "{} no disco {volume} (índice da MFT, os {} melhores){}",
+        "{} on disk {volume} (MFT index, the best {}){}",
         fx_core::format::items(n),
         fx_index::MAX_RESULTS,
         filter_suffix(filters)

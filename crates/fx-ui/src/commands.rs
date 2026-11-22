@@ -4,6 +4,8 @@
 //! no key and act directly.
 
 use fx_core::SortKey;
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 
 /// Who handles a command's keystroke.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,11 +31,21 @@ pub enum Action {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Command {
-    pub label: &'static str,
+    /// Portuguese and English.
+    pub labels: (&'static str, &'static str),
     pub action: Action,
 }
 
 impl Command {
+    /// The label in the interface language.
+    pub fn label(&self) -> &'static str {
+        if fx_core::locale::english() {
+            self.labels.1
+        } else {
+            self.labels.0
+        }
+    }
+
     /// The shortcut as shown next to the command ("Ctrl+Shift+N").
     pub fn shortcut(&self) -> Option<String> {
         match self.action {
@@ -43,79 +55,129 @@ impl Command {
     }
 }
 
-const fn window(label: &'static str, keys: &'static str) -> Command {
+type Labels = (&'static str, &'static str);
+
+const fn window(labels: Labels, keys: &'static str) -> Command {
     Command {
-        label,
+        labels,
         action: Action::Key(Target::Window, keys),
     }
 }
 
-const fn tab(label: &'static str, keys: &'static str) -> Command {
+const fn tab(labels: Labels, keys: &'static str) -> Command {
     Command {
-        label,
+        labels,
         action: Action::Key(Target::Tab, keys),
     }
 }
 
-const fn direct(label: &'static str, action: Action) -> Command {
-    Command { label, action }
+const fn direct(labels: Labels, action: Action) -> Command {
+    Command { labels, action }
 }
 
 pub const COMMANDS: &[Command] = &[
-    tab("Buscar no disco", "ctrl-f"),
-    tab("Pré-visualizar (Quick Look)", "space"),
-    tab("Nova pasta", "ctrl-shift-n"),
-    tab("Renomear", "f2"),
-    tab("Enviar para a Lixeira", "delete"),
-    tab("Excluir permanentemente", "shift-delete"),
-    tab("Copiar", "ctrl-c"),
-    tab("Recortar", "ctrl-x"),
-    tab("Colar", "ctrl-v"),
-    tab("Copiar caminho", "ctrl-shift-c"),
-    tab("Desfazer", "ctrl-z"),
-    tab("Refazer", "ctrl-y"),
-    tab("Selecionar tudo", "ctrl-a"),
-    tab("Propriedades", "alt-enter"),
-    tab("Abrir com…", "shift-enter"),
-    tab("Abrir no Terminal aqui", "ctrl-`"),
-    tab("Menu de contexto", "shift-f10"),
-    tab("Editar caminho", "ctrl-l"),
-    tab("Pasta acima", "alt-up"),
-    tab("Voltar", "alt-left"),
-    tab("Avançar", "alt-right"),
-    window("Nova aba", "ctrl-t"),
-    window("Fechar aba", "ctrl-w"),
-    window("Próxima aba", "ctrl-tab"),
-    window("Aba anterior", "ctrl-shift-tab"),
-    window("Mostrar ou esconder a barra lateral", "ctrl-b"),
-    window("Mostrar ou esconder itens ocultos", "ctrl-h"),
-    window("Histórico de operações", "ctrl-shift-h"),
-    window("Densidade compacta", "ctrl-1"),
-    window("Densidade padrão", "ctrl-2"),
-    window("Densidade confortável", "ctrl-3"),
-    direct("Alternar grade e lista", Action::ToggleGrid),
-    direct("Ordenar por nome", Action::Sort(SortKey::Name)),
-    direct("Ordenar por tipo", Action::Sort(SortKey::Type)),
-    direct("Ordenar por tamanho", Action::Sort(SortKey::Size)),
+    tab(("Buscar no disco", "Search the disk"), "ctrl-f"),
+    tab(
+        ("Pré-visualizar (Quick Look)", "Preview (Quick Look)"),
+        "space",
+    ),
+    tab(("Nova pasta", "New folder"), "ctrl-shift-n"),
+    tab(("Renomear", "Rename"), "f2"),
+    tab(("Enviar para a Lixeira", "Send to Recycle Bin"), "delete"),
+    tab(
+        ("Excluir permanentemente", "Delete permanently"),
+        "shift-delete",
+    ),
+    tab(("Copiar", "Copy"), "ctrl-c"),
+    tab(("Recortar", "Cut"), "ctrl-x"),
+    tab(("Colar", "Paste"), "ctrl-v"),
+    tab(("Copiar caminho", "Copy path"), "ctrl-shift-c"),
+    tab(("Desfazer", "Undo"), "ctrl-z"),
+    tab(("Refazer", "Redo"), "ctrl-y"),
+    tab(("Selecionar tudo", "Select all"), "ctrl-a"),
+    tab(("Propriedades", "Properties"), "alt-enter"),
+    tab(("Abrir com…", "Open with…"), "shift-enter"),
+    tab(
+        ("Abrir no Terminal aqui", "Open in Terminal here"),
+        "ctrl-`",
+    ),
+    tab(("Menu de contexto", "Context menu"), "shift-f10"),
+    tab(("Editar caminho", "Edit path"), "ctrl-l"),
+    tab(("Pasta acima", "Up one folder"), "alt-up"),
+    tab(("Voltar", "Back"), "alt-left"),
+    tab(("Avançar", "Forward"), "alt-right"),
+    window(("Nova aba", "New tab"), "ctrl-t"),
+    window(("Fechar aba", "Close tab"), "ctrl-w"),
+    window(("Próxima aba", "Next tab"), "ctrl-tab"),
+    window(("Aba anterior", "Previous tab"), "ctrl-shift-tab"),
+    window(
+        (
+            "Mostrar ou esconder a barra lateral",
+            "Show or hide the sidebar",
+        ),
+        "ctrl-b",
+    ),
+    window(
+        (
+            "Mostrar ou esconder itens ocultos",
+            "Show or hide hidden items",
+        ),
+        "ctrl-h",
+    ),
+    window(
+        ("Histórico de operações", "Operation history"),
+        "ctrl-shift-h",
+    ),
+    window(("Densidade compacta", "Compact density"), "ctrl-1"),
+    window(("Densidade padrão", "Standard density"), "ctrl-2"),
+    window(("Densidade confortável", "Comfortable density"), "ctrl-3"),
     direct(
-        "Ordenar por data de modificação",
+        ("Alternar grade e lista", "Toggle grid and list"),
+        Action::ToggleGrid,
+    ),
+    direct(
+        ("Ordenar por nome", "Sort by name"),
+        Action::Sort(SortKey::Name),
+    ),
+    direct(
+        ("Ordenar por tipo", "Sort by type"),
+        Action::Sort(SortKey::Type),
+    ),
+    direct(
+        ("Ordenar por tamanho", "Sort by size"),
+        Action::Sort(SortKey::Size),
+    ),
+    direct(
+        ("Ordenar por data de modificação", "Sort by date modified"),
         Action::Sort(SortKey::Modified),
     ),
-    direct("Sobre o fx (versão)", Action::About),
+    direct(("Sobre o fx (versão)", "About fx (version)"), Action::About),
     direct(
-        "Ativar a busca no disco inteiro (serviço, pede administrador)",
+        (
+            "Ativar a busca no disco inteiro (serviço, pede administrador)",
+            "Turn on whole-disk search (service, asks for administrator)",
+        ),
         Action::IndexService(true),
     ),
     direct(
-        "Desativar a busca no disco inteiro (remove o serviço)",
+        (
+            "Desativar a busca no disco inteiro (remove o serviço)",
+            "Turn off whole-disk search (removes the service)",
+        ),
         Action::IndexService(false),
     ),
     direct(
-        "Tornar o fx o gerenciador de arquivos padrão (pastas e Win+E)",
+        (
+            "Tornar o fx o gerenciador de arquivos padrão (pastas e Win+E)",
+            "Make fx the default file manager (folders and Win+E)",
+        ),
         Action::DefaultManager(true),
     ),
     direct(
-        "Voltar ao Explorador como gerenciador padrão",
+        (
+            "Voltar ao Explorador como gerenciador padrão",
+            "Back to Explorer as the default file manager",
+        ),
         Action::DefaultManager(false),
     ),
 ];
@@ -127,7 +189,7 @@ pub fn shortcut_label(keys: &str) -> String {
             "ctrl" => "Ctrl".to_owned(),
             "shift" => "Shift".to_owned(),
             "alt" => "Alt".to_owned(),
-            "space" => "Espaço".to_owned(),
+            "space" => tr!("Espaço", "Space").to_owned(),
             "enter" => "Enter".to_owned(),
             "delete" => "Delete".to_owned(),
             "tab" => "Tab".to_owned(),
@@ -147,7 +209,7 @@ mod tests {
 
     #[test]
     fn labels_are_unique_and_keys_parse() {
-        let mut labels: Vec<&str> = COMMANDS.iter().map(|c| c.label).collect();
+        let mut labels: Vec<&str> = COMMANDS.iter().map(|c| c.label()).collect();
         labels.sort();
         let before = labels.len();
         labels.dedup();
@@ -179,11 +241,11 @@ mod tests {
 
     #[test]
     fn palette_search_finds_commands() {
-        let labels = COMMANDS.iter().map(|c| c.label);
+        let labels = COMMANDS.iter().map(|c| c.label());
         let first = fx_core::fuzzy::fuzzy_rank("nova p", labels)[0];
-        assert_eq!(COMMANDS[first].label, "Nova pasta");
-        let labels = COMMANDS.iter().map(|c| c.label);
+        assert_eq!(COMMANDS[first].label(), "Nova pasta");
+        let labels = COMMANDS.iter().map(|c| c.label());
         let first = fx_core::fuzzy::fuzzy_rank("ocultos", labels)[0];
-        assert_eq!(COMMANDS[first].label, "Mostrar ou esconder itens ocultos");
+        assert_eq!(COMMANDS[first].label(), "Mostrar ou esconder itens ocultos");
     }
 }

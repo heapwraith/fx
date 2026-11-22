@@ -78,7 +78,8 @@ impl Filters {
                 "etiqueta" | "tag" => match crate::tags::bit_for(&value) {
                     Some(bit) => {
                         f.tags |= bit;
-                        f.labels.push(format!("etiqueta {value}"));
+                        f.labels
+                            .push(crate::trf!("etiqueta {value}", "tag {value}"));
                         true
                     }
                     None => false,
@@ -143,17 +144,25 @@ impl Filters {
         let (label, exts, dirs): (&str, &[&str], Option<bool>) = match strip_accents(value).as_str()
         {
             "imagem" | "imagens" | "foto" | "fotos" | "image" | "images" => {
-                ("imagens", IMAGES, None)
+                (crate::tr!("imagens", "images"), IMAGES, None)
             }
-            "video" | "videos" => ("vídeos", VIDEOS, None),
-            "audio" | "audios" | "musica" | "musicas" | "music" => ("áudio", AUDIO, None),
+            "video" | "videos" => (crate::tr!("vídeos", "videos"), VIDEOS, None),
+            "audio" | "audios" | "musica" | "musicas" | "music" => {
+                (crate::tr!("áudio", "audio"), AUDIO, None)
+            }
             "documento" | "documentos" | "doc" | "docs" | "document" => {
-                ("documentos", DOCUMENTS, None)
+                (crate::tr!("documentos", "documents"), DOCUMENTS, None)
             }
-            "codigo" | "code" => ("código", CODE, None),
-            "compactado" | "compactados" | "zip" | "archive" => ("compactados", ARCHIVES, None),
-            "pasta" | "pastas" | "folder" | "folders" => ("pastas", &[], Some(true)),
-            "arquivo" | "arquivos" | "file" | "files" => ("arquivos", &[], Some(false)),
+            "codigo" | "code" => (crate::tr!("código", "code"), CODE, None),
+            "compactado" | "compactados" | "zip" | "archive" => {
+                (crate::tr!("compactados", "archives"), ARCHIVES, None)
+            }
+            "pasta" | "pastas" | "folder" | "folders" => {
+                (crate::tr!("pastas", "folders"), &[], Some(true))
+            }
+            "arquivo" | "arquivos" | "file" | "files" => {
+                (crate::tr!("arquivos", "files"), &[], Some(false))
+            }
             _ => return false,
         };
         self.exts.extend(exts.iter().map(|e| (*e).to_owned()));
@@ -191,8 +200,9 @@ impl Filters {
         self.size_min = min.or(self.size_min);
         self.size_max = max.or(self.size_max);
         self.labels.push(match (min, max) {
-            (Some(a), Some(b)) => format!(
+            (Some(a), Some(b)) => crate::trf!(
                 "{} a {}",
+                "{} to {}",
                 crate::format::size_short(a),
                 crate::format::size_short(b)
             ),
@@ -208,11 +218,27 @@ impl Filters {
         let today = (now + offset).div_euclid(DAY) * DAY - offset;
         let (min, max, label): (Option<i64>, Option<i64>, String) =
             match strip_accents(value).as_str() {
-                "hoje" | "today" => (Some(today), None, "hoje".into()),
-                "ontem" | "yesterday" => (Some(today - DAY), Some(today), "ontem".into()),
-                "semana" | "week" => (Some(today - 6 * DAY), None, "últimos 7 dias".into()),
-                "mes" | "month" => (Some(today - 29 * DAY), None, "últimos 30 dias".into()),
-                "ano" | "year" => (Some(today - 364 * DAY), None, "últimos 365 dias".into()),
+                "hoje" | "today" => (Some(today), None, crate::tr!("hoje", "today").into()),
+                "ontem" | "yesterday" => (
+                    Some(today - DAY),
+                    Some(today),
+                    crate::tr!("ontem", "yesterday").into(),
+                ),
+                "semana" | "week" => (
+                    Some(today - 6 * DAY),
+                    None,
+                    crate::tr!("últimos 7 dias", "last 7 days").into(),
+                ),
+                "mes" | "month" => (
+                    Some(today - 29 * DAY),
+                    None,
+                    crate::tr!("últimos 30 dias", "last 30 days").into(),
+                ),
+                "ano" | "year" => (
+                    Some(today - 364 * DAY),
+                    None,
+                    crate::tr!("últimos 365 dias", "last 365 days").into(),
+                ),
                 v => {
                     let day = |s: &str| parse_day(s).map(|d| d * DAY - offset);
                     if let Some(d) = v.strip_prefix('>') {
@@ -220,18 +246,22 @@ impl Filters {
                         (
                             Some(d?),
                             None,
-                            format!("desde {}", v[1..].trim_start_matches('=')),
+                            crate::trf!("desde {}", "since {}", v[1..].trim_start_matches('=')),
                         )
                     } else if let Some(d) = v.strip_prefix('<') {
                         let d = day(d.trim_start_matches('='));
                         (
                             None,
                             Some(d?),
-                            format!("antes de {}", v[1..].trim_start_matches('=')),
+                            crate::trf!("antes de {}", "before {}", v[1..].trim_start_matches('=')),
                         )
                     } else if let Some((a, b)) = v.split_once("..") {
                         // Both ends included: up to the end of the last day.
-                        (Some(day(a)?), Some(day(b)? + DAY), format!("{a} a {b}"))
+                        (
+                            Some(day(a)?),
+                            Some(day(b)? + DAY),
+                            crate::trf!("{a} a {b}", "{a} to {b}"),
+                        )
                     } else {
                         let d = day(v)?;
                         (Some(d), Some(d + DAY), v.to_owned())

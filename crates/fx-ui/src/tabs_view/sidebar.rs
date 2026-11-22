@@ -2,6 +2,8 @@
 //! pin or unpin the current folder and × to unpin) and drives with free space.
 //! Clicking an item opens it in the active tab.
 
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use std::path::{Path, PathBuf};
 
 use fx_core::format::size_short;
@@ -111,27 +113,29 @@ impl TabsView {
         // Quick access: pinned folders, then the pin/unpin button for the
         // folder shown in the active tab.
         col = col.child(
-            caption("Acesso rápido").justify_between().child(
-                div()
-                    .id("pin-current")
-                    .size(px(24.0))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded(px(RADIUS))
-                    .font_family(icon_font)
-                    .hover(|s| s.bg(rgba(t.hover)))
-                    .child(if pinned_here { ICON_UNPIN } else { ICON_PIN })
-                    .on_click(cx.listener(move |view, _: &ClickEvent, _, cx| {
-                        let path = view.current().read(cx).path().to_path_buf();
-                        view.places.update(cx, |places, cx| {
-                            if !places.pinned.unpin(&path) {
-                                places.pinned.pin(path);
-                            }
-                            cx.notify();
-                        });
-                    })),
-            ),
+            caption(tr!("Acesso rápido", "Quick access"))
+                .justify_between()
+                .child(
+                    div()
+                        .id("pin-current")
+                        .size(px(24.0))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(px(RADIUS))
+                        .font_family(icon_font)
+                        .hover(|s| s.bg(rgba(t.hover)))
+                        .child(if pinned_here { ICON_UNPIN } else { ICON_PIN })
+                        .on_click(cx.listener(move |view, _: &ClickEvent, _, cx| {
+                            let path = view.current().read(cx).path().to_path_buf();
+                            view.places.update(cx, |places, cx| {
+                                if !places.pinned.unpin(&path) {
+                                    places.pinned.pin(path);
+                                }
+                                cx.notify();
+                            });
+                        })),
+                ),
         );
         for (k, path) in places.pinned.paths().iter().enumerate() {
             let group: SharedString = format!("pinned-{k}").into();
@@ -172,7 +176,7 @@ impl TabsView {
             );
         }
 
-        col = col.child(caption("Este computador"));
+        col = col.child(caption(tr!("Este computador", "This PC")));
         for (k, d) in places.drives.iter().enumerate() {
             let active = d.root == current;
             let target = d.root.clone();
@@ -200,8 +204,9 @@ impl TabsView {
                         div()
                             .text_size(px(11.0))
                             .text_color(rgba(t.text_secondary))
-                            .child(format!(
+                            .child(trf!(
                                 "{} livres de {}",
+                                "{} free of {}",
                                 size_short(free),
                                 size_short(total)
                             )),

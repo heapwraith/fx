@@ -4,6 +4,8 @@
 //! Also the Properties sheet (Alt+Enter and the context menu).
 
 use fx_core::{Direction, SortKey};
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use fx_shell::launch::Launch;
 use gpui::{
     ClickEvent, Context, EventEmitter, MouseButton, MouseDownEvent, SharedString, deferred, div,
@@ -82,36 +84,55 @@ impl FolderView {
         vec![
             Item::Choice {
                 id: "hidden",
-                label: "Mostrar itens ocultos",
+                label: tr!("Mostrar itens ocultos", "Show hidden items"),
                 hint: "Ctrl+H",
                 checked: self.look.show_hidden,
                 action: Action::ToggleHidden,
             },
             Item::Divider,
-            Item::Caption("Ordenar por"),
-            sort("sort-name", "Nome", SortKey::Name),
-            sort("sort-type", "Tipo", SortKey::Type),
-            sort("sort-size", "Tamanho", SortKey::Size),
-            sort("sort-date", "Modificado em", SortKey::Modified),
+            Item::Caption(tr!("Ordenar por", "Sort by")),
+            sort("sort-name", tr!("Nome", "Name"), SortKey::Name),
+            sort("sort-type", tr!("Tipo", "Type"), SortKey::Type),
+            sort("sort-size", tr!("Tamanho", "Size"), SortKey::Size),
+            sort(
+                "sort-date",
+                tr!("Modificado em", "Date modified"),
+                SortKey::Modified,
+            ),
             Item::Choice {
                 id: "asc",
-                label: "Crescente",
+                label: tr!("Crescente", "Ascending"),
                 hint: "",
                 checked: dir == Direction::Ascending,
                 action: Action::Direction(Direction::Ascending),
             },
             Item::Choice {
                 id: "desc",
-                label: "Decrescente",
+                label: tr!("Decrescente", "Descending"),
                 hint: "",
                 checked: dir == Direction::Descending,
                 action: Action::Direction(Direction::Descending),
             },
             Item::Divider,
-            Item::Caption("Densidade"),
-            dens("compact", "Compacta", "Ctrl+1", Density::Compact),
-            dens("standard", "Padrão", "Ctrl+2", Density::Standard),
-            dens("comfortable", "Confortável", "Ctrl+3", Density::Comfortable),
+            Item::Caption(tr!("Densidade", "Density")),
+            dens(
+                "compact",
+                tr!("Compacta", "Compact"),
+                "Ctrl+1",
+                Density::Compact,
+            ),
+            dens(
+                "standard",
+                tr!("Padrão", "Standard"),
+                "Ctrl+2",
+                Density::Standard,
+            ),
+            dens(
+                "comfortable",
+                tr!("Confortável", "Comfortable"),
+                "Ctrl+3",
+                Density::Comfortable,
+            ),
         ]
     }
 

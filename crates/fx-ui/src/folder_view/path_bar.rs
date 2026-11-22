@@ -7,6 +7,8 @@
 //! filters that cache in memory, so it never waits for the disk; while the
 //! listing runs, the field simply shows no suggestions yet.
 
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::channel;
@@ -260,7 +262,7 @@ impl FolderView {
                     view.edit = None;
                     view.go_to(path, None, window, cx);
                 } else if let Some(edit) = &mut view.edit {
-                    edit.error = Some("pasta não encontrada");
+                    edit.error = Some(tr!("pasta não encontrada", "folder not found"));
                 }
                 cx.notify();
             });

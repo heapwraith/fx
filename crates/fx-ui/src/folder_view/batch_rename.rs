@@ -7,6 +7,8 @@
 //! repeated, already in the folder); Enter applies only when nothing is
 //! wrong, as one operation that a single Ctrl+Z reverts (`Job::batch_rename`).
 
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -22,7 +24,15 @@ use crate::theme::{CAPTION_SIZE, RADIUS, rgba, space};
 
 const PANEL_WIDTH: f32 = 720.0;
 const ROW_HEIGHT: f32 = 26.0;
-const FIELDS: [&str; 3] = ["Buscar", "Substituir por", "Modelo"];
+const FIELDS: usize = 3;
+
+fn field_label(k: usize) -> &'static str {
+    match k {
+        0 => tr!("Buscar", "Search"),
+        1 => tr!("Substituir por", "Replace with"),
+        _ => tr!("Modelo", "Template"),
+    }
+}
 
 /// One preview line: old name, new name, problem, whether it changes.
 type PreviewRow = (SharedString, SharedString, Option<&'static str>, bool);
@@ -122,9 +132,9 @@ impl FolderView {
             "enter" => self.apply_batch_rename(window, cx),
             "tab" => {
                 b.field = if m.shift {
-                    (b.field + FIELDS.len() - 1) % FIELDS.len()
+                    (b.field + FIELDS - 1) % FIELDS
                 } else {
-                    (b.field + 1) % FIELDS.len()
+                    (b.field + 1) % FIELDS
                 };
             }
             "backspace" if m.control => {
@@ -206,7 +216,7 @@ impl FolderView {
                         .w(px(110.0))
                         .text_size(px(CAPTION_SIZE))
                         .text_color(rgba(t.text_secondary))
-                        .child(FIELDS[k]),
+                        .child(field_label(k)),
                 )
                 .child(
                     div()
@@ -228,24 +238,35 @@ impl FolderView {
                         }),
                 )
         };
-        let yes_no = |on: bool| if on { "sim" } else { "não" };
-        let options = format!(
+        let yes_no = |on: bool| {
+            if on {
+                tr!("sim", "yes")
+            } else {
+                tr!("não", "no")
+            }
+        };
+        let options = trf!(
             "Alt+R expressão regular: {} · Alt+M diferenciar maiúsculas: {} · Alt+C letras: {}",
+            "Alt+R regular expression: {} · Alt+M match case: {} · Alt+C letters: {}",
             yes_no(b.rules.regex),
             yes_no(b.rules.case_sensitive),
             b.rules.case.label()
         );
         let footer = match &b.plan {
-            Err(e) => format!("Expressão inválida: {e}"),
-            Ok(_) if problems > 0 => format!(
+            Err(e) => trf!("Expressão inválida: {e}", "Invalid expression: {e}"),
+            Ok(_) if problems > 0 => trf!(
                 "{} com problema: corrija para aplicar · Esc cancela",
+                "{} with a problem: fix them to apply · Esc cancels",
                 fx_core::format::items(problems)
             ),
-            Ok(_) if changes == 0 => {
-                "Nada muda ainda · {nome} é o nome atual, {n:3} numera · Esc cancela".to_owned()
-            }
-            Ok(_) => format!(
+            Ok(_) if changes == 0 => tr!(
+                "Nada muda ainda · {nome} é o nome atual, {n:3} numera · Esc cancela",
+                "Nothing changes yet · {nome} is the current name, {n:3} numbers · Esc cancels"
+            )
+            .to_owned(),
+            Ok(_) => trf!(
                 "Enter renomeia {} (um Ctrl+Z desfaz tudo) · Esc cancela",
+                "Enter renames {} (one Ctrl+Z undoes it all) · Esc cancels",
                 fx_core::format::items(changes)
             ),
         };
@@ -338,8 +359,9 @@ impl FolderView {
                     .flex()
                     .flex_col()
                     .gap(px(space(2)))
-                    .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(format!(
+                    .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(trf!(
                         "Renomear {}",
+                        "Rename {}",
                         fx_core::format::items(b.names.len())
                     )))
                     .child(field(0))

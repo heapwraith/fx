@@ -9,6 +9,8 @@
 //! files from fx or any app through the operations queue (conflicts asked,
 //! undo recorded), and empties the clipboard after a successful cut-paste.
 
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use std::path::PathBuf;
 
 use fx_ops::{Job, JobId, Resolution};
@@ -126,9 +128,15 @@ impl FolderView {
             Err(reason) => {
                 let answer = window.prompt(
                     PromptLevel::Warning,
-                    "Operação em pasta protegida",
-                    Some(&format!("Atenção: {reason}. Continuar mesmo assim?")),
-                    &["Continuar", "Cancelar"],
+                    tr!(
+                        "Operação em pasta protegida",
+                        "Operation in a protected folder"
+                    ),
+                    Some(&trf!(
+                        "Atenção: {reason}. Continuar mesmo assim?",
+                        "Warning: {reason}. Continue anyway?"
+                    )),
+                    &[tr!("Continuar", "Continue"), tr!("Cancelar", "Cancel")],
                     cx,
                 );
                 cx.spawn(async move |_, cx| {
@@ -167,22 +175,24 @@ impl FolderView {
                     return true;
                 }
                 let detail = match items.len() {
-                    1 => format!(
+                    1 => trf!(
                         "\"{}\" será excluído para sempre, sem passar pela Lixeira.",
+                        "\"{}\" will be deleted forever, without going to the Recycle Bin.",
                         items[0]
                             .file_name()
                             .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
                     ),
-                    n => format!(
+                    n => trf!(
                         "{} serão excluídos para sempre, sem passar pela Lixeira.",
+                        "{} will be deleted forever, without going to the Recycle Bin.",
                         count(n)
                     ),
                 };
                 let answer = window.prompt(
                     PromptLevel::Critical,
-                    "Excluir permanentemente?",
+                    tr!("Excluir permanentemente?", "Delete permanently?"),
                     Some(&detail),
-                    &["Excluir", "Cancelar"],
+                    &[tr!("Excluir", "Delete"), tr!("Cancelar", "Cancel")],
                     cx,
                 );
                 cx.spawn_in(window, async move |this, cx| {
@@ -205,7 +215,8 @@ impl FolderView {
                 true
             }
             "n" if ctrl_shift => {
-                let job = Job::new_folder(self.path.clone(), "Nova pasta".into());
+                let job =
+                    Job::new_folder(self.path.clone(), tr!("Nova pasta", "New folder").into());
                 self.awaiting_folder = self.submit_job(job, window, cx);
                 true
             }
@@ -260,9 +271,20 @@ impl FolderView {
                 .await;
             let _ = this.update(cx, |view, cx| {
                 view.notice = Some(match done {
-                    Ok(()) if cut => format!("recortado: {} (cole com Ctrl+V)", count(n)),
-                    Ok(()) => format!("copiado: {} (cole com Ctrl+V)", count(n)),
-                    Err(e) => format!("área de transferência indisponível: {e}"),
+                    Ok(()) if cut => trf!(
+                        "recortado: {} (cole com Ctrl+V)",
+                        "cut: {} (paste with Ctrl+V)",
+                        count(n)
+                    ),
+                    Ok(()) => trf!(
+                        "copiado: {} (cole com Ctrl+V)",
+                        "copied: {} (paste with Ctrl+V)",
+                        count(n)
+                    ),
+                    Err(e) => trf!(
+                        "área de transferência indisponível: {e}",
+                        "clipboard unavailable: {e}"
+                    ),
                 });
                 cx.notify();
             });
@@ -292,11 +314,14 @@ impl FolderView {
                     }
                 }
                 Ok(_) => {
-                    view.notice = Some("nada para colar".into());
+                    view.notice = Some(tr!("nada para colar", "nothing to paste").into());
                     cx.notify();
                 }
                 Err(e) => {
-                    view.notice = Some(format!("área de transferência indisponível: {e}"));
+                    view.notice = Some(trf!(
+                        "área de transferência indisponível: {e}",
+                        "clipboard unavailable: {e}"
+                    ));
                     cx.notify();
                 }
             });
@@ -331,7 +356,10 @@ impl FolderView {
         let request = fx_shell::menu::MenuRequest {
             items: items.clone(),
             folder,
-            fx_items: vec!["Abrir no Terminal aqui".into(), "Copiar caminho".into()],
+            fx_items: vec![
+                tr!("Abrir no Terminal aqui", "Open in Terminal here").into(),
+                tr!("Copiar caminho", "Copy path").into(),
+            ],
             owner,
             started: std::time::Instant::now(),
             warm_up: false,
@@ -407,9 +435,9 @@ impl FolderView {
             .join("\r\n");
         cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
         self.notice = Some(if paths.len() == 1 {
-            "caminho copiado".into()
+            tr!("caminho copiado", "path copied").into()
         } else {
-            format!("{} caminhos copiados", paths.len())
+            trf!("{} caminhos copiados", "{} paths copied", paths.len())
         });
     }
 

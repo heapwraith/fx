@@ -6,6 +6,8 @@
 //! worker thread and drawn as a virtualized list, so a folder of 100,000
 //! items does not block anything.
 
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -227,12 +229,12 @@ impl FolderView {
                 None => div()
                     .p(px(space(3)))
                     .text_color(rgba(t.text_secondary))
-                    .child("Lendo…")
+                    .child(tr!("Lendo…", "Reading…"))
                     .into_any_element(),
                 Some(entries) if entries.is_empty() => div()
                     .p(px(space(3)))
                     .text_color(rgba(t.text_secondary))
-                    .child("Pasta vazia")
+                    .child(tr!("Pasta vazia", "Empty folder"))
                     .into_any_element(),
                 Some(entries) => {
                     let entries = entries.clone();

@@ -30,6 +30,8 @@ mod view_menu;
 
 pub use view_menu::ViewEvent;
 
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::ffi::OsString;
@@ -590,7 +592,13 @@ impl FolderView {
             let failure = match result {
                 Ok(Ok(_)) => None,
                 Ok(Err(e)) => Some(read_failure(&e)),
-                Err(_) => Some("Erro interno ao ler esta pasta.".to_owned()),
+                Err(_) => Some(
+                    tr!(
+                        "Erro interno ao ler esta pasta.",
+                        "Internal error while reading this folder."
+                    )
+                    .to_owned(),
+                ),
             };
             let Ok(Some(list)) = this.update(cx, |view, cx| {
                 if view.generation != generation {
@@ -985,8 +993,9 @@ impl FolderView {
                 description: if self.list.attributes(i).is_dir() {
                     "pasta".to_owned()
                 } else {
-                    format!(
+                    trf!(
                         "{}, modificado em {}",
+                        "{}, modified {}",
                         size_kb(self.list.size(i)),
                         local_date(self.list.modified(i))
                     )
@@ -1045,13 +1054,24 @@ impl FolderView {
             .and_then(|p| p.parent().map(|d| d.join("fx-indexd.exe")))
             .filter(|p| p.exists());
         let Some(exe) = exe else {
-            self.show_notice("fx-indexd.exe não está ao lado do fx.exe".to_owned(), cx);
+            self.show_notice(
+                tr!(
+                    "fx-indexd.exe não está ao lado do fx.exe",
+                    "fx-indexd.exe is not next to fx.exe"
+                )
+                .to_owned(),
+                cx,
+            );
             return;
         };
         let args = if install { "install" } else { "uninstall" }.to_owned();
         let rx = fx_shell::launch(Launch::Elevated { exe, args });
         self.show_notice(
-            "Aguardando a permissão de administrador do Windows…".to_owned(),
+            tr!(
+                "Aguardando a permissão de administrador do Windows…",
+                "Waiting for Windows administrator permission…"
+            )
+            .to_owned(),
             cx,
         );
         cx.spawn(async move |this, cx| {
@@ -1059,12 +1079,15 @@ impl FolderView {
                 .background_spawn(async move { rx.recv().unwrap_or(Ok(())) })
                 .await;
             let text = match (result, install) {
-                (Ok(()), true) => {
-                    "Busca no disco inteiro ativada: o índice fica pronto em alguns segundos"
-                        .to_owned()
+                (Ok(()), true) => tr!(
+                    "Busca no disco inteiro ativada: o índice fica pronto em alguns segundos",
+                    "Whole-disk search is on: the index will be ready in a few seconds"
+                )
+                .to_owned(),
+                (Ok(()), false) => {
+                    tr!("Serviço de índice removido", "Index service removed").to_owned()
                 }
-                (Ok(()), false) => "Serviço de índice removido".to_owned(),
-                (Err(e), _) => format!("serviço de índice: {e}"),
+                (Err(e), _) => trf!("serviço de índice: {e}", "index service: {e}"),
             };
             let _ = this.update(cx, |view, cx| view.show_notice(text, cx));
         })
@@ -1090,12 +1113,17 @@ impl FolderView {
                 .background_spawn(async move { rx.recv().unwrap_or(Ok(())) })
                 .await;
             let text = match (result, enable) {
-                (Ok(()), true) => {
-                    "O fx agora abre pastas, unidades e o Win+E. \"Voltar ao Explorador\" desfaz"
-                        .to_owned()
-                }
-                (Ok(()), false) => "O Explorador voltou a ser o gerenciador padrão".to_owned(),
-                (Err(e), _) => format!("gerenciador padrão: {e}"),
+                (Ok(()), true) => tr!(
+                    "O fx agora abre pastas, unidades e o Win+E. \"Voltar ao Explorador\" desfaz",
+                    "fx now opens folders, drives and Win+E. \"Back to Explorer\" undoes it"
+                )
+                .to_owned(),
+                (Ok(()), false) => tr!(
+                    "O Explorador voltou a ser o gerenciador padrão",
+                    "Explorer is the default file manager again"
+                )
+                .to_owned(),
+                (Err(e), _) => trf!("gerenciador padrão: {e}", "default manager: {e}"),
             };
             let _ = this.update(cx, |view, cx| view.show_notice(text, cx));
         })
@@ -1411,8 +1439,8 @@ impl FolderView {
                     |n| n.to_string_lossy().into_owned(),
                 )
             }
-            Launch::Properties(_) => "as Propriedades".to_owned(),
-            Launch::Elevated { .. } => "o serviço de índice".to_owned(),
+            Launch::Properties(_) => tr!("as Propriedades", "Properties").to_owned(),
+            Launch::Elevated { .. } => tr!("o serviço de índice", "the index service").to_owned(),
         };
         let rx = fx_shell::launch(what);
         cx.spawn(async move |this, cx| {
@@ -1421,7 +1449,10 @@ impl FolderView {
                 .await;
             if let Err(e) = result {
                 let _ = this.update(cx, |view, cx| {
-                    view.notice = Some(format!("não foi possível abrir {label}: {e}"));
+                    view.notice = Some(trf!(
+                        "não foi possível abrir {label}: {e}",
+                        "could not open {label}: {e}"
+                    ));
                     cx.notify();
                 });
             }
@@ -1885,8 +1916,8 @@ impl FolderView {
         let (head, tail) = self.load_text();
         let selected = match self.selection.len() {
             0 => String::new(),
-            1 => " · 1 selecionado".to_owned(),
-            k => format!(" · {k} selecionados"),
+            1 => tr!(" · 1 selecionado", " · 1 selected").to_owned(),
+            k => trf!(" · {k} selecionados", " · {k} selected"),
         };
         format!("{head}{selected}{tail}")
     }
@@ -1899,8 +1930,9 @@ impl FolderView {
             .as_ref()
             .filter(|_| !self.filter_text.is_empty())
         {
-            let head = format!(
+            let head = trf!(
                 "filtro \"{}\": {} de {}",
+                "filter \"{}\": {} of {}",
                 self.filter_text,
                 fx_core::format::count(filtered.len()),
                 fx_core::format::count(n)
@@ -1911,18 +1943,22 @@ impl FolderView {
         let shown = rows_of(&self.filtered, &self.list).len();
         let hidden = match n - shown {
             0 => String::new(),
-            1 => " · 1 oculto".to_owned(),
-            k => format!(" · {} ocultos", fx_core::format::count(k)),
+            1 => tr!(" · 1 oculto", " · 1 hidden").to_owned(),
+            k => trf!(" · {} ocultos", " · {} hidden", fx_core::format::count(k)),
         };
         let tail = match &self.status {
-            Status::Loading => " — carregando…".to_owned(),
-            Status::Sorting => " — ordenando…".to_owned(),
+            Status::Loading => tr!(" — carregando…", " — loading…").to_owned(),
+            Status::Sorting => tr!(" — ordenando…", " — sorting…").to_owned(),
             Status::Ready => match self.loaded_in {
-                Some(d) => format!("{hidden} · lida em {}", elapsed_text(d)),
+                Some(d) => trf!(
+                    "{hidden} · lida em {}",
+                    "{hidden} · read in {}",
+                    elapsed_text(d)
+                ),
                 None => hidden,
             },
             // The message itself is shown in the list area.
-            Status::Failed(_) => " · erro".to_owned(),
+            Status::Failed(_) => tr!(" · erro", " · error").to_owned(),
         };
         (items(shown), tail)
     }
@@ -1937,13 +1973,24 @@ impl FolderView {
             && filtered.is_empty()
         {
             if self.filter_text.is_empty() {
-                return (!self.list.is_empty() && matches!(self.status, Status::Ready))
-                    .then(|| "Só há itens ocultos aqui. Ctrl+H mostra.".to_owned());
+                return (!self.list.is_empty() && matches!(self.status, Status::Ready)).then(
+                    || {
+                        tr!(
+                            "Só há itens ocultos aqui. Ctrl+H mostra.",
+                            "There are only hidden items here. Ctrl+H shows them."
+                        )
+                        .to_owned()
+                    },
+                );
             }
-            return Some(format!("Nada corresponde a \"{}\".", self.filter_text));
+            return Some(trf!(
+                "Nada corresponde a \"{}\".",
+                "Nothing matches \"{}\".",
+                self.filter_text
+            ));
         }
         (matches!(self.status, Status::Ready) && self.list.is_empty())
-            .then(|| "Esta pasta está vazia.".to_owned())
+            .then(|| tr!("Esta pasta está vazia.", "This folder is empty.").to_owned())
     }
 
     /// Frame bookkeeping for `FX_TRACE=1`.
@@ -2118,14 +2165,34 @@ fn elapsed_text(d: Duration) -> String {
 fn read_failure(e: &std::io::Error) -> String {
     use std::io::ErrorKind;
     match (e.kind(), e.raw_os_error()) {
-        (ErrorKind::PermissionDenied, _) | (_, Some(5)) => {
-            "Sem permissão para abrir esta pasta.".to_owned()
-        }
-        (ErrorKind::NotFound, _) | (_, Some(2 | 3)) => "Esta pasta não existe mais.".to_owned(),
-        (_, Some(21)) => "A unidade não está pronta (sem disco ou desconectada).".to_owned(),
-        (_, Some(53 | 64 | 67 | 1222)) => "O local de rede não está disponível.".to_owned(),
-        (_, Some(code)) => format!("Não foi possível ler esta pasta (erro {code} do Windows)."),
-        _ => format!("Não foi possível ler esta pasta ({e})."),
+        (ErrorKind::PermissionDenied, _) | (_, Some(5)) => tr!(
+            "Sem permissão para abrir esta pasta.",
+            "No permission to open this folder."
+        )
+        .to_owned(),
+        (ErrorKind::NotFound, _) | (_, Some(2 | 3)) => tr!(
+            "Esta pasta não existe mais.",
+            "This folder no longer exists."
+        )
+        .to_owned(),
+        (_, Some(21)) => tr!(
+            "A unidade não está pronta (sem disco ou desconectada).",
+            "The drive is not ready (no disc or disconnected)."
+        )
+        .to_owned(),
+        (_, Some(53 | 64 | 67 | 1222)) => tr!(
+            "O local de rede não está disponível.",
+            "The network location is not available."
+        )
+        .to_owned(),
+        (_, Some(code)) => trf!(
+            "Não foi possível ler esta pasta (erro {code} do Windows).",
+            "Could not read this folder (Windows error {code})."
+        ),
+        _ => trf!(
+            "Não foi possível ler esta pasta ({e}).",
+            "Could not read this folder ({e})."
+        ),
     }
 }
 
@@ -2235,10 +2302,13 @@ impl Render for FolderView {
                             .gap(px(space(3)))
                             .border_b_1()
                             .border_color(rgba(t.divider))
-                            .child(self.header_cell("Nome", SortKey::Name, None, cx).flex_1())
+                            .child(
+                                self.header_cell(tr!("Nome", "Name"), SortKey::Name, None, cx)
+                                    .flex_1(),
+                            )
                             .when(!grid_view && columns.kind, |d| {
                                 d.child(self.header_cell(
-                                    "Tipo",
+                                    tr!("Tipo", "Type"),
                                     SortKey::Type,
                                     Some(Col::Kind),
                                     cx,
@@ -2246,7 +2316,7 @@ impl Render for FolderView {
                             })
                             .when(!grid_view && columns.size, |d| {
                                 d.child(self.header_cell(
-                                    "Tamanho",
+                                    tr!("Tamanho", "Size"),
                                     SortKey::Size,
                                     Some(Col::Size),
                                     cx,
@@ -2254,7 +2324,7 @@ impl Render for FolderView {
                             })
                             .when(!grid_view && columns.date, |d| {
                                 d.child(self.header_cell(
-                                    "Modificado em",
+                                    tr!("Modificado em", "Date modified"),
                                     SortKey::Modified,
                                     Some(Col::Date),
                                     cx,

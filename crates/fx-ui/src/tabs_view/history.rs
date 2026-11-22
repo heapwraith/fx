@@ -4,6 +4,8 @@
 //! job, so it never overwrites anything (SAFETY.md §2.3).
 
 use fx_core::format::date_time;
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use gpui::{ClickEvent, Context, MouseButton, MouseDownEvent, deferred, div, prelude::*, px};
 
 use super::TabsView;
@@ -33,7 +35,10 @@ impl TabsView {
                 div()
                     .py(px(space(4)))
                     .text_color(rgba(t.text_secondary))
-                    .child("Nada para desfazer nesta sessão."),
+                    .child(tr!(
+                        "Nada para desfazer nesta sessão.",
+                        "Nothing to undo in this session."
+                    )),
             );
         }
         for op in done {
@@ -70,7 +75,7 @@ impl TabsView {
                             .border_1()
                             .border_color(rgba(t.divider))
                             .hover(|s| s.bg(rgba(t.hover)))
-                            .child("Desfazer")
+                            .child(tr!("Desfazer", "Undo"))
                             .on_click(cx.listener(move |view, _: &ClickEvent, _, cx| {
                                 view.media.ops.update(cx, |ops, cx| ops.undo_at(index, cx));
                             })),
@@ -97,13 +102,16 @@ impl TabsView {
             .child(
                 div()
                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child("Histórico de operações"),
+                    .child(tr!("Histórico de operações", "Operation history")),
             )
             .child(
                 div()
                     .text_size(px(CAPTION_SIZE))
                     .text_color(rgba(t.text_secondary))
-                    .child("Desfazer reverte só aquela operação, sem sobrescrever nada."),
+                    .child(tr!(
+                        "Desfazer reverte só aquela operação, sem sobrescrever nada.",
+                        "Undo reverts only that operation, without overwriting anything."
+                    )),
             )
             .child(list);
         Some(

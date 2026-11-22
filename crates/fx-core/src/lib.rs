@@ -12,6 +12,7 @@ pub mod fuzzy;
 pub mod highlight;
 mod history;
 mod list;
+pub mod locale;
 pub mod markdown;
 pub mod miller;
 pub mod natural;

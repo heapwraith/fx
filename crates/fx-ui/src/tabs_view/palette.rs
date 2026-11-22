@@ -3,6 +3,8 @@
 //! Enter runs the choice. A command runs its own shortcut on the window or
 //! the active tab (`crate::commands`), so both paths behave the same.
 
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -39,7 +41,7 @@ enum Item {
 impl Item {
     fn label(&self) -> String {
         match self {
-            Item::Command(c) => c.label.to_owned(),
+            Item::Command(c) => c.label().to_owned(),
             Item::Folder { name, .. } => name.clone(),
         }
     }
@@ -263,7 +265,7 @@ impl TabsView {
             .map(|&i| match &p.items[i] {
                 Item::Command(c) => Row {
                     glyph: ICON_COMMAND,
-                    label: c.label.into(),
+                    label: c.label().into(),
                     detail: SharedString::default(),
                     shortcut: c.shortcut().unwrap_or_default().into(),
                 },
@@ -271,7 +273,12 @@ impl TabsView {
                     glyph: if *pinned { ICON_PIN } else { ICON_FOLDER },
                     label: item.label().into(),
                     detail: path.display().to_string().into(),
-                    shortcut: if *pinned { "Acesso rápido" } else { "Recente" }.into(),
+                    shortcut: if *pinned {
+                        tr!("Acesso rápido", "Quick access")
+                    } else {
+                        tr!("Recente", "Recent")
+                    }
+                    .into(),
                 },
             })
             .collect();
@@ -357,9 +364,10 @@ impl TabsView {
                     .border_b_1()
                     .border_color(rgba(t.divider))
                     .child(if p.query.is_empty() {
-                        div()
-                            .text_color(rgba(t.text_secondary))
-                            .child("Digite um comando ou uma pasta…")
+                        div().text_color(rgba(t.text_secondary)).child(tr!(
+                            "Digite um comando ou uma pasta…",
+                            "Type a command or a folder…"
+                        ))
                     } else {
                         div().truncate().child(format!("{}|", p.query))
                     }),
@@ -375,9 +383,13 @@ impl TabsView {
                     .text_size(px(CAPTION_SIZE))
                     .text_color(rgba(t.text_secondary))
                     .child(if p.shown.is_empty() {
-                        "Nada encontrado".to_owned()
+                        tr!("Nada encontrado", "Nothing found").to_owned()
                     } else {
-                        "↑↓ escolhe · Enter executa · Esc fecha".to_owned()
+                        tr!(
+                            "↑↓ escolhe · Enter executa · Esc fecha",
+                            "↑↓ chooses · Enter runs · Esc closes"
+                        )
+                        .to_owned()
                     }),
             );
         Some(

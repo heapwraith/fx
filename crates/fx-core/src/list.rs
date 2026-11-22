@@ -75,13 +75,14 @@ pub fn next_sort(current: (SortKey, Direction), clicked: SortKey) -> (SortKey, D
 /// "Arquivo" without one (a leading dot is not an extension: ".gitignore").
 pub fn type_label(name: &str, is_dir: bool) -> String {
     if is_dir {
-        return "Pasta de arquivos".to_owned();
+        return crate::tr!("Pasta de arquivos", "File folder").to_owned();
     }
     match name.rfind('.') {
         Some(dot) if dot > 0 && dot + 1 < name.len() => {
-            format!("Arquivo {}", name[dot + 1..].to_uppercase())
+            let ext = name[dot + 1..].to_uppercase();
+            crate::trf!("Arquivo {ext}", "{ext} File")
         }
-        _ => "Arquivo".to_owned(),
+        _ => crate::tr!("Arquivo", "File").to_owned(),
     }
 }
 

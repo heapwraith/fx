@@ -6,6 +6,8 @@
 //! data object to the target (Explorer, desktop, a browser upload...), which
 //! performs the operation itself.
 
+#[allow(unused_imports)]
+use fx_core::{tr, trf};
 use std::path::PathBuf;
 
 use fx_ops::{Job, OpKind, Resolution, drop_operation};
@@ -64,11 +66,24 @@ impl FolderView {
             let result = fx_shell::drag_files(hwnd, &paths);
             let _ = this.update(cx, |view, cx| {
                 view.notice = match result {
-                    Ok(fx_shell::DragResult::Moved) => Some("movido pelo destino".into()),
-                    Ok(fx_shell::DragResult::Copied) => Some("copiado pelo destino".into()),
-                    Ok(fx_shell::DragResult::Linked) => Some("atalho criado pelo destino".into()),
+                    Ok(fx_shell::DragResult::Moved) => {
+                        Some(tr!("movido pelo destino", "moved by the target").into())
+                    }
+                    Ok(fx_shell::DragResult::Copied) => {
+                        Some(tr!("copiado pelo destino", "copied by the target").into())
+                    }
+                    Ok(fx_shell::DragResult::Linked) => Some(
+                        tr!(
+                            "atalho criado pelo destino",
+                            "shortcut created by the target"
+                        )
+                        .into(),
+                    ),
                     Ok(fx_shell::DragResult::None) => None,
-                    Err(e) => Some(format!("não foi possível arrastar: {e}")),
+                    Err(e) => Some(trf!(
+                        "não foi possível arrastar: {e}",
+                        "could not drag: {e}"
+                    )),
                 };
                 cx.notify();
             });
