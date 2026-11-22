@@ -176,23 +176,6 @@ fn interactive_loop(index: &Index) -> std::io::Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn queries_are_1_to_12_characters_and_prefixes_cover_them() {
-        for q in QUERIES {
-            let n = q.chars().count();
-            assert!((1..=12).contains(&n), "{q:?} has {n} chars");
-            let p: Vec<&str> = prefixes(q).collect();
-            assert_eq!(p.len(), n);
-            assert_eq!(p.last(), Some(q));
-        }
-        assert_eq!(prefixes("😀a").collect::<Vec<_>>(), ["😀", "😀a"]);
-    }
-}
-
 /// P5 through the `fx-indexd` service (T2.6): what the app pays per key in
 /// "Disco inteiro" (pipe round trip + search of every volume + filters).
 /// Types each query one character at a time, 3 rounds. Needs the service
@@ -260,4 +243,21 @@ pub fn service() -> std::io::Result<()> {
     );
     std::fs::write(results_dir()?.join(format!("{date}-T2.6-P5.json")), json)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn queries_are_1_to_12_characters_and_prefixes_cover_them() {
+        for q in QUERIES {
+            let n = q.chars().count();
+            assert!((1..=12).contains(&n), "{q:?} has {n} chars");
+            let p: Vec<&str> = prefixes(q).collect();
+            assert_eq!(p.len(), n);
+            assert_eq!(p.last(), Some(q));
+        }
+        assert_eq!(prefixes("😀a").collect::<Vec<_>>(), ["😀", "😀a"]);
+    }
 }
