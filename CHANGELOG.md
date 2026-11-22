@@ -5,6 +5,7 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 ## [Não lançado]
 
 ### Adicionado
+- Alto contraste do Windows: o fx usa as cores do sistema e troca ao vivo.
 - Terminal embutido (Ctrl+J) com PowerShell na pasta atual.
 - Etiquetas coloridas (Alt+1…7) e busca por `etiqueta:`.
 - Vista em colunas (Ctrl+Shift+3).

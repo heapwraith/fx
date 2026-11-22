@@ -305,12 +305,13 @@ fn open_folder_window(
             }
             let system = Mode::from_appearance(window.appearance());
             let mode = forced.unwrap_or(system);
-            let mica = mica_supported && mode == system;
+            let theme = Theme::current(mode);
+            let mica = mica_supported && mode == system && !theme.high_contrast;
             if mica_supported && !mica {
                 window.set_background_appearance(WindowBackgroundAppearance::Opaque);
             }
             let look = Look {
-                theme: Theme::for_mode(mode),
+                theme,
                 forced_mode: forced.is_some(),
                 density,
                 font,
@@ -350,6 +351,39 @@ fn open_folder_window(
                     }
                 })
                 .detach();
+            // High contrast does not change the light/dark appearance GPUI
+            // reports, so its switch is polled (one cheap system call a second).
+            let contrast_view = view.clone();
+            let handle = window.window_handle();
+            cx.spawn(async move |cx| {
+                let mut on = fx_shell::high_contrast().is_some();
+                loop {
+                    cx.background_executor()
+                        .timer(std::time::Duration::from_secs(1))
+                        .await;
+                    let now = fx_shell::high_contrast().is_some();
+                    if now == on {
+                        continue;
+                    }
+                    on = now;
+                    let updated = handle.update(cx, |_, window, cx| {
+                        let system = Mode::from_appearance(window.appearance());
+                        let mica =
+                            contrast_view.update(cx, |view, cx| view.set_system_mode(system, cx));
+                        if mica_supported {
+                            window.set_background_appearance(if mica {
+                                WindowBackgroundAppearance::MicaBackdrop
+                            } else {
+                                WindowBackgroundAppearance::Opaque
+                            });
+                        }
+                    });
+                    if updated.is_err() {
+                        break;
+                    }
+                }
+            })
+            .detach();
             window.activate_window();
             let for_close = view.clone();
             let closing_persist = close_persist;

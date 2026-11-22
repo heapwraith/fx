@@ -76,7 +76,7 @@
 - Teste: todo texto tem as duas versões; nenhuma string de interface fora do catálogo (teste que varre o código).
 
 ## T3.8 — Alto contraste e DPI por monitor
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: com o alto contraste ligado o tema vem das cores do sistema (`GetSysColor` em `fx-shell::contrast`, `Theme::from_system`), opaco e sem Mica; a troca é vista ao vivo (consulta de 1 s, o GPUI não avisa); DPI por monitor já vinha do manifesto PerMonitorV2 e do `WM_DPICHANGED` do GPUI (D-051). Teste dos tokens; conferência visual nos testes finais.
 
 **Fazer**
 - Com o alto contraste do Windows ligado, o fx usa as cores do sistema (`GetSysColor`), muda ao vivo; mover a janela entre monitores com escalas diferentes redesenha nítido.

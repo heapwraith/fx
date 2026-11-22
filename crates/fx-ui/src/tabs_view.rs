@@ -324,9 +324,11 @@ impl TabsView {
     /// The system theme changed: every tab follows. Returns whether Mica shows.
     pub fn set_system_mode(&mut self, system: Mode, cx: &mut Context<Self>) -> bool {
         if !self.look.forced_mode {
-            self.look.theme = Theme::for_mode(system);
+            self.look.theme = Theme::current(system);
         }
-        self.look.mica = self.look.mica_supported && self.look.theme.mode == system;
+        self.look.mica = self.look.mica_supported
+            && self.look.theme.mode == system
+            && !self.look.theme.high_contrast;
         for tab in self.tabs.iter() {
             tab.update(cx, |view, cx| {
                 view.set_system_mode(system);

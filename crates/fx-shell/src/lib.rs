@@ -4,6 +4,7 @@
 //! Platform code lives in `src/windows/` behind `#[cfg(windows)]` (D-012).
 
 pub mod clipboard;
+pub mod contrast;
 pub mod icons;
 pub mod launch;
 pub mod menu;
@@ -22,4 +23,4 @@ pub use windows::{
     start_thumb_service, supports_mica, utc_offset_at, watch_drives, window_id, windows_build,
 };
 #[cfg(windows)]
-pub use windows::{conpty, default_manager, preview_host};
+pub use windows::{conpty, contrast::high_contrast, default_manager, preview_host};

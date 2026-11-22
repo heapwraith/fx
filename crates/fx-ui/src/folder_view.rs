@@ -935,9 +935,11 @@ impl FolderView {
     /// theme, so it only matches when the fx theme is the same.
     pub fn set_system_mode(&mut self, system: Mode) -> bool {
         if !self.look.forced_mode {
-            self.look.theme = Theme::for_mode(system);
+            self.look.theme = Theme::current(system);
         }
-        self.look.mica = self.look.mica_supported && self.look.theme.mode == system;
+        self.look.mica = self.look.mica_supported
+            && self.look.theme.mode == system
+            && !self.look.theme.high_contrast;
         self.look.mica
     }
 

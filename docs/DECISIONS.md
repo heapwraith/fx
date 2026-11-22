@@ -387,3 +387,11 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Painel** (`folder_view/terminal.rs`): Ctrl+J abre o PowerShell na pasta atual (280 px, embaixo da aba, sobre a lista) e fecha; enquanto tem o foco recebe todas as teclas (Esc inclusive), codificadas em VT (setas, Home/End, Delete, PgUp/PgDn, Ctrl+letra); clicar na lista devolve o foco a ela. Cores Campbell (as do Windows Terminal). Um `canvas` mede o painel e o console é redimensionado. A saída repinta a vista em rajadas agrupadas.
 - **Pendente:** seguir a pasta da aba (`cd`), rolar o histórico com a roda, copiar texto, escolher o shell.
 
+## D-051 — Alto contraste e DPI por monitor (T3.8)
+- **Data:** 2026-11-22 · **Status:** aceita
+- **Detecção:** `SystemParametersInfoW(SPI_GETHIGHCONTRAST)`; as cores vêm de `GetSysColor` (janela, texto, destaque, texto cinza, link, botão), expostas por `fx_shell::high_contrast()` com o tipo neutro `SystemColors`.
+- **Tema:** `Theme::from_system` usa só essas cores, opacas: fundo e camada = janela, texto e texto secundário = texto da janela (alto contraste evita cinzas em texto), destaque e foco = cor de seleção do sistema, divisórias na cor do texto. Claro ou escuro pela luminância do fundo. O Mica fica desligado. `Theme::current` prefere o alto contraste ao modo claro/escuro em todos os lugares onde o tema é escolhido.
+- **Ao vivo:** o GPUI só avisa quando muda claro/escuro (`ImmersiveColorSet`), e ligar o alto contraste nem sempre muda isso; uma tarefa consulta o estado a cada 1 s (uma chamada de sistema barata, fora de qualquer espera) e reaplica o tema quando ele muda. Evita mexer no patch do GPUI.
+- **DPI por monitor:** já atendido: o manifesto do GPUI declara `PerMonitorV2` e o GPUI trata `WM_DPICHANGED` (redesenha na escala nova). Nada a fazer no fx além de não usar tamanhos em pixels físicos.
+- **Pendente:** cores fixas que não passam pelo tema (terminal embutido, etiquetas, realce de sintaxe em parte) seguem iguais no alto contraste; conferência com o Narrador e com o alto contraste ligado vai para os testes finais.
+

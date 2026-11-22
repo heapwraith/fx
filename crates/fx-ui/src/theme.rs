@@ -144,6 +144,9 @@ pub struct Theme {
     /// accent, comments the secondary text.
     pub syntax_string: Color,
     pub syntax_number: Color,
+    /// Built from the Windows high contrast colors (T3.8): no Mica, no
+    /// translucent fills.
+    pub high_contrast: bool,
 }
 
 impl Theme {
@@ -164,6 +167,7 @@ impl Theme {
         thumb_hover: 0x0000008A,
         syntax_string: 0xA0461AFF,
         syntax_number: 0x6A3FA0FF,
+        high_contrast: false,
     };
 
     pub const DARK: Theme = Theme {
@@ -181,7 +185,46 @@ impl Theme {
         thumb_hover: 0xFFFFFF8A,
         syntax_string: 0xE8A87CFF,
         syntax_number: 0xC6A0F6FF,
+        high_contrast: false,
     };
+
+    /// The theme for the system `mode`, or the high contrast one when
+    /// Windows high contrast is on (it wins over light and dark).
+    pub fn current(mode: Mode) -> Theme {
+        fx_shell::high_contrast().map_or_else(|| Theme::for_mode(mode), Theme::from_system)
+    }
+
+    /// High contrast: every color comes from the system palette, opaque.
+    /// Selection uses the system highlight; secondary text stays the full
+    /// text color (high contrast avoids grays for text).
+    pub fn from_system(c: fx_shell::contrast::SystemColors) -> Theme {
+        let luminance = |rgba: u32| {
+            let (r, g, b) = ((rgba >> 24) & 0xFF, (rgba >> 16) & 0xFF, (rgba >> 8) & 0xFF);
+            (299 * r + 587 * g + 114 * b) / 1000
+        };
+        let tint = |rgba: u32, alpha: u32| (rgba & 0xFFFF_FF00) | alpha;
+        Theme {
+            mode: if luminance(c.window) < 128 {
+                Mode::Dark
+            } else {
+                Mode::Light
+            },
+            base: c.window,
+            layer: c.window,
+            text: c.window_text,
+            text_secondary: c.window_text,
+            accent: c.highlight,
+            hover: tint(c.highlight, 0x40),
+            selected: tint(c.highlight, 0x80),
+            divider: c.window_text,
+            focus: c.highlight,
+            thumb: c.window_text,
+            thumb_hover: c.highlight,
+            syntax_string: c.window_text,
+            syntax_number: c.window_text,
+            high_contrast: true,
+        }
+    }
 
     pub fn for_mode(mode: Mode) -> Theme {
         match mode {
@@ -240,6 +283,34 @@ mod tests {
 
     /// Every text color on every background it can appear on (backdrop, list
     /// layer, hovered row, selected row) meets WCAG AA (4.5:1).
+    #[test]
+    fn high_contrast_uses_the_system_colors() {
+        let black = fx_shell::contrast::SystemColors {
+            window: 0x000000FF,
+            window_text: 0xFFFFFFFF,
+            highlight: 0x1AEBFFFF,
+            highlight_text: 0x000000FF,
+            gray_text: 0x3FF23FFF,
+            hot_light: 0xFFFF00FF,
+            button_face: 0x000000FF,
+        };
+        let t = Theme::from_system(black);
+        assert!(t.high_contrast);
+        assert_eq!(t.mode, Mode::Dark);
+        assert_eq!(
+            (t.base, t.text, t.text_secondary, t.accent),
+            (0x000000FF, 0xFFFFFFFF, 0xFFFFFFFF, 0x1AEBFFFF)
+        );
+        assert!(contrast(t.text, t.base) >= 7.0);
+        let white = fx_shell::contrast::SystemColors {
+            window: 0xFFFFFFFF,
+            window_text: 0x000000FF,
+            ..black
+        };
+        assert_eq!(Theme::from_system(white).mode, Mode::Light);
+        const { assert!(!Theme::LIGHT.high_contrast && !Theme::DARK.high_contrast) };
+    }
+
     #[test]
     fn text_contrast_is_at_least_4_5_in_both_themes() {
         for t in [Theme::LIGHT, Theme::DARK] {

@@ -3,6 +3,7 @@
 mod a11y;
 mod clipboard;
 pub mod conpty;
+pub mod contrast;
 pub mod default_manager;
 mod dragdrop;
 mod elevation;
