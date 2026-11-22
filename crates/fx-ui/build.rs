@@ -17,6 +17,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return Ok(());
     }
+    // The updater's DLLs (WinHTTP, WinTrust and what they pull in, BCrypt)
+    // load only when an update check runs, not at every start: they cost
+    // about 1 MB of P8 (T4.5).
+    for dll in ["winhttp.dll", "wintrust.dll", "bcrypt.dll"] {
+        println!("cargo:rustc-link-arg-bins=/DELAYLOAD:{dll}");
+    }
+    println!("cargo:rustc-link-arg-bins=delayimp.lib");
     let dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?);
     let out = PathBuf::from(std::env::var("OUT_DIR")?);
     let mut parts: Vec<u16> = version
