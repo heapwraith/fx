@@ -71,6 +71,7 @@ features = [
     "Win32_UI_Shell_PropertiesSystem",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_Globalization",
     "Win32_Graphics_Gdi",
 ]
 

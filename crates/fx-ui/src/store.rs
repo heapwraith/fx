@@ -33,6 +33,8 @@ pub struct Settings {
     pub restaurar_sessao: bool,
     /// Show hidden and system files (Ctrl+H, T1.21).
     pub mostrar_ocultos: bool,
+    /// Interface language (T3.7): "pt", "en" or "" (the Windows language).
+    pub idioma: String,
 }
 
 /// The part of the settings a window changes (density, sidebar, hidden files).
@@ -50,6 +52,7 @@ impl Default for Settings {
             barra_lateral: true,
             restaurar_sessao: true,
             mostrar_ocultos: false,
+            idioma: String::new(),
         }
     }
 }
@@ -443,6 +446,7 @@ mod tests {
             barra_lateral: false,
             restaurar_sessao: true,
             mostrar_ocultos: true,
+            idioma: "en".into(),
         };
         save_settings(&path, &s).unwrap();
         assert_eq!(load_settings(&path), s);

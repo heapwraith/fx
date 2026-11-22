@@ -52,6 +52,14 @@ pub fn windows_build() -> Option<u32> {
     Some(info.dwBuildNumber)
 }
 
+/// Whether the Windows display language is Portuguese (any country), for
+/// the interface language (T3.7).
+pub fn system_language_is_portuguese() -> bool {
+    // SAFETY: plain call, no arguments.
+    let lang = unsafe { windows::Win32::Globalization::GetUserDefaultUILanguage() };
+    lang & 0x3FF == 0x16 // LANG_PORTUGUESE
+}
+
 /// Mica (`DWMSBT_MAINWINDOW`) exists from Windows 11 22H2 (build 22621).
 pub fn supports_mica() -> bool {
     windows_build().is_some_and(|b| b >= 22_621)

@@ -27,6 +27,8 @@ pub enum Action {
     IndexService(bool),
     /// Makes fx the default file manager (`true`) or goes back to Explorer.
     DefaultManager(bool),
+    /// Switches the interface between Portuguese and English (T3.7).
+    Language,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -180,6 +182,7 @@ pub const COMMANDS: &[Command] = &[
         ),
         Action::DefaultManager(false),
     ),
+    direct(("Idioma: English", "Language: Português"), Action::Language),
 ];
 
 /// "ctrl-shift-n" → "Ctrl+Shift+N", "alt-up" → "Alt+↑", "space" → "Espaço".

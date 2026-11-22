@@ -67,7 +67,7 @@
 - Build ARM64 verde no CI; artefatos no release da tag.
 
 ## T3.7 — Português e inglês
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: ~245 textos da interface em pares pt/en no ponto de uso (`fx_core::tr!`/`trf!`, o compilador recusa texto sem as duas versões); idioma por `settings.toml` (`idioma`), `FX_LANG` ou o idioma do Windows; troca ao vivo na paleta ("Idioma: English"), salva com a sessão; números (1.234 / 1,234), datas (DD/MM / MM/DD), tipos, filtros e problemas do renomear em lote seguem o idioma (D-053). Testes: varredura de `fx-ui/src` sem texto português fora dos pares, separadores em inglês; conferido na janela nos dois idiomas.
 
 **Fazer**
 - Todos os textos da interface num catálogo (`fx-ui/src/i18n.rs`, sem dependência), escolhido pelo idioma do Windows, com troca na paleta; formatos de número e data seguem o idioma.

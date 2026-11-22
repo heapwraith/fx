@@ -422,8 +422,9 @@ fn start_label(pending: &Pending) -> Option<String> {
         OpKind::Move | OpKind::MoveBack => tr!("Movendo", "Moving"),
         _ => return None,
     };
-    Some(format!(
+    Some(trf!(
         "{verb} {} para {}",
+        "{verb} {} to {}",
         count(job.source_count()),
         job.dest_name()
     ))

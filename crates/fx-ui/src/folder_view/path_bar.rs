@@ -243,7 +243,7 @@ impl FolderView {
         let path = PathBuf::from(&typed);
         if !path.is_absolute() {
             if let Some(edit) = &mut self.edit {
-                edit.error = Some("digite um caminho completo");
+                edit.error = Some(tr!("digite um caminho completo", "type a full path"));
             }
             return;
         }

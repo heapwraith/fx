@@ -20,6 +20,7 @@ pub(crate) const VERSION: &str = env!("FX_VERSION");
 
 mod commands;
 mod folder_view;
+mod i18n;
 mod icons;
 mod ops;
 mod persist;
@@ -131,6 +132,7 @@ fn main() {
     } else {
         Settings::default()
     };
+    i18n::init(&settings.idioma);
     let session = (persist && arg.is_none() && settings.restaurar_sessao)
         .then(persist::load_session)
         .flatten();

@@ -239,6 +239,10 @@ impl TabsView {
                 Action::DefaultManager(on) => {
                     tab.update(cx, |view, cx| view.default_manager(on, cx));
                 }
+                Action::Language => {
+                    crate::i18n::switch();
+                    cx.refresh_windows();
+                }
                 Action::About => tab.update(cx, |view, cx| {
                     view.show_notice(format!("fx {} · MIT OR Apache-2.0", crate::VERSION), cx);
                 }),

@@ -402,3 +402,13 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Release:** a tag gera também `fx-X.Y.Z-windows-arm64.zip` e anexa o instalador ARM64.
 - **Local:** `cargo xwin` no WSL não compila ARM64 hoje (o `ring`, dependência do GPUI, precisa dos cabeçalhos ARM64 que o xwin não baixou); o CI é a referência. Sem teste em máquina ARM real: vai para os testes finais.
 
+## D-053 — Português e inglês (T3.7)
+- **Data:** 2026-11-22 · **Status:** aceita
+- **Catálogo no ponto de uso, não num arquivo central:** cada texto é escrito como par, `tr!("Copiar", "Copy")` (texto fixo) ou `trf!("Moveu {n} itens", "Moved {n} items")` (mesmas regras do `format!`, inclusive capturas). As macros ficam em `fx-core::locale`, com a chave global do idioma; `fx-ui/src/i18n.rs` escolhe o idioma e guarda o teste. Motivo: com dois idiomas, o par junto do uso é mais fácil de manter que chaves num arquivo separado, e o compilador garante as duas versões (o critério "todo texto tem as duas versões" vira erro de compilação). Desvio consciente do texto da tarefa, que falava em catálogo em `i18n.rs`.
+- **Comandos da paleta:** a tabela é `const`, então guarda o par `(pt, en)` e `Command::label()` escolhe na hora.
+- **Escolha do idioma:** `idioma` em `settings.toml` ("pt"/"en"), depois `FX_LANG`, depois `GetUserDefaultUILanguage` (português de qualquer país → português; o resto → inglês). A paleta troca ao vivo (`refresh_windows`) e a escolha é salva com a sessão, sem I/O na thread de UI.
+- **Formatos:** separador de milhar `.`/`,`, decimal `,`/`.`, data `DD/MM/AAAA`/`MM/DD/AAAA` (24 h nos dois), "itens"/"items", tipo "Arquivo JPG"/"JPG File"; rótulos dos filtros de busca e problemas do renomear em lote também. As palavras-chave da busca já aceitavam os dois idiomas (`tipo:`/`type:`).
+- **Valores guardados não são traduzidos:** a densidade em `settings.toml` continua "padrão"/"compacta"/"confortável".
+- **Teste de varredura:** lê `fx-ui/src`, ignora comentários, SQL e o módulo de testes, e acusa todo literal com cara de português (acentos ou palavras como "de", "para", "não") que não seja a primeira metade de um par. Achou dois esquecidos na primeira rodada.
+- **Pendente:** mensagens de erro vindas de `fx-ops` e `fx-shell` (ex.: "já existe um item chamado …") seguem em português; as do próprio Windows vêm no idioma do sistema.
+
