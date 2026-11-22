@@ -256,3 +256,9 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Decisão:** o critério "2 semanas como gerenciador principal" fica dispensado. O usuário quer o fx completo primeiro; vai usá-lo e melhorá-lo depois. Os outros critérios passaram (P1–P4, P7, nenhuma perda de dados; `bench/results/gate-1.md`).
 - **Consequência:** a Fase 2 está em `docs/phases/PHASE-2.md`, aprovada pelo usuário em 2026-11-21. Problemas que só o uso diário mostraria podem aparecer mais tarde; os testes de falha do motor de operações (T2.4) vêm antes da beta pública para compensar.
 
+## D-036 — Ícone e recursos do executável (T2.1)
+- **Data:** 2026-11-21 · **Status:** aceita
+- **Ícone:** desenho próprio, sem marca de terceiros: pasta na cor de destaque do fx (teal) com uma seta dupla »» de velocidade; em 16–24 px só a pasta, para ficar nítido. A fonte é `tools/make-icon.py` (Pillow, desenhado a 8× e reduzido), que gera `crates/fx-ui/resources/fx.ico` com 16, 20, 24, 32, 40, 48, 64, 96, 128 e 256 px. Para mudar o ícone, edite o script e rode-o de novo.
+- **Recursos:** `crates/fx-ui/build.rs` gera um `.rc` (UTF-8) com o ícone de id 1 e o VERSIONINFO (descrição, versão do `Cargo.toml`, licença, idioma pt-BR) e o compila com `embed-resource`. O GPUI já carrega o ícone de id 1 do executável para a classe da janela (barra de título, barra de tarefas, Alt+Tab) e já embute o manifesto (DPI por monitor, Common Controls 6), então não há conflito.
+- **Dependência:** `embed-resource = "=3.0.12"` como dependência de build do `fx-ui`. Não é crate novo: é a mesma versão que o `build.rs` do GPUI já usa (estava no `Cargo.lock`). Usa o `llvm-rc` no WSL e o `rc.exe` do Windows SDK no CI.
+

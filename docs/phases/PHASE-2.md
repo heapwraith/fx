@@ -8,7 +8,7 @@
 
 **Já adiantado na Fase 1:** Ctrl+F sem filtros (T1.23), Quick Look de imagem e texto (T1.22), paleta de comandos (T1.24).
 
-**Dependências novas previstas** (cada uma registrada em `docs/DECISIONS.md` na tarefa que a introduzir, e **pedida ao usuário antes**): `embed-resource` ou chamada direta ao `llvm-rc` (T2.1); `zip` (T2.8); `pulldown-cmark` (T2.8); `tree-sitter` e gramáticas (T2.8, avaliar o peso no executável); Inno Setup no CI (T2.9).
+**Dependências novas previstas** (cada uma registrada em `docs/DECISIONS.md` na tarefa que a introduzir, e **pedida ao usuário antes**): `embed-resource` (T2.1, feito: já vinha pelo GPUI); `zip` (T2.8); `pulldown-cmark` (T2.8); `tree-sitter` e gramáticas (T2.8, avaliar o peso no executável); Inno Setup no CI (T2.9).
 
 **Ações que pedem o usuário** (SAFETY.md §1): instalar e testar o serviço elevado (T2.4); pedir a assinatura gratuita à SignPath Foundation (T2.10, só o usuário pode se inscrever).
 
@@ -17,7 +17,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 ---
 
 ## T2.1 — Ícone e metadados do executável
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-21 · Resumo: ícone próprio (pasta teal com »», versão sem a seta em 16–24 px) gerado por `tools/make-icon.py` em `crates/fx-ui/resources/fx.ico` (10 tamanhos, 16–256); `build.rs` embute o ícone (id 1, que o GPUI usa na classe da janela) e a versão (`fx — gerenciador de arquivos`, 0.0.1, licença) via `embed-resource` (D-036). Conferido: barra de título, barra de tarefas e Propriedades do arquivo. Alt+Tab não capturado (usa o mesmo recurso).
 
 **Fazer**
 - Ícone do fx (16 a 256 px, claro e escuro legíveis, sem marca de terceiros), desenhado como SVG e convertido em `.ico`.
