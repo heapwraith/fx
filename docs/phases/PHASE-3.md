@@ -58,7 +58,7 @@
 - PowerShell e cmd abrem, recebem teclas e mostram cores; fechar o painel encerra o processo; P4 do fx sem regressão com o terminal aberto.
 
 ## T3.6 — Build ARM64
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: job `arm64` no CI (runner x64, alvo `aarch64-pc-windows-msvc`) verde em 543 s no commit 4f0aa8a; artefato com fx, fx-indexd e fx-preview (PE 0xAA64, fx.exe 12,4 MB) e `fx-0.2.0-beta-setup-arm64.exe` (5,8 MB, `/DArch=arm64` no `fx.iss`); o job de release anexa o zip e o instalador ARM64 à tag (D-052). Anexo no release confere-se na próxima tag.
 
 **Fazer**
 - CI compila `aarch64-pc-windows-msvc` (fx, fx-indexd, fx-preview) e anexa `fx-X.Y.Z-windows-arm64.zip` e o instalador ARM64 ao release.

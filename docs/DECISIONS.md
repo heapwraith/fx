@@ -395,3 +395,10 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **DPI por monitor:** já atendido: o manifesto do GPUI declara `PerMonitorV2` e o GPUI trata `WM_DPICHANGED` (redesenha na escala nova). Nada a fazer no fx além de não usar tamanhos em pixels físicos.
 - **Pendente:** cores fixas que não passam pelo tema (terminal embutido, etiquetas, realce de sintaxe em parte) seguem iguais no alto contraste; conferência com o Narrador e com o alto contraste ligado vai para os testes finais.
 
+## D-052 — Build ARM64 (T3.6)
+- **Data:** 2026-11-22 · **Status:** aceita
+- **Como:** compilação cruzada no próprio runner `windows-latest` (x64), com o alvo `aarch64-pc-windows-msvc` do `rust-toolchain.toml` e as ferramentas ARM64 do MSVC que o runner já traz. Job separado (`arm64`), em paralelo ao `check`; o `release` depende dos dois.
+- **Instalador:** o mesmo `installer/fx.iss` com `/DArch=arm64` (`ArchitecturesAllowed=arm64`, nome `fx-X.Y.Z-setup-arm64.exe`). O executor do Inno Setup é x86 (roda por emulação no Windows ARM); os binários instalados são ARM64.
+- **Release:** a tag gera também `fx-X.Y.Z-windows-arm64.zip` e anexa o instalador ARM64.
+- **Local:** `cargo xwin` no WSL não compila ARM64 hoje (o `ring`, dependência do GPUI, precisa dos cabeçalhos ARM64 que o xwin não baixou); o CI é a referência. Sem teste em máquina ARM real: vai para os testes finais.
+

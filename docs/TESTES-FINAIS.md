@@ -16,3 +16,4 @@ O usuário pediu para terminar todas as funcionalidades primeiro (2026-11-22) e 
 
 - [ ] **T3.1 Gerenciador padrão:** paleta → "Tornar o fx o gerenciador de arquivos padrão"; conferir que abrir uma pasta pela área de trabalho, uma unidade em "Este Computador" e o Win+E abrem o fx; depois "Voltar ao Explorador como gerenciador padrão" e conferir que tudo volta ao Explorador. (Altera `HKCU\Software\Classes`; o reverter restaura o que havia.)
 - [ ] **T3.8 alto contraste:** ligar o alto contraste (Alt+Shift esquerdo+PrtSc) com o fx aberto; em até 1 s ele troca para as cores do sistema, sem Mica; desligar volta ao tema normal. Mover a janela entre monitores com escalas diferentes: texto nítido.
+- [ ] **T3.6 ARM64:** na próxima tag, conferir no release o `fx-X.Y.Z-windows-arm64.zip` e o `setup-arm64.exe`; se houver uma máquina Windows ARM, instalar e abrir.
