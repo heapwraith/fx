@@ -2060,6 +2060,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fx-preview"
+version = "0.1.0"
+dependencies = [
+ "fx-shell",
+]
+
+[[package]]
 name = "fx-shell"
 version = "0.1.0"
 dependencies = [

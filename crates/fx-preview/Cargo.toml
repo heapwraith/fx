@@ -1,0 +1,15 @@
+[package]
+name = "fx-preview"
+description = "Hosts Windows preview handlers for Quick Look, isolated from fx (T2.9)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fx-shell.workspace = true

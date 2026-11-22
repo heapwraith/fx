@@ -8,7 +8,7 @@
 
 **Já adiantado na Fase 1:** Ctrl+F sem filtros (T1.23), Quick Look de imagem e texto (T1.22), paleta de comandos (T1.24).
 
-**Dependências novas previstas** (cada uma registrada em `docs/DECISIONS.md` na tarefa que a introduzir, e **pedida ao usuário antes**): `embed-resource` (T2.1, feito: já vinha pelo GPUI); `regex` (T2.8, feito: já vinha no `Cargo.lock`); `zip`, `pulldown-cmark`, `tree-sitter` e gramáticas (T2.9, avaliar o peso no executável); Inno Setup no CI (T2.9).
+**Dependências novas previstas** (cada uma registrada em `docs/DECISIONS.md` na tarefa que a introduzir, e **pedida ao usuário antes**): `embed-resource` (T2.1, feito: já vinha pelo GPUI); `regex` (T2.8, feito: já vinha no `Cargo.lock`); nenhuma na T2.9 (ZIP, Markdown e cores feitos no `fx-core`, D-044); Inno Setup no CI (T2.9).
 
 **Ações que pedem o usuário** (SAFETY.md §1): instalar e testar o serviço elevado (T2.4); pedir a assinatura gratuita à SignPath Foundation (T2.10, só o usuário pode se inscrever).
 
@@ -95,7 +95,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 - Testes da regra de nomes (colisão, nome inválido, ciclo a→b→a); Ctrl+Z desfaz tudo.
 
 ## T2.9 — Prévias completas (`fx-preview`)
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: `fx-preview.exe` isolado hospeda os visualizadores do Windows (`IPreviewHandler`) sobre o painel do Quick Look, com tempo limite de 5 s e encerrado ao trocar de item (D-044); código com cores (tokenizador próprio, 6 famílias), Markdown renderizado e lista de ZIP pelo diretório central, sem dependências novas. Conferido na janela: PDF (visualizador do Edge), MD, ZIP e RS; visualizador travado (teste com host falso) custa só o tempo limite; P4 sem regressão (p95 ≤ 3,5 ms; Quick Look p95 46 ms). DOCX, MP4 e MP3 sem visualizador nesta máquina (sem Office; o Windows 11 não traz o de mídia): mostram a miniatura do Windows.
 
 **Fazer**
 - Processo `fx-preview` isolado que hospeda os preview handlers do Windows (PDF, Office, vídeo e áudio), com tempo limite: se travar, o fx não trava.

@@ -323,3 +323,21 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Painel:** três campos (Tab alterna; Ctrl+Backspace limpa o campo), Alt+R/Alt+M/Alt+C, prévia "antigo → novo" com o problema de cada linha, rodapé dizendo o que o Enter fará.
 - **Dependência:** `regex = "=1.13.2"` no `fx-core`. Não é crate novo: a mesma versão já vinha no `Cargo.lock` (dependência do GPUI). Limite de tamanho da regex compilada: 1 MB.
 
+## D-044 — Prévias completas e o processo `fx-preview` (T2.9)
+- **Data:** 2026-11-22 · **Status:** aceita
+- **Visualizadores do Windows (PDF, Office, mídia, SVG, RTF...):** quando o tipo não tem prévia própria do fx e há um preview handler registrado (`AssocQueryStringW` com `{8895b1c6-…}`), o Quick Look inicia `fx-preview.exe`, que cria uma janela sem borda sobre o corpo do painel e hospeda nela o `IPreviewHandler` (inicializado por stream, caminho ou item do shell; normalmente o Windows o roda no `prevhost.exe`). Protocolo pelas entradas e saídas padrão: o host diz `ready` (ou `error …`), o fx manda `move x y w h`, `raise`, `hide`, `quit` (`fx-shell::preview`, `fx-shell::windows::preview_host`).
+- **Isolamento e tempo limite:** um visualizador é código de terceiros; travado ou caindo, só o `fx-preview` sofre. O fx espera o `ready` numa thread com limite de 5 s e mata o processo se passar (teste com um host falso que trava: o erro volta no tempo limite). Trocar de item, fechar o painel ou sair encerra o processo.
+- **Armadilhas encontradas na conferência:**
+  - **Dono da janela:** a janela do host **não** pode ser filha nem ter como dona a janela do fx. Uma relação de janelas entre processos liga as filas de entrada, e o teclado do fx parou. Por isso ela é solta: o fx a mantém acima de si com `raise` a cada 250 ms enquanto está ativo (um clique no fx o traria para cima dela) e manda `hide` quando perde o foco.
+  - **Console:** o `fx-preview` é um programa gráfico (`windows_subsystem = "windows"`) e é iniciado com `CREATE_NO_WINDOW`; como programa de console, o Windows abria um terminal que roubava o foco.
+  - **Posição:** um `canvas` absoluto precisa de `top_0()/left_0()`, senão o layout o coloca depois do irmão; isso deslocava o host uma altura inteira (corrigido também no `canvas` das migalhas).
+- **Repintura:** enquanto o host abre, o fx pede um quadro por repaint; depois que ele aparece, um temporizador de 250 ms repinta só o necessário para mantê-lo no lugar (sem redesenhar a 239 Hz).
+- **No fx, sem dependências novas** (o plano previa `zip`, `pulldown-cmark` e `tree-sitter`):
+  - **ZIP:** lê só o diretório central (sem descompactar), com ZIP64, nomes UTF-8 e CP437, até 5.000 entradas (`fx-core::zip_list`);
+  - **Markdown:** títulos, listas (inclusive tarefas), citações, código e réguas, com os marcadores em linha reduzidos ao texto (`fx-core::markdown`);
+  - **Código:** tokenizador por família (Rust; C/C++/C#/Java/JS/TS/Go/Kotlin/Swift/CSS/PHP; Python; shell e PowerShell; JSON/TOML/YAML/INI; SQL), com palavras-chave na cor de destaque e cores próprias para textos e números (`syntax_string`, `syntax_number` no tema, contraste ≥ 4,5:1 testado) (`fx-core::highlight`).
+
+  O `tree-sitter` custaria vários MB e dezenas de gramáticas para uma prévia de leitura.
+- **Nesta máquina:** há visualizador para PDF (Edge), RTF, SVG e texto/HTML; não há para DOCX (exige Office) nem para MP4/MP3 (o Windows 11 não traz o de mídia). Esses tipos mostram a miniatura do Windows (o vídeo, um quadro).
+- **Limites:** mover a janela do fx só reposiciona o host na repintura seguinte (até 250 ms); um menu ou a paleta abertos sobre o Quick Look ficam atrás do host.
+

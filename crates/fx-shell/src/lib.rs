@@ -8,11 +8,14 @@ pub mod icons;
 pub mod launch;
 pub mod menu;
 pub mod places;
+pub mod preview;
 pub mod thumbs;
 
 #[cfg(windows)]
 mod windows;
 
+#[cfg(windows)]
+pub use windows::preview_host;
 #[cfg(windows)]
 pub use windows::{
     A11y, DragResult, Instance, LatestTree, claim_instance, clear_clipboard, clipboard_files,

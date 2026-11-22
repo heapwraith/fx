@@ -8,7 +8,11 @@
 //! everything else: the shell's large thumbnail (or its big icon).
 
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::Duration;
+
+use fx_shell::preview::{PreviewProcess, ScreenRect};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::channel;
@@ -23,7 +27,7 @@ use fx_core::preview::{
 use fx_core::zip_list;
 use gpui::{
     Context, Image, ImageFormat, ImageSource, MouseButton, MouseDownEvent, ObjectFit, RenderImage,
-    SharedString, Window, deferred, div, img, prelude::*, px, uniform_list,
+    SharedString, Window, canvas, deferred, div, img, prelude::*, px, uniform_list,
 };
 
 use super::FolderView;
@@ -54,6 +58,93 @@ type Spans = Vec<Vec<(std::ops::Range<usize>, Kind)>>;
 /// Most archive entries listed.
 const ZIP_MAX: usize = 5000;
 
+/// How long a preview handler may take to show something.
+const HANDLER_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The `fx-preview` process of the open preview and its state.
+#[derive(Default)]
+pub(super) struct Host {
+    process: Mutex<Option<PreviewProcess>>,
+    started: AtomicBool,
+    closed: AtomicBool,
+    failed: Mutex<Option<String>>,
+    last: Mutex<Option<ScreenRect>>,
+    /// Last `raise`, to repeat it a few times a second while fx is active
+    /// (a click on fx brings fx above the preview), and whether it is hidden.
+    raised: Mutex<Option<std::time::Instant>>,
+    hidden: AtomicBool,
+}
+
+impl Host {
+    /// The preview went away: end the process (now, or when it starts).
+    fn close(&self) {
+        self.closed.store(true, Ordering::SeqCst);
+        drop(self.process.lock().ok().and_then(|mut p| p.take()));
+    }
+
+    /// Called every frame with the panel body in screen pixels: starts the
+    /// process once, then keeps its window on the panel.
+    fn place(self: &Arc<Self>, owner: isize, rect: ScreenRect, path: &Path, active: bool) {
+        if !self.started.swap(true, Ordering::SeqCst) {
+            let exe = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.join("fx-preview.exe")));
+            let Some(exe) = exe.filter(|p| p.exists()) else {
+                *lock(&self.failed) = Some("fx-preview.exe não está ao lado do fx.exe".into());
+                return;
+            };
+            let mut cmd = std::process::Command::new(exe);
+            cmd.arg(owner.to_string())
+                .args([rect.x, rect.y, rect.width, rect.height].map(|v| v.to_string()))
+                .arg(path);
+            *lock(&self.last) = Some(rect);
+            let host = self.clone();
+            let _ = std::thread::Builder::new()
+                .name("fx-preview-start".into())
+                .spawn(move || match PreviewProcess::start(cmd, HANDLER_TIMEOUT) {
+                    Ok(mut p) => {
+                        if host.closed.load(Ordering::SeqCst) {
+                            return; // dropped here: the process ends
+                        }
+                        if let Some(r) = *lock(&host.last) {
+                            p.move_to(r);
+                        }
+                        *lock(&host.process) = Some(p);
+                    }
+                    Err(e) => *lock(&host.failed) = Some(e.to_string()),
+                });
+            return;
+        }
+        let mut last = lock(&self.last);
+        let mut process = lock(&self.process);
+        let Some(p) = process.as_mut() else { return };
+        if *last != Some(rect) {
+            *last = Some(rect);
+            p.move_to(rect);
+        }
+        if !active {
+            if !self.hidden.swap(true, Ordering::SeqCst) {
+                p.set_visible(false);
+            }
+            return;
+        }
+        let mut raised = lock(&self.raised);
+        let due = raised.is_none_or(|t| t.elapsed() >= Duration::from_millis(250));
+        if due || self.hidden.swap(false, Ordering::SeqCst) {
+            p.set_visible(true);
+            *raised = Some(std::time::Instant::now());
+        }
+    }
+
+    fn waiting(&self) -> bool {
+        lock(&self.process).is_none() && lock(&self.failed).is_none()
+    }
+}
+
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// The open preview.
 pub(super) struct QuickLook {
     entry: u32,
@@ -81,6 +172,9 @@ enum Content {
     Markdown(Arc<Vec<MdLine>>, bool),
     /// An archive's file list (T2.9): (name, size) rows and a summary.
     Zip(Arc<Vec<(SharedString, SharedString)>>, SharedString),
+    /// A Windows preview handler (PDF...) shown by `fx-preview` over the
+    /// panel (T2.9).
+    Handler(PathBuf, Arc<Host>),
     Nothing(&'static str),
 }
 
@@ -100,9 +194,14 @@ impl FolderView {
 
     pub(super) fn close_quick_look(&mut self) {
         if let Some(q) = self.quick_look.take()
-            && let Content::Image(image) | Content::Icon(image, _) = q.content
+            && let Content::Image(image) | Content::Icon(image, _) = &q.content
         {
-            self.stale_images.push(image);
+            self.stale_images.push(image.clone());
+        }
+        if let Some(q) = &self.quick_look
+            && let Content::Handler(_, host) = &q.content
+        {
+            host.close();
         }
     }
 
@@ -199,12 +298,43 @@ impl FolderView {
                     }
                     return;
                 };
+                let handler = matches!(content, Content::Handler(..));
                 q.content = content;
+                let asked = q.asked;
                 if let Some(trace) = &view.trace {
-                    trace.borrow_mut().input_started(q.asked, "preview");
+                    trace.borrow_mut().input_started(asked, "preview");
+                }
+                if handler {
+                    view.tick_preview_host(ticket, cx);
                 }
                 cx.notify();
             });
+        })
+        .detach();
+    }
+
+    /// While a Windows preview is open: repaint 4 times a second, which
+    /// keeps its window on the panel, above fx, or hidden when fx is not
+    /// active (see `Host::place`). Stops when the preview changes.
+    fn tick_preview_host(&self, ticket: u64, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(250))
+                    .await;
+                let open = this.update(cx, |view, cx| {
+                    let open = view.quick_look.as_ref().is_some_and(|q| {
+                        q.ticket == ticket && matches!(q.content, Content::Handler(..))
+                    });
+                    if open {
+                        cx.notify();
+                    }
+                    open
+                });
+                if !matches!(open, Ok(true)) {
+                    return;
+                }
+            }
         })
         .detach();
     }
@@ -217,6 +347,59 @@ impl FolderView {
         let t = self.look.theme;
         let body = match q.content.clone() {
             Content::Loading => message("Carregando…", t.text_secondary).into_any_element(),
+            Content::Handler(path, host) => {
+                let failed = lock(&host.failed).clone();
+                match failed {
+                    Some(why) => message_owned(format!("Sem prévia: {why}"), t.text_secondary)
+                        .into_any_element(),
+                    None => {
+                        let waiting = host.waiting();
+                        div()
+                            .size_full()
+                            .relative()
+                            .child(message(
+                                "Abrindo o visualizador do Windows…",
+                                t.text_secondary,
+                            ))
+                            .child(
+                                canvas(
+                                    move |bounds, window, _| {
+                                        let Some(owner) = fx_shell::window_id(window) else {
+                                            return;
+                                        };
+                                        let scale = window.scale_factor();
+                                        let px =
+                                            |v: gpui::Pixels| (f32::from(v) * scale).round() as i32;
+                                        let (x, y) = fx_shell::preview_host::client_to_screen(
+                                            owner,
+                                            px(bounds.origin.x),
+                                            px(bounds.origin.y),
+                                        );
+                                        let rect = ScreenRect {
+                                            x,
+                                            y,
+                                            width: px(bounds.size.width),
+                                            height: px(bounds.size.height),
+                                        };
+                                        let active = window.is_window_active();
+                                        host.place(owner, rect, &path, active);
+                                        // Until it shows (or fails), check every frame;
+                                        // afterwards a 250 ms tick keeps it in place.
+                                        if waiting {
+                                            window.request_animation_frame();
+                                        }
+                                    },
+                                    |_, _, _, _| {},
+                                )
+                                .absolute()
+                                .top_0()
+                                .left_0()
+                                .size_full(),
+                            )
+                            .into_any_element()
+                    }
+                }
+            }
             Content::Nothing(why) => message(why, t.text_secondary).into_any_element(),
             Content::Icon(image, caption) => div()
                 .size_full()
@@ -373,6 +556,16 @@ impl FolderView {
     }
 }
 
+fn message_owned(text: String, color: crate::theme::Color) -> gpui::Div {
+    div()
+        .size_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_color(rgba(color))
+        .child(text)
+}
+
 fn message(text: &'static str, color: crate::theme::Color) -> gpui::Div {
     div()
         .size_full()
@@ -434,6 +627,11 @@ fn load(path: &Path, kind: PreviewKind, bytes: u64, is_dir: bool, decode: &Decod
             },
             Err(_) => Content::Nothing("Não foi possível ler este arquivo."),
         },
+        // Folders and other files: a Windows preview handler when the type
+        // has one (PDF...), else the shell's thumbnail.
+        PreviewKind::Other if !is_dir && fx_shell::preview_host::handler_for(path).is_some() => {
+            Content::Handler(path.to_path_buf(), Arc::new(Host::default()))
+        }
         _ => shell(path, decode),
     }
 }
@@ -500,6 +698,7 @@ fn zip_view(
                     .map(|i| {
                         let (name, size) = rows[i].clone();
                         div()
+                            .w_full()
                             .h(px(LINE_HEIGHT + 4.0))
                             .flex()
                             .items_center()

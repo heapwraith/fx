@@ -10,6 +10,7 @@ mod keys;
 mod launch;
 mod menu;
 mod places;
+pub mod preview_host;
 mod sheets;
 mod thumbs;
 mod time;

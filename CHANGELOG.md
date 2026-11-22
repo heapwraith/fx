@@ -11,6 +11,7 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 - Migalhas que não cabem viram um botão "…" com o menu das pastas escondidas.
 - `fx-bench memory` mede a memória parada (P8).
 
+- Quick Look com os visualizadores do Windows (PDF e outros) num processo isolado, código com cores, Markdown renderizado e conteúdo de ZIP.
 - Renomear em lote (F2 com vários itens): buscar e substituir com regex, numeração, letras, prévia ao vivo e um Ctrl+Z para desfazer.
 - Coluna Tamanho com o total de cada pasta, calculado em segundo plano; ordenar por tamanho inclui as pastas.
 - Busca com filtros digitados (`tipo:imagem`, `ext:pdf`, `tamanho:>10mb`, `data:semana`), alcance disco inteiro ou pasta (Tab), colunas ordenáveis, arrastar e menu do Windows nos resultados.
