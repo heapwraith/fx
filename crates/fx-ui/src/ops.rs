@@ -111,7 +111,14 @@ impl Ops {
 
     fn start(cx: &mut Context<Self>) -> Option<Engine> {
         let (tx, rx) = channel();
-        let engine = Engine::start(tx).ok()?;
+        // With the journal, temporary files left by a killed fx are deleted
+        // now; without a data folder, the engine still runs without it.
+        let engine = match crate::store::ops_journal_dir() {
+            Some(dir) => Engine::start_with_journal(tx.clone(), &dir)
+                .or_else(|_| Engine::start(tx))
+                .ok()?,
+            None => Engine::start(tx).ok()?,
+        };
         cx.spawn(async move |this, cx| {
             let background = cx.background_executor().clone();
             let mut rx = rx;

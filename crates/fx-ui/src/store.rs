@@ -95,6 +95,12 @@ pub fn settings_path() -> Option<PathBuf> {
     app_dir("APPDATA").map(|d| d.join("settings.toml"))
 }
 
+/// Journal of the copies in progress (T2.4): kept even with `FX_NO_STATE`,
+/// since it protects the user's disk, not the app's state.
+pub fn ops_journal_dir() -> Option<PathBuf> {
+    app_dir("LOCALAPPDATA").map(|d| d.join("ops"))
+}
+
 pub fn state_path() -> Option<PathBuf> {
     app_dir("LOCALAPPDATA").map(|d| d.join("state.db"))
 }

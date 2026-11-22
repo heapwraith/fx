@@ -686,3 +686,268 @@ fn drop_operation_follows_the_explorer() {
     let mixed = [c(r"C:\a"), c(r"D:\b")];
     assert_eq!(drop_operation(&mixed, dest, false, false), OpKind::Copy);
 }
+
+// ---- Failure tests (task T2.4, docs/SAFETY.md §3) ----
+
+/// Opens `p` and keeps it open, letting others share only `share` (0: no
+/// sharing at all, like a file in use by an app that locks it).
+fn hold(p: &Path, share: u32) -> std::fs::File {
+    use std::os::windows::fs::OpenOptionsExt;
+    std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(share)
+        .open(p)
+        .unwrap()
+}
+
+fn pattern(len: usize, seed: u8) -> Vec<u8> {
+    (0..len)
+        .map(|i| (i as u8).wrapping_mul(31).wrapping_add(seed))
+        .collect()
+}
+
+/// The disk fills up in the middle of the second file: the first file stays
+/// complete, the second leaves neither a partial file nor a temporary one,
+/// and both sources are intact.
+#[test]
+fn disk_full_mid_copy_leaves_nothing_partial() {
+    let t = tempfile::tempdir().unwrap();
+    let (a, b) = (t.path().join("a.bin"), t.path().join("b.bin"));
+    let (ca, cb) = (pattern(1 << 20, 1), pattern(1 << 20, 2));
+    write(&a, &ca);
+    write(&b, &cb);
+    let dest = t.path().join("destino");
+    std::fs::create_dir(&dest).unwrap();
+    let (e, rx) = engine();
+    let mut job = Job::copy(vec![a.clone(), b.clone()], dest.clone());
+    job.fail_after = Some(300_000);
+    let (_, outcome, report) = run(&e, &rx, job);
+    assert!(matches!(outcome, Outcome::Failed(_)), "{outcome:?}");
+    assert!(report.copied.is_empty());
+    assert!(!dest.join("a.bin").exists() && !dest.join("b.bin").exists());
+    assert_no_temp(&dest);
+    assert_eq!(std::fs::read(&a).unwrap(), ca);
+    assert_eq!(std::fs::read(&b).unwrap(), cb);
+}
+
+/// A move across volumes that runs out of space keeps the source.
+#[test]
+fn disk_full_during_a_cross_volume_move_keeps_the_source() {
+    let t = tempfile::tempdir().unwrap();
+    let src = t.path().join("pasta");
+    write(&src.join("um.bin"), &pattern(200_000, 3));
+    write(&src.join("sub").join("dois.bin"), &pattern(200_000, 4));
+    let before = snapshot(&src);
+    let dest = t.path().join("destino");
+    std::fs::create_dir(&dest).unwrap();
+    let (e, rx) = engine();
+    let mut job = Job::move_to(vec![src.clone()], dest.clone());
+    job.force_copy = true;
+    job.fail_after = Some(50_000);
+    let (_, outcome, report) = run(&e, &rx, job);
+    assert!(matches!(outcome, Outcome::Failed(_)), "{outcome:?}");
+    assert!(report.moved.is_empty());
+    assert_eq!(snapshot(&src), before, "source intact");
+    assert_no_temp(&dest);
+}
+
+/// A source in use (locked by another program): the files before it are
+/// copied, it is not, nothing partial or temporary remains.
+#[test]
+fn a_locked_source_fails_cleanly() {
+    let t = tempfile::tempdir().unwrap();
+    let (a, b) = (t.path().join("a.txt"), t.path().join("em uso.txt"));
+    write(&a, b"primeiro");
+    write(&b, b"aberto por outro programa");
+    let dest = t.path().join("destino");
+    std::fs::create_dir(&dest).unwrap();
+    let _lock = hold(&b, 0);
+    let (e, rx) = engine();
+    let (_, outcome, report) = run(&e, &rx, Job::copy(vec![a.clone(), b.clone()], dest.clone()));
+    assert!(matches!(outcome, Outcome::Failed(_)), "{outcome:?}");
+    assert_eq!(report.copied.len(), 1);
+    assert_eq!(std::fs::read(dest.join("a.txt")).unwrap(), b"primeiro");
+    assert!(!dest.join("em uso.txt").exists());
+    assert_no_temp(&dest);
+    drop(_lock);
+    assert_eq!(std::fs::read(&b).unwrap(), b"aberto por outro programa");
+}
+
+/// "Replace" onto a file that is in use, or read-only: the existing file
+/// keeps its content and the new one is not left behind as a temporary.
+#[test]
+fn replace_onto_a_locked_or_read_only_file_keeps_it() {
+    let t = tempfile::tempdir().unwrap();
+    let src = t.path().join("origem").join("x.txt");
+    write(&src, b"novo");
+    let dest = t.path().join("destino");
+    let target = dest.join("x.txt");
+    write(&target, b"antigo");
+    let (e, rx) = engine();
+
+    let lock = hold(&target, 0);
+    let job = Job::copy(vec![src.clone()], dest.clone()).on_conflict(Resolution::Replace);
+    let (_, outcome, _) = run(&e, &rx, job);
+    assert!(matches!(outcome, Outcome::Failed(_)), "locked: {outcome:?}");
+    drop(lock);
+    assert_eq!(std::fs::read(&target).unwrap(), b"antigo");
+    assert_no_temp(&dest);
+
+    let mut perms = std::fs::metadata(&target).unwrap().permissions();
+    perms.set_readonly(true);
+    std::fs::set_permissions(&target, perms.clone()).unwrap();
+    let job = Job::copy(vec![src.clone()], dest.clone()).on_conflict(Resolution::Replace);
+    let (_, outcome, _) = run(&e, &rx, job);
+    assert!(
+        matches!(outcome, Outcome::Failed(_)),
+        "read-only: {outcome:?}"
+    );
+    assert_eq!(std::fs::read(&target).unwrap(), b"antigo");
+    assert_no_temp(&dest);
+    #[allow(clippy::permissions_set_readonly_false)]
+    perms.set_readonly(false);
+    std::fs::set_permissions(&target, perms).unwrap();
+    assert_eq!(std::fs::read(&src).unwrap(), b"novo");
+}
+
+/// A move across volumes whose source cannot be deleted (in use): the copy
+/// is complete, the source stays. A duplicate, never a loss.
+#[test]
+fn cross_volume_move_with_an_undeletable_source_keeps_both() {
+    let t = tempfile::tempdir().unwrap();
+    let src = t.path().join("relatório.pdf");
+    let content = pattern(500_000, 5);
+    write(&src, &content);
+    let dest = t.path().join("destino");
+    std::fs::create_dir(&dest).unwrap();
+    // Others may read it (so it can be copied) but not delete it.
+    let lock = hold(&src, 1); // FILE_SHARE_READ
+    let (e, rx) = engine();
+    let mut job = Job::move_to(vec![src.clone()], dest.clone());
+    job.force_copy = true;
+    let (_, outcome, report) = run(&e, &rx, job);
+    drop(lock);
+    assert!(matches!(outcome, Outcome::Failed(_)), "{outcome:?}");
+    assert!(report.moved.is_empty());
+    assert_eq!(std::fs::read(&src).unwrap(), content, "source kept");
+    assert_eq!(
+        std::fs::read(dest.join("relatório.pdf")).unwrap(),
+        content,
+        "copy complete"
+    );
+    assert_no_temp(&dest);
+}
+
+/// The process is killed in the middle of a copy (a real child process,
+/// `TerminateProcess`): the source is intact, no destination file appears,
+/// and the next engine start deletes the temporary file it left.
+#[test]
+fn killed_mid_copy_recovers_on_the_next_start() {
+    let t = tempfile::tempdir().unwrap();
+    let src = t.path().join("grande.bin");
+    let content = pattern(48 << 20, 6);
+    write(&src, &content);
+    let dest = t.path().join("destino");
+    std::fs::create_dir(&dest).unwrap();
+    let journal = t.path().join("journal");
+
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "tests::child_copies_until_killed",
+            "--ignored",
+            "--nocapture",
+        ])
+        .env("FX_OPS_CHILD_SRC", &src)
+        .env("FX_OPS_CHILD_DEST", &dest)
+        .env("FX_OPS_CHILD_JOURNAL", &journal)
+        .stdout(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    // Wait for the temporary file to exist and grow, then kill.
+    let start = Instant::now();
+    let temp = loop {
+        let found = std::fs::read_dir(&dest)
+            .unwrap()
+            .flatten()
+            .map(|e| e.path())
+            .find(|p| p.to_string_lossy().contains(".fx-"));
+        if let Some(p) = found
+            && std::fs::metadata(&p).is_ok_and(|m| m.len() > 0)
+        {
+            break p;
+        }
+        assert!(start.elapsed() < WAIT, "the child never started copying");
+        std::thread::sleep(Duration::from_millis(5));
+    };
+    std::thread::sleep(Duration::from_millis(100));
+    child.kill().unwrap();
+    child.wait().unwrap();
+
+    assert!(temp.exists(), "killed mid-copy: the temporary file is left");
+    assert!(!dest.join("grande.bin").exists(), "no partial destination");
+    assert_eq!(std::fs::read(&src).unwrap(), content, "source intact");
+
+    let (tx, _rx) = channel();
+    let _engine = Engine::start_with_journal(tx, &journal).unwrap();
+    assert_no_temp(&dest);
+    assert_eq!(std::fs::read(&src).unwrap(), content);
+}
+
+/// Child of [`killed_mid_copy_recovers_on_the_next_start`]; does nothing
+/// when run on its own.
+#[test]
+#[ignore]
+fn child_copies_until_killed() {
+    let (Some(src), Some(dest), Some(journal)) = (
+        std::env::var_os("FX_OPS_CHILD_SRC"),
+        std::env::var_os("FX_OPS_CHILD_DEST"),
+        std::env::var_os("FX_OPS_CHILD_JOURNAL"),
+    ) else {
+        return;
+    };
+    let (tx, rx) = channel();
+    let e = Engine::start_with_journal(tx, Path::new(&journal)).unwrap();
+    let mut job = Job::copy(vec![PathBuf::from(src)], PathBuf::from(dest));
+    job.throttle = true;
+    let _ = run(&e, &rx, job);
+}
+
+/// A file larger than 4 GiB (sizes past 32 bits). Ignored: it writes 8 GB
+/// to %TEMP%. Run with `-- --ignored larger_than_4_gib`.
+#[test]
+#[ignore]
+fn larger_than_4_gib() {
+    use std::io::{Seek, SeekFrom, Write};
+    let t = tempfile::tempdir().unwrap();
+    let src = t.path().join("enorme.bin");
+    let size: u64 = (4 << 30) + (1 << 20);
+    {
+        let mut f = std::fs::File::create(&src).unwrap();
+        f.write_all(b"inicio").unwrap();
+        f.set_len(size).unwrap();
+        f.seek(SeekFrom::Start(size - 3)).unwrap();
+        f.write_all(b"fim").unwrap();
+    }
+    let dest = t.path().join("destino");
+    std::fs::create_dir(&dest).unwrap();
+    let (e, rx) = engine();
+    let started = Instant::now();
+    let (_, outcome, _) = run(&e, &rx, Job::copy(vec![src.clone()], dest.clone()));
+    println!(
+        "4 GiB + 1 MiB copied in {:.1} s",
+        started.elapsed().as_secs_f64()
+    );
+    assert_eq!(outcome, Outcome::Done);
+    let copy = dest.join("enorme.bin");
+    assert_eq!(std::fs::metadata(&copy).unwrap().len(), size);
+    let mut f = std::fs::File::open(&copy).unwrap();
+    let mut buf = [0u8; 6];
+    std::io::Read::read_exact(&mut f, &mut buf).unwrap();
+    assert_eq!(&buf, b"inicio");
+    f.seek(SeekFrom::Start(size - 3)).unwrap();
+    let mut end = [0u8; 3];
+    std::io::Read::read_exact(&mut f, &mut end).unwrap();
+    assert_eq!(&end, b"fim");
+    assert_no_temp(&dest);
+}

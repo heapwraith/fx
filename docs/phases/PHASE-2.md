@@ -49,7 +49,7 @@ Regras: faça as tarefas **na ordem**. Ao concluir uma, marque `[x]`, coloque a 
 - P8 medida ≤ 80 MB; capturas das migalhas a 640 px; lista dos testes manuais com resultado.
 
 ## T2.4 — Testes de falha do motor de operações (SAFETY.md §3)
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: 9 testes novos no `fx-ops` (37 no total), todos sem perda: disco cheio no meio (cópia e movimentação entre volumes), origem em uso, "substituir" sobre arquivo em uso ou somente leitura, mover com origem que não pode ser apagada (fica duplicado, nunca perdido), **processo morto de verdade no meio da cópia** (10 de 10) e arquivo de 4 GiB + 1 MiB (5,7 s, ignorado por gravar 8 GB). Novo diário de temporários: o fx apaga na partida o que um processo morto deixou (D-039).
 
 **Fazer**
 - Testes de `fx-ops`: falta de espaço no meio da cópia (VHD pequeno ou cota em pasta temporária), arquivo em uso e acesso negado, cancelamento no meio, processo morto no meio (reabrir e conferir), nomes Unicode, caminhos > 260, 0 bytes e > 4 GB.

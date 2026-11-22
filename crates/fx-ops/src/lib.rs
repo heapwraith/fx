@@ -91,6 +91,13 @@ pub struct Job {
     confirmed: bool,
     /// Tests: treat a move as cross-volume (copy, verify, delete).
     force_copy: bool,
+    /// Tests: each file fails like a full disk after this many bytes were
+    /// written to its temporary file (T2.4).
+    #[cfg(test)]
+    fail_after: Option<u64>,
+    /// Tests: copy slowly (so another process can be killed mid-copy).
+    #[cfg(test)]
+    throttle: bool,
 }
 
 impl Job {
@@ -157,6 +164,10 @@ impl Job {
             restore: Vec::new(),
             confirmed: false,
             force_copy: false,
+            #[cfg(test)]
+            fail_after: None,
+            #[cfg(test)]
+            throttle: false,
         }
     }
 
@@ -413,6 +424,7 @@ type Controls = Arc<Mutex<HashMap<JobId, Arc<Control>>>>;
 struct Work {
     id: JobId,
     job: Box<Job>,
+    journal: Option<Arc<journal::Journal>>,
     control: Arc<Control>,
     answers: Receiver<(Resolution, bool)>,
 }
@@ -420,6 +432,7 @@ struct Work {
 /// The queue. Dropping it lets running jobs finish and stops the workers.
 pub struct Engine {
     tx: Mutex<Sender<Work>>,
+    journal: Option<Arc<journal::Journal>>,
     controls: Controls,
     next: AtomicU64,
 }
@@ -433,6 +446,22 @@ impl std::fmt::Debug for Engine {
 impl Engine {
     /// Starts the queue; events of every job arrive on `events`.
     pub fn start(events: Sender<Event>) -> io::Result<Self> {
+        Self::start_inner(events, None)
+    }
+
+    /// [`Engine::start`] with a journal of temporary files in `dir` (T2.4):
+    /// first deletes the temporary files left by processes that died in the
+    /// middle of a copy ([`recover`]), then records this process's.
+    pub fn start_with_journal(events: Sender<Event>, dir: &Path) -> io::Result<Self> {
+        recover(dir);
+        let journal = journal::Journal::create(dir)?;
+        Self::start_inner(events, Some(Arc::new(journal)))
+    }
+
+    fn start_inner(
+        events: Sender<Event>,
+        journal: Option<Arc<journal::Journal>>,
+    ) -> io::Result<Self> {
         let (tx, rx) = channel::<Work>();
         let controls: Controls = Arc::default();
         let done = controls.clone();
@@ -441,6 +470,7 @@ impl Engine {
             .spawn(move || schedule(&rx, &events, &done))?;
         Ok(Self {
             tx: Mutex::new(tx),
+            journal,
             controls,
             next: AtomicU64::new(1),
         })
@@ -459,6 +489,7 @@ impl Engine {
         let _ = lock(&self.tx).send(Work {
             id,
             job: Box::new(job),
+            journal: self.journal.clone(),
             control,
             answers,
         });
@@ -591,6 +622,8 @@ fn measure(path: &Path) -> (u64, u64) {
 struct Run<'a> {
     id: JobId,
     job: &'a Job,
+    /// Where temporary files are recorded before they exist (T2.4).
+    journal: Option<&'a journal::Journal>,
     cancel: &'a AtomicI32,
     control: &'a Control,
     answers: &'a Receiver<(Resolution, bool)>,
@@ -650,6 +683,7 @@ fn run_job(work: &Work, events: &Sender<Event>) {
     let mut run = Run {
         id: work.id,
         job,
+        journal: work.journal.as_deref(),
         cancel: &work.control.cancel,
         control: &work.control,
         answers: &work.answers,
@@ -981,11 +1015,22 @@ impl Run<'_> {
             .file_name()
             .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
         let temp = dir.join(format!(".{name}.fx-{}-{}.tmp", std::process::id(), self.id));
+        if let Some(journal) = self.journal {
+            // Before the file exists: if fx dies while copying, the next start
+            // finds and deletes it. No journal entry, no copy.
+            journal.add(&temp)?;
+        }
         let base = self.done;
         let copied = {
             let (events, id, total) = (self.events, self.id, self.total);
             let last = &mut self.last_progress;
+            #[cfg(test)]
+            let throttle = self.job.throttle;
             let mut report = |bytes: u64| {
+                #[cfg(test)]
+                if throttle {
+                    std::thread::sleep(Duration::from_millis(15));
+                }
                 if last.elapsed() >= PROGRESS_EVERY {
                     *last = Instant::now();
                     let _ = events.send(Event::Progress {
@@ -996,7 +1041,14 @@ impl Run<'_> {
                     });
                 }
             };
-            copy_file(src, &temp, self.cancel, &mut report)
+            #[cfg(test)]
+            let copied = match self.job.fail_after {
+                Some(limit) => disk_full_after(src, &temp, limit),
+                None => copy_file(src, &temp, self.cancel, &mut report),
+            };
+            #[cfg(not(test))]
+            let copied = copy_file(src, &temp, self.cancel, &mut report);
+            copied
         };
         let finish = copied.map_err(Stop::from).and_then(|()| {
             let written = std::fs::metadata(&temp)?.len();
@@ -1027,6 +1079,20 @@ impl Run<'_> {
         });
         Ok(())
     }
+}
+
+/// Tests: a copy that runs out of disk space. Writes the first `limit`
+/// bytes of `src` to `dst` (the partial file a real copy leaves behind) and
+/// fails with `ERROR_DISK_FULL`, like `CopyFile2` on a full volume.
+#[cfg(test)]
+fn disk_full_after(src: &Path, dst: &Path, limit: u64) -> io::Result<()> {
+    use std::io::Read;
+    let mut partial = Vec::new();
+    std::fs::File::open(src)?
+        .take(limit)
+        .read_to_end(&mut partial)?;
+    std::fs::write(dst, partial)?;
+    Err(io::Error::from_raw_os_error(112)) // ERROR_DISK_FULL
 }
 
 /// Final rename of a verified temporary file. If the name was taken while
@@ -1089,6 +1155,9 @@ fn copy_file(
 ) -> io::Result<()> {
     windows::copy_file(src, dst, cancel, report)
 }
+
+mod journal;
+pub use journal::recover;
 
 #[cfg(test)]
 mod tests;

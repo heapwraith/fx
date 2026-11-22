@@ -11,7 +11,10 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 - Migalhas que não cabem viram um botão "…" com o menu das pastas escondidas.
 - `fx-bench memory` mede a memória parada (P8).
 
+- Testes de falha do motor de operações (disco cheio, arquivo em uso, processo morto, > 4 GB).
+
 ### Corrigido
+- Uma cópia interrompida porque o fx foi encerrado à força deixava um arquivo temporário no destino; agora ele é apagado na próxima abertura.
 - O fx podia fechar sozinho na abertura em certas larguras de janela (texto truncado com reticências).
 
 ## [0.1.0] — 2026-11-21
