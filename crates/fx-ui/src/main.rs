@@ -26,6 +26,7 @@ mod persist;
 mod places;
 mod store;
 mod tabs_view;
+mod tags;
 mod theme;
 mod thumbs;
 mod trace;
@@ -86,6 +87,7 @@ fn log_panics() {
 
 fn main() {
     log_panics();
+    tags::init();
     // An empty argument counts as none (a shell command with "%1" and no item).
     let arg = std::env::args_os().nth(1).filter(|a| !a.is_empty());
     // No folder (Win+E, the Start Menu): the user's home, not the working

@@ -348,6 +348,15 @@ impl Ops {
                 let _ = fx_shell::clear_clipboard();
             });
         }
+        // Tags follow what fx renamed or moved (T3.4).
+        for (old, new) in report
+            .moved
+            .iter()
+            .chain(report.renamed.iter())
+            .chain(report.batch_renamed.iter())
+        {
+            crate::tags::moved(old, new);
+        }
         let Some(pending) = self.pending.remove(&id) else {
             return;
         };

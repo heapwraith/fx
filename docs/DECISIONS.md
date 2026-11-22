@@ -371,3 +371,12 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Atalho:** Ctrl+Shift+3, lido pelo estado do teclado como Ctrl+Shift+2/6 (D-034), por causa do Shift+dígito do GPUI.
 - **Pendente:** arrastar, menu de contexto e Quick Look dentro das colunas; salvar o modo na sessão.
 
+## D-049 — Etiquetas coloridas (T3.4)
+- **Data:** 2026-11-22 · **Status:** aceita
+- **Modelo:** até 7 por item numa máscara de bits (`fx-core::tags`: vermelho, laranja, amarelo, verde, azul, roxo, cinza; nomes em português e inglês ou 1–7).
+- **Onde ficam:** `%LOCALAPPDATA%\fx\tags.db` (SQLite, já no projeto), tabela `tags(key, path, mask)`, com a chave em minúsculas (o NTFS ignora maiúsculas) e o caminho como escrito, para exibir. Um espelho em memória atende a interface (um lock e uma busca por hash); carregar e gravar acontecem na thread `fx-tags`. Com `FX_NO_STATE=1`, só em memória.
+- **Acompanham o fx:** ao terminar uma operação, o que o relatório diz que foi renomeado ou movido (inclusive em lote) leva as etiquetas; uma pasta leva as de tudo que está dentro (sem confundir `Nova` com `Nova2`). Mudanças feitas fora do fx não são vistas (o item etiquetado que sumiu simplesmente não aparece na busca).
+- **Teclado:** Alt+1…7 liga ou desliga a etiqueta na seleção (desliga em todos quando todos já têm), Alt+0 limpa. Na lista, um ponto de 8 px por etiqueta ao lado do nome.
+- **Busca:** `etiqueta:verde` (ou `tag:`) responde direto das etiquetas, em qualquer pasta, e aplica depois o nome e os outros filtros.
+- **Pendente:** etiquetas na grade e nas colunas; editar os nomes das etiquetas; filtro por etiqueta na paleta.
+

@@ -202,6 +202,8 @@ fn index_for(volume: &str) -> Option<Arc<Index>> {
 
 /// The backend a search runs on (moved to its worker thread).
 enum Backend {
+    /// `etiqueta:` — the tagged items, wherever they are (T3.4).
+    Tags,
     Service,
     OwnIndex(String, Arc<Index>),
     Folder(PathBuf),
@@ -374,6 +376,7 @@ impl FolderView {
             return;
         }
         let backend = match (search.scope, search.disk) {
+            _ if filters.tags != 0 => Backend::Tags,
             (Scope::Disk, Disk::Service) => Backend::Service,
             (Scope::Disk, Disk::OwnIndex) => {
                 match volume_of(&search.root).and_then(|v| index_for(&v).map(|i| (v, i))) {
@@ -391,6 +394,7 @@ impl FolderView {
             .spawn(move || {
                 let summary = match backend {
                     Backend::Service => service_search(&filters, &tx),
+                    Backend::Tags => tag_search(&filters, &tx),
                     Backend::OwnIndex(volume, index) => {
                         index_search(&index, &volume, &filters, &cancel, &tx)
                     }
@@ -873,6 +877,37 @@ fn sort_found(hits: &mut [Found], order: Order) {
 /// " · imagens · > 10 MB" for the summary line.
 fn filter_suffix(filters: &Filters) -> String {
     filters.labels.iter().map(|l| format!(" · {l}")).collect()
+}
+
+/// Every item with the wanted tags, filtered by name and the other filters;
+/// returns the summary line.
+fn tag_search(filters: &Filters, tx: &std::sync::mpsc::Sender<Vec<Found>>) -> String {
+    let needle = fx_core::natural::fold(filters.text.trim());
+    let mut found = Vec::new();
+    for path in crate::tags::tagged(filters.tags) {
+        let Ok(meta) = std::fs::metadata(&path) else {
+            continue; // gone (deleted outside fx)
+        };
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let modified = meta.modified().map(unix).unwrap_or(0);
+        if !needle.is_empty() && !fx_core::natural::fold(&name).contains(&needle) {
+            continue;
+        }
+        if !filters.matches(&name, meta.is_dir(), meta.len(), modified) {
+            continue;
+        }
+        found.push(Found::new(path, meta.is_dir(), meta.len(), modified));
+    }
+    let n = found.len();
+    let _ = tx.send(found);
+    format!(
+        "{} com essa etiqueta{}",
+        fx_core::format::items(n),
+        filter_suffix(filters)
+    )
 }
 
 /// The index service (every NTFS volume); returns the summary line.

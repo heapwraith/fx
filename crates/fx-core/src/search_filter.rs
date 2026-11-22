@@ -26,6 +26,9 @@ pub struct Filters {
     /// Modification time in Unix seconds: `[min, max)`.
     pub modified_min: Option<i64>,
     pub modified_max: Option<i64>,
+    /// Color tags every result must have (T3.4); checked by the caller,
+    /// who knows the tags of each path.
+    pub tags: u8,
     /// One short label per filter understood ("imagens", "> 10 MB"), for the UI.
     pub labels: Vec<String>,
     /// Filter words fx could not read ("tamanho:muito").
@@ -72,6 +75,14 @@ impl Filters {
                 "tipo" | "type" => f.kind(&value),
                 "ext" => f.ext(&value),
                 "tamanho" | "size" => f.size(&value).is_some(),
+                "etiqueta" | "tag" => match crate::tags::bit_for(&value) {
+                    Some(bit) => {
+                        f.tags |= bit;
+                        f.labels.push(format!("etiqueta {value}"));
+                        true
+                    }
+                    None => false,
+                },
                 "data" | "date" | "modificado" | "modified" => {
                     f.date(&value, now, utc_offset).is_some()
                 }
@@ -97,6 +108,7 @@ impl Filters {
             || self.size_max.is_some()
             || self.modified_min.is_some()
             || self.modified_max.is_some()
+            || self.tags != 0
     }
 
     /// Whether an entry passes the filters (the name is matched elsewhere).
@@ -407,6 +419,15 @@ mod tests {
             let (y, m, d) = crate::format::civil_from_days(days);
             assert_eq!(days_from_civil(y, m, d), days);
         }
+    }
+
+    #[test]
+    fn tag_filter() {
+        let f = p("relatório etiqueta:verde tag:red");
+        assert_eq!(f.text, "relatório");
+        assert_eq!(f.tags, (1 << 3) | 1);
+        assert!(f.is_active());
+        assert_eq!(p("etiqueta:rosa").problems.len(), 1);
     }
 
     #[test]

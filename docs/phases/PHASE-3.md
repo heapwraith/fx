@@ -40,7 +40,7 @@
 - Abrir uma pasta de 100 mil numa coluna sem travar (P4); teste do modelo de colunas (caminho → colunas, seleção, voltar).
 
 ## T3.4 — Etiquetas
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: 7 etiquetas coloridas (`fx-core::tags`); Alt+1…7 liga/desliga na seleção, Alt+0 limpa; bolinhas ao lado do nome; guardadas em `tags.db` (SQLite, thread própria, espelho em memória) e levadas junto em renomear/mover feitos pelo fx; `etiqueta:verde` na busca acha os itens etiquetados em qualquer pasta (D-049). Testes da loja e do filtro; conferido na janela.
 
 **Fazer**
 - Até 7 etiquetas coloridas por item (nomes editáveis), guardadas no banco do fx (por caminho, seguindo renomeações e movimentos feitos pelo fx); coluna/ponto de cor na lista; filtrar por etiqueta na busca (`etiqueta:`) e na paleta.

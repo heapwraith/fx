@@ -742,14 +742,34 @@ impl FolderView {
                             })
                             .child(match self.renaming.as_ref().filter(|r| r.entry == i) {
                                 Some(r) => self.render_rename_box(r, t).into_any_element(),
-                                None => div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .truncate()
-                                    .when(dim, |d| d.opacity(HIDDEN_OPACITY))
-                                    .text_color(rgba(t.text))
-                                    .child(SharedString::from(self.list.name(i).to_owned()))
-                                    .into_any_element(),
+                                None => {
+                                    let tags =
+                                        crate::tags::mask_of(&self.path.join(self.list.os_name(i)));
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(space(2)))
+                                        .child(
+                                            div()
+                                                .min_w_0()
+                                                .truncate()
+                                                .when(dim, |d| d.opacity(HIDDEN_OPACITY))
+                                                .text_color(rgba(t.text))
+                                                .child(SharedString::from(
+                                                    self.list.name(i).to_owned(),
+                                                )),
+                                        )
+                                        .children(fx_core::tags::colors(tags).map(|(_, c)| {
+                                            div()
+                                                .flex_none()
+                                                .size(px(8.0))
+                                                .rounded_full()
+                                                .bg(rgba(c))
+                                        }))
+                                        .into_any_element()
+                                }
                             })
                             .when(columns.kind, |d| {
                                 d.child(
@@ -1748,6 +1768,15 @@ impl FolderView {
             "enter" if only_alt => {
                 self.show_properties(cx);
                 Some("open")
+            }
+            // Alt+1..7 toggles a color tag on the selection, Alt+0 clears (T3.4).
+            d @ ("0" | "1" | "2" | "3" | "4" | "5" | "6" | "7") if only_alt => {
+                let paths = self.targets();
+                match d.parse::<u8>().unwrap_or(0) {
+                    0 => crate::tags::clear(&paths),
+                    n => crate::tags::toggle(&paths, 1 << (n - 1)),
+                }
+                Some("move")
             }
             _ if m.alt || m.platform => None,
             _ if step.is_some() => {

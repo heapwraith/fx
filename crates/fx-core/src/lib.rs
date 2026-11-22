@@ -20,6 +20,7 @@ pub mod preview;
 pub mod search_filter;
 mod selection;
 mod tabs;
+pub mod tags;
 mod undo;
 pub mod zip_list;
 
