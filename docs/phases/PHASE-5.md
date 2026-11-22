@@ -1,6 +1,8 @@
-# Fase 5 — Pendências de todas as fases
+# Fase 5 — Pendências de todas as fases e lançamento da 1.0
 
-> Criada em 2026-11-22, a pedido do usuário: tudo o que faltou nas fases anteriores fica numa etapa só, separada para o final, depois da Fase 4 (atualizador e polimento) e de o fx estar em uso no PC do usuário. A ordem abaixo é uma sugestão; o usuário escolhe.
+> Criada em 2026-11-22, a pedido do usuário: tudo o que faltou nas fases anteriores fica numa etapa só, separada para o final. A Fase 4 terminou com o fx instalado e em uso no PC do usuário (`bench/results/gate-4.md`). **Ainda não iniciada:** começa quando o usuário pedir. A ordem abaixo é uma sugestão; o usuário escolhe.
+
+**Objetivo:** fechar tudo o que ficou para depois, testar com o usuário o que só uma pessoa pode testar e publicar a 1.0 assinada.
 
 ## T5.1 — Testes manuais com o usuário
 - [ ] Concluída em: ____ · Resumo:
@@ -10,10 +12,12 @@ Toda a lista de `docs/TESTES-FINAIS.md` (Narrador, Explorador, totais pelo servi
 ## T5.2 — Distribuição
 - [ ] Concluída em: ____ · Resumo:
 
-- Assinatura pela SignPath Foundation (inscrição é do usuário).
-- Publicar a beta e depois a 1.0 no GitHub.
+- Assinatura pela SignPath Foundation (inscrição é do usuário; passos em `docs/SIGNING.md`).
+- Publicar a beta e depois a 1.0 no GitHub (o atualizador só enxerga releases publicados, não rascunhos).
+- **Licenças de terceiros:** gerar um `THIRD-PARTY-NOTICES` com a licença de cada dependência (GPUI, Apache 2.0, e as demais) e incluí-lo no instalador e no zip; a Apache 2.0 pede que a licença acompanhe o programa e que arquivos modificados sejam indicados.
 - Pacote MSIX para a Microsoft Store e manifesto do winget.
 - Ações do CI que ainda usam Node 20.
+- Instalador menor (hoje 15,2 MB, porque o programa do instalador leva o GPUI sem compressão).
 
 ## T5.3 — Site, documentação de uso e vídeo
 - [ ] Concluída em: ____ · Resumo:
@@ -40,6 +44,9 @@ Seguir a pasta da aba (`cd`) quando ela muda, cmd além do PowerShell, rolar o h
 - Janela de prévia do Windows: atraso de até 250 ms ao mover a janela e sobreposição a menus.
 - Benchmarks de entrada conferirem o foco da janela antes de começar (falhas pontuais vistas no portão 3).
 - Compilação ARM64 local no WSL (cabeçalhos ARM64 do xwin).
+- **Memória parado (P8):** está em 87–88 MB com meta de 88. Descobrir o que carrega WinTrust e Crypt32 no processo parado e o peso do atlas de glifos, e abrir margem.
+- `fx-indexd`: a cópia em Program Files não é atualizada pelo atualizador nem removida pelo desinstalador (hoje só avisa).
+- A cópia temporária usada para desinstalar fica em `%TEMP%`.
 
 ---
 

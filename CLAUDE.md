@@ -13,7 +13,7 @@ Leia antes de qualquer tarefa:
 - `docs/ARCHITECTURE.md` — crates, threads, processos, o que pode depender do quê.
 - `docs/PERFORMANCE.md` — metas numéricas e o protocolo de medição.
 - `docs/SAFETY.md` — regras de segurança de dados e limites de autonomia. **Obrigatório.**
-- A fase atual em `docs/phases/` (hoje: `PHASE-4.md`; a Fase 3 passou no portão em 2026-11-22; pendências de todas as fases em `PHASE-5.md`).
+- O roteiro em `docs/ROADMAP.md` e a fase atual em `docs/phases/` (hoje: `PHASE-5.md`, ainda não iniciada; as fases 0 a 4 passaram no portão, a última em 2026-11-22).
 - `docs/DECISIONS.md` — decisões já tomadas. Não reabra sem motivo novo e registrado.
 
 ## Ambiente (crítico)
@@ -38,6 +38,7 @@ cargo fmt --all
 cargo xwin run -p fx-ui --release                                  # abre o app no Windows
 cargo xwin run -p fx-bench --release -- fixtures                   # gera as pastas de teste em %TEMP%\fx-fixtures
 cargo xwin run -p fx-bench --release -- all                        # roda todos os benchmarks e grava bench/results/*.json
+cargo xwin build --release -p fx-setup                             # instalador; empacotar: fx-setup --pack <stub> <bins> <raiz> <saída>
 ```
 
 O `clippy` precisa de `--target` explícito: sem ele, o `cargo xwin` repete o `--target` nos argumentos do rustc e falha.

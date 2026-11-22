@@ -4,21 +4,27 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 
 ## [Não lançado]
 
+Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualizador.
+
 ### Adicionado
-- Instalador próprio (fx-setup), com a cara do fx, desinstalação limpa e atualização sem fechar o app.
-- Telas "Sobre o fx" e "Como usar o fx" (F1; abre sozinha na primeira vez).
-- Transições curtas nas sobreposições (respeitam "Efeitos de animação" do Windows) e mensagens para busca e paleta sem resultado.
-- Atualizador: aviso de versão nova e instalação pela paleta, conferida por SHA-256.
-- Relatório de falhas local e anônimo, com issue pré-preenchida (nada é enviado sozinho).
-- Estado de pastas de nuvem (OneDrive e outras) e comandos para manter ou liberar espaço.
-- Interface em português e inglês (idioma do Windows; troca na paleta).
-- Build e instalador para Windows ARM64.
-- Alto contraste do Windows: o fx usa as cores do sistema e troca ao vivo.
-- Terminal embutido (Ctrl+J) com PowerShell na pasta atual.
-- Etiquetas coloridas (Alt+1…7) e busca por `etiqueta:`.
-- Vista em colunas (Ctrl+Shift+3).
-- Painel duplo (F3): Tab troca de painel, F5 copia e F6 move para o outro painel.
-- Tornar o fx o gerenciador de arquivos padrão (pastas, unidades e Win+E) pela paleta, com "Voltar ao Explorador" que restaura tudo.
+- **Instalador próprio** (fx-setup), com a interface do fx: instala só para o usuário, troca os arquivos de uma vez (volta ao que havia se algo falhar) e desinstala sem deixar nada. Substitui o Inno Setup.
+- **Atualizações automáticas:** a versão nova é baixada e conferida (SHA-256) em segundo plano e aplicada ao fechar o fx; "Atualizar o fx" na paleta reinicia na hora. Pode ser desligado.
+- Telas **"Sobre o fx"** e **"Como usar o fx"** (F1; abre sozinha na primeira vez).
+- **Gerenciador padrão:** pastas, unidades e Win+E abrem no fx; "Voltar ao Explorador" restaura tudo.
+- **Painel duplo** (F3): Tab troca de painel, F5 copia e F6 move para o outro.
+- **Vista em colunas** (Ctrl+Shift+3).
+- **Etiquetas coloridas** (Alt+1…7) e busca por `etiqueta:`.
+- **Terminal embutido** (Ctrl+J) com PowerShell na pasta atual.
+- **Pastas de nuvem** (OneDrive e outras): estado de cada item e comandos para manter ou liberar espaço.
+- Interface em **português e inglês** (idioma do Windows; troca na paleta).
+- **Alto contraste** do Windows com as cores do sistema, ao vivo.
+- **Relatório de falhas** local e anônimo, com issue pré-preenchida (nada é enviado sozinho).
+- Build e instalador para **Windows ARM64**.
+- Transições curtas nas sobreposições (respeitam "Efeitos de animação" do Windows) e mensagens claras para busca e paleta sem resultado.
+
+### Mudado
+- Mensagens de erro de cópia, Lixeira, menu e Propriedades nos dois idiomas.
+- As bibliotecas de rede do atualizador só carregam quando ele roda (menos memória na abertura).
 
 ## [0.2.0-beta] — 2026-11-22
 

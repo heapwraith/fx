@@ -6,7 +6,7 @@ Um gerenciador de arquivos pode destruir o trabalho de alguém em um clique. Est
 
 Pergunte ao usuário e espere a resposta antes de:
 
-- **Alterar o registro do Windows** (`reg add`, `reg delete`, `Set-ItemProperty HKCU:/HKLM:`, ou código que faça isso fora de um teste com chave temporária). Isso inclui registrar o app como gerenciador padrão — só na Fase 3, e só quando o usuário pedir.
+- **Alterar o registro do Windows** (`reg add`, `reg delete`, `Set-ItemProperty HKCU:/HKLM:`, ou código que faça isso fora de um teste com chave temporária). Isso inclui registrar o app como gerenciador padrão (só quando o usuário pedir) e instalar o fx no PC do usuário.
 - **Rodar qualquer coisa como Administrador** ou instalar serviços (`sc create`, `New-Service`).
 - **Apagar, mover ou renomear arquivos fora de**: pastas criadas por `tempfile`, `%TEMP%\fx-fixtures`, `target/` e o próprio repositório.
 - **`git push`**, criar releases, publicar crates, mexer em configurações globais do git.
@@ -27,11 +27,16 @@ Nunca, nem com pedido: formatar unidades, desativar o Windows Defender, apagar p
 
 ## 3. Testes obrigatórios do motor de operações
 
-Antes da beta pública (portão da Fase 2), `fx-ops` precisa de testes que simulem:
+`fx-ops` tem testes (desde o portão da Fase 2) que simulam:
 - falta de espaço no meio da cópia,
 - arquivo em uso / acesso negado,
 - cancelamento no meio,
 - queda (processo morto) no meio — ao reabrir, nada corrompido,
 - nomes Unicode, caminhos > 260 caracteres, arquivos de 0 bytes e > 4 GB.
 
-Nenhum desses pode resultar em perda de dados. Um único caso de perda reprova o portão.
+Nenhum desses pode resultar em perda de dados. Um único caso de perda reprova qualquer portão.
+
+## 4. Instalador e atualizações
+
+- O instalador troca os arquivos de uma vez e volta ao que havia se algo falhar; nunca apaga um arquivo que não instalou.
+- Uma atualização só é aplicada depois de conferir o SHA-256 contra o `SHA256SUMS.txt` do release e, quando o fx for assinado, a assinatura do instalador.

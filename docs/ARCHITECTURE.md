@@ -1,85 +1,99 @@
 # Arquitetura
 
-Regra central: **a interface só desenha.** Tudo que pode demorar roda em workers ou em processos separados, e se comunica com a UI por mensagens.
+Regra central: **a interface só desenha.** Tudo que pode demorar roda em threads de trabalho ou em processos separados, e conversa com a interface por mensagens. Nada de disco, rede, COM do shell ou espera de lock na thread de UI.
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│ fx-ui  (binário `fx`) — GPUI, thread de UI                   │
-│   lista virtualizada · abas · paleta · Quick Look            │
-└───────────────▲──────────────────────────────┬───────────────┘
-                │ eventos/estado (canal)       │ comandos
-┌───────────────┴──────────────────────────────▼───────────────┐
-│ fx-core — estado, comandos, ordenação, filtro, histórico     │
-│   sem Windows, sem I/O, 100% testável, #![forbid(unsafe)]    │
-└──────┬──────────────┬───────────────┬───────────────┬────────┘
-       │              │               │               │
-  ┌────▼─────┐  ┌─────▼─────┐  ┌──────▼─────┐  ┌──────▼─────┐
-  │ fx-fs    │  │ fx-fs     │  │ fx-shell   │  │ fx-ops     │
-  │ leitura  │  │ observador│  │ COM (STA): │  │ fila de    │
-  │ de pastas│  │ de mudança│  │ menu, mini-│  │ operações, │
-  │          │  │           │  │ aturas, D&D│  │ desfazer   │
-  └──────────┘  └───────────┘  └─────┬──────┘  └────────────┘
-       │ named pipe                  │
-  ┌────▼───────────────────┐   ┌─────▼──────────────────────┐
-  │ fx-indexd (elevado)    │   │ fx-preview (processo)      │
-  │ MFT + USN → índice     │   │ preview handlers isolados  │
-  └────────────────────────┘   └────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│ fx  (fx-ui) — GPUI, thread de UI                                  │
+│   abas · lista/grade/colunas · paleta · busca · Quick Look        │
+│   painel duplo · terminal · atualizador · Sobre / Como usar       │
+└──────▲─────────────────────────────────────────────────┬──────────┘
+       │ estado e eventos (canais)                       │ comandos
+┌──────┴─────────────────────────────────────────────────▼──────────┐
+│ fx-core — lógica pura: lista, ordenação, filtro, busca, desfazer, │
+│ abas, etiquetas, tela VT, pacote do instalador, versões, idioma   │
+│ sem Windows, sem I/O de sistema, #![forbid(unsafe_code)]          │
+└──────┬──────────────┬──────────────────┬──────────────────┬───────┘
+  ┌────▼────┐   ┌─────▼─────┐   ┌────────▼────────┐   ┌─────▼──────┐
+  │ fx-fs   │   │ fx-index  │   │ fx-shell        │   │ fx-ops     │
+  │ pastas, │   │ MFT, USN, │   │ COM (STA): menu,│   │ fila de    │
+  │ observa-│   │ índice,   │   │ ícones, miniatu-│   │ operações, │
+  │ dor,    │   │ busca,    │   │ ras, arrastar,  │   │ conflitos, │
+  │ busca em│   │ protocolo │   │ ConPTY, rede,   │   │ diário,    │
+  │ pasta   │   │ do pipe   │   │ registro, insta-│   │ Lixeira    │
+  └─────────┘   └─────┬─────┘   │ lação           │   └────────────┘
+                      │ pipe    └────────┬────────┘
+            ┌─────────▼────────┐ ┌───────▼────────┐ ┌────────────────┐
+            │ fx-indexd        │ │ fx-preview     │ │ fx-setup       │
+            │ serviço SYSTEM:  │ │ processo: pre- │ │ instalador,    │
+            │ índice de todos  │ │ view handlers  │ │ desinstalador, │
+            │ os volumes NTFS  │ │ do Windows     │ │ aplica updates │
+            └──────────────────┘ └────────────────┘ └────────────────┘
 ```
 
 ## Crates
 
-| Crate | Tipo | Responsabilidade | Pode depender de |
+| Crate | Tipo | Responsabilidade | Depende de |
 |---|---|---|---|
-| `fx-core` | lib | Tipos de domínio (`Entry`, `Folder`, `Selection`), ordenação, filtro local, comandos, histórico de desfazer, estado de abas | só crates puros (sem `windows`) |
-| `fx-fs` | lib | Enumeração de pastas em lote, metadados, observador de mudanças | `fx-core`, `windows` |
-| `fx-index` | lib | Leitura da MFT e do diário USN, índice em memória, busca difusa | `fx-core`, `windows`, `ntfs-reader` |
-| `fx-indexd` | bin | Serviço elevado que mantém o índice e responde buscas por named pipe (Fase 2) | `fx-index` |
-| `fx-shell` | lib | Ponte COM: menu de contexto, miniaturas, arrastar e soltar, ícones, registro como padrão | `fx-core`, `windows` |
-| `fx-ops` | lib | Motor de operações (copiar, mover, renomear, excluir para Lixeira), fila, conflitos | `fx-core`, `fx-fs`, `windows` |
-| `fx-ui` | bin `fx` | Interface GPUI | todos acima |
-| `fx-bench` | bin | Gerador de fixtures e benchmarks | todos acima |
+| `fx-core` | lib | Tipos de domínio, lista em colunas (struct of arrays), ordenação natural, filtro, filtros de busca (`tipo:`, `ext:`…), desfazer, abas, colunas Miller, etiquetas, tela VT, Markdown, realce de sintaxe, pacote do instalador, versões e JSON do atualizador, relatório de falhas, idioma (`tr!`/`trf!`) | nada do projeto |
+| `fx-fs` | lib | Enumeração de pastas em lote, observador de mudanças, busca recursiva em pasta, tamanho de pastas, marcar arquivos de nuvem | `fx-core` |
+| `fx-index` | lib | Leitura da MFT e do diário USN, índice em memória, busca difusa, protocolo do pipe (`FXQ3`) | `fx-core` |
+| `fx-indexd` | bin | Serviço do Windows (LocalSystem) que mantém o índice e responde por pipe com ACL do usuário | `fx-index` |
+| `fx-shell` | lib | Tudo do shell e do sistema: menu de contexto, ícones e miniaturas, arrastar e soltar, área de transferência, Propriedades, abrir com, elevação, UI Automation, instância única, ConPTY, alto contraste, gerenciador padrão, rede/hash/assinatura do atualizador, compressão, atalhos e registro do instalador | `fx-core` |
+| `fx-ops` | lib | Motor de operações (`CopyFile2` com progresso, mover, renomear, Lixeira), fila, conflitos, diário de temporários, desfazer | `fx-core`, `fx-fs` |
+| `fx-ui` | bin `fx` | A interface GPUI | todos os acima |
+| `fx-preview` | bin | Hospeda um preview handler do Windows por vez, isolado: um handler de terceiros que trava ou cai só encerra esse processo | `fx-shell` |
+| `fx-setup` | lib + bin | Instalador, desinstalador e ajudante de atualização, em GPUI com os tokens do `fx-ui` | `fx-core`, `fx-shell` |
+| `fx-bench` | bin | Fixtures e benchmarks (P1–P9) | `fx-core`, `fx-fs`, `fx-index` |
 
-`fx-core` **nunca** depende de `windows` nem de GPUI. Isso mantém a lógica testável em qualquer máquina.
+`unsafe` só existe em `fx-shell`, `fx-fs` e `fx-index`, em funções pequenas com comentário `// SAFETY:`. `fx-core`, `fx-ui` e `fx-setup` proíbem `unsafe`.
 
 ## Plataformas (D-012)
 
-**Windows primeiro, sem fechar a porta para Linux e macOS.** Só o Windows é suportado e medido até decidirmos um port numa fase futura. Mesmo assim, o código específico do Windows fica isolado desde já:
+Só Windows é suportado e medido por enquanto, mas o código do Windows fica isolado:
 
-- `fx-core` e `fx-ui` não usam `windows` nem `#[cfg(windows)]`. A UI fala com o sistema só pelas interfaces de `fx-fs`, `fx-shell`, `fx-index` e `fx-ops`.
-- Cada um desses crates expõe **tipos e traits neutros** na raiz (ex.: `DirEntry`, `trait DirReader`) e guarda a implementação em `src/windows/`, compilada com `#[cfg(windows)]`. Tipos do `windows-rs` (`HANDLE`, `PCWSTR`, `HRESULT`) nunca aparecem na API pública.
-- A dependência `windows` entra como `[target.'cfg(windows)'.dependencies]`.
-- Não existe implementação para outros sistemas, nem stub ou `todo!()`: em Linux e macOS esses crates simplesmente não oferecem a implementação. Escrever a segunda implementação é o trabalho do port.
-- Recursos sem equivalente fora do Windows (MFT, registrar como gerenciador padrão) ficam atrás de interfaces próprias e podem não existir em outras plataformas.
-- Não fazer abstração especulativa: a interface nasce do que a implementação Windows precisa, sem prever como outro sistema funcionaria.
+- `fx-core` não conhece o Windows; `fx-ui` e `fx-setup` falam com o sistema só pelas interfaces de `fx-fs`, `fx-shell`, `fx-index` e `fx-ops`.
+- Cada um desses crates expõe tipos neutros na raiz e guarda a implementação em `src/windows/` (`#[cfg(windows)]`). Tipos do `windows-rs` nunca aparecem na API pública.
+- Não há stubs para outros sistemas. Escrever a segunda implementação é o trabalho do porte; a interface (GPUI) já roda em macOS e Linux.
 
-## Modelo de threads
+## Processos
 
-- **Thread de UI (GPUI):** só desenha e recebe input. Lê o estado de `fx-core` e envia comandos.
-- **Pool de leitura (fx-fs):** enumeração de pastas em paralelo. Entrega resultados em lotes (ex.: a cada 2.000 entradas ou 8 ms, o que vier primeiro) para a UI pintar cedo.
-- **Thread do observador:** `ReadDirectoryChangesW` por pasta aberta; manda diffs, nunca a lista inteira.
-- **Thread STA do shell (fx-shell):** COM exige apartment single-threaded para o shell. Uma thread dedicada recebe pedidos (menu, miniatura, ícone) por canal e responde de forma assíncrona. Chamadas a extensões de terceiros têm tempo limite.
-- **Thread de miniaturas (prioridade baixa):** primeira passada só com o cache do Windows (`WTS_INCACHEONLY`); extração do resto em segundo plano.
-- **Motor de operações (fx-ops):** uma thread por operação ativa, com fila e controle de concorrência por unidade de disco.
+| Processo | Quando roda | Fala com o fx por |
+|---|---|---|
+| `fx.exe` | sempre; uma instância por usuário (as outras encaminham a pasta por pipe e saem) | — |
+| `fx-indexd.exe` | se o usuário ativar a busca no disco inteiro (serviço, cópia em `%ProgramFiles%\fx`) | pipe nomeado, protocolo `FXQ3` |
+| `fx-preview.exe` | ao pré-visualizar um tipo que tem preview handler do Windows | entrada e saída padrão; janela própria sobre o painel |
+| `fx-setup.exe` | ao instalar, desinstalar ou aplicar uma atualização (espera o fx fechar) | linha de comando |
 
-Comunicação entre threads: canais (`crossbeam-channel` ou o executor do GPUI). Sem locks segurados durante I/O.
+## Threads do fx
 
-## APIs do Windows previstas
+- **UI (GPUI):** desenha e recebe entrada; lê o estado e envia comandos.
+- **Leitura de pastas (fx-fs):** entrega em lotes (a cada 2.000 entradas ou 8 ms) para pintar cedo.
+- **Observador:** `ReadDirectoryChangesW` na pasta aberta; manda diferenças, nunca a lista inteira.
+- **STA do shell (fx-shell):** menus, ícones, miniaturas e Propriedades numa thread COM dedicada, com tempo limite para extensões de terceiros.
+- **Operações (fx-ops):** uma thread por operação, com fila.
+- **Outras, sob demanda:** busca, tamanhos de pasta, ConPTY do terminal, gravação da sessão (SQLite) e das etiquetas, atualizador.
+
+## APIs do Windows usadas
 
 | Necessidade | API |
 |---|---|
-| Enumerar pasta rápido | `FindFirstFileExW` com `FindExInfoBasic` + `FIND_FIRST_EX_LARGE_FETCH`; avaliar `NtQueryDirectoryFile` / `GetFileInformationByHandleEx(FileIdBothDirectoryInfo)` na Fase 0 |
-| Observar mudanças | `ReadDirectoryChangesW` (ou `ReadDirectoryChangesExW`) |
-| Ler MFT / USN | crate `ntfs-reader` (requer admin); `FSCTL_QUERY_USN_JOURNAL`, `FSCTL_READ_USN_JOURNAL` |
-| Miniaturas | `IShellItemImageFactory::GetImage` e `IThumbnailCache::GetThumbnail` |
-| Menu de contexto | `IShellFolder::GetUIObjectOf` → `IContextMenu` / `IContextMenu3` |
-| Arrastar e soltar | OLE `IDropTarget` / `IDataObject` / `DoDragDrop` |
-| Lixeira e operações compatíveis | `IFileOperation` (para Lixeira e desfazer do shell) e `CopyFile2` (cópia com progresso) |
-| Abrir arquivo com o app padrão | `ShellExecuteExW` |
-| Virar o gerenciador padrão (Fase 3) | `HKCU\Software\Classes\Directory\shell` e `Drive\shell` + interceptar Win+E |
+| Ler pastas | `FindFirstFileExW` (`FindExInfoBasic`, `FIND_FIRST_EX_LARGE_FETCH`) |
+| Observar mudanças | `ReadDirectoryChangesW` |
+| Índice do disco | MFT e diário USN (`FSCTL_QUERY_USN_JOURNAL`, `FSCTL_READ_USN_JOURNAL`), em serviço |
+| Ícones e miniaturas | `SHGetFileInfo`, `IShellItemImageFactory` |
+| Menu de contexto | `IContextMenu` / `IContextMenu3` |
+| Arrastar e soltar | OLE `IDropTarget`, `IDataObject`, `DoDragDrop` |
+| Copiar | `CopyFile2` com progresso; Lixeira por `IFileOperation` |
+| Prévias | `IPreviewHandler` no `fx-preview` |
+| Terminal | ConPTY (`CreatePseudoConsole`) |
+| Gerenciador padrão | `HKCU\Software\Classes` (Folder, Directory, Drive, Win+E), com backup e reverter |
+| Atualizador | WinHTTP, BCrypt (SHA-256), WinVerifyTrust — carregadas só quando usadas (*delay-load*) |
+| Instalador | Compression API (LZMS), `IShellLinkW`, `HKCU\…\Uninstall\fx` |
 
-## Desenho da lista (desempenho)
+## Desenho da lista
 
-- **Virtualização:** só as linhas visíveis (+ uma margem) são construídas a cada quadro.
-- **Dados em colunas (struct of arrays):** nomes num buffer único de `u16`/UTF-8 com offsets, tamanhos e datas em vetores separados. Ordenar = ordenar um vetor de índices.
-- **Ordenação natural** ("arquivo2" antes de "arquivo10"), igual ao Explorador (`StrCmpLogicalW` como referência de comportamento).
-- **Nada de realocar a lista inteira a cada lote** — anexar e reordenar índices.
+- **Virtualização:** só as linhas visíveis (mais uma margem) são construídas a cada quadro.
+- **Dados em colunas:** nomes num buffer único com deslocamentos, tamanhos e datas em vetores separados; ordenar é ordenar um vetor de índices.
+- **Ordenação natural** ("arquivo2" antes de "arquivo10"), como o Explorador.
+- **Lotes anexados**, nunca a lista inteira realocada; reordenação em segundo plano.

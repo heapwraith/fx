@@ -1,5 +1,7 @@
 # Desempenho: metas e protocolo de medição
 
+Os resultados mais recentes estão no relatório do último portão ([`bench/results/gate-4.md`](../bench/results/gate-4.md)). Todas as metas passam; a P8 (memória parado) está no limite.
+
 ## Metas
 
 | ID | Medida | Meta |

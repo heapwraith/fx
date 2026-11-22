@@ -473,3 +473,11 @@ Formato: cada decisão tem ID, data, status (aceita / substituída / pendente), 
 - **Achado:** salvar a sessão de dentro da atualização da aba (`FolderView`) fazia o GPUI entrar em pânico ("cannot read FolderView while it is already being updated"): o salvamento lê todas as abas. Agora acontece no nível do app (`AsyncApp::update`). Os relatórios de falha passaram a ter um contador no nome: dois pânicos no mesmo segundo sobrescreviam o primeiro, que era o útil.
 - **Teste de ponta a ponta** (manual, pasta e chave de teste): `FX_PACK_VERSION` gera pacotes com versão maior; 0.2.0 → 9.9.9 ao fechar a janela, 9.9.9 → 9.9.10 pela paleta, com o fx reaberto.
 
+## D-061 — Documentação reorganizada para a Fase 5
+- **Data:** 2026-11-22 · **Status:** aceita (pedido do usuário: "mantenha apenas o necessário")
+- `docs/ROADMAP.md` substitui `docs/phases/PHASES-1-4.md` (que descrevia uma Fase 4 diferente da que foi feita): as seis fases, o estado, o que cada uma entregou e os links dos portões.
+- README reescrito para quem usa (o que é, números, recursos, instalar, primeiros passos, privacidade) e para quem contribui (build e mapa dos documentos).
+- `ARCHITECTURE.md` atualizado com os 11 crates e os 4 processos reais; `PRODUCT.md`, `PERFORMANCE.md`, `SAFETY.md` (seção do instalador), `SIGNING.md`, `TESTES-FINAIS.md` e `CHANGELOG.md` atualizados.
+- Removidas as capturas da T1.1 (`bench/results/visual-t1.1/`), já aprovadas e sem uso.
+- Os arquivos de fase e os relatórios de portão ficam como histórico.
+
