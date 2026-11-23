@@ -11,8 +11,9 @@ use gpui::{
     prelude::*, px,
 };
 
-use super::FolderView;
+use super::{FolderView, MediaCol};
 use crate::theme::{CAPTION_SIZE, Density, RADIUS, rgba, space};
+use fx_core::grouping::GroupBy;
 
 const MENU_WIDTH: f32 = 248.0;
 const ICON_CHECK: &str = "\u{E73E}";
@@ -84,6 +85,8 @@ enum Action {
     Sort(SortKey),
     Direction(Direction),
     Density(Density),
+    Group(GroupBy),
+    Column(MediaCol),
 }
 
 impl FolderView {
@@ -119,7 +122,22 @@ impl FolderView {
             checked: density == d,
             action: Action::Density(d),
         };
-        vec![
+        let by = self.groups.by;
+        let group = |id, label, g: GroupBy| Item::Choice {
+            id,
+            label,
+            hint: "",
+            checked: by == g,
+            action: Action::Group(g),
+        };
+        let column = |id, m: MediaCol| Item::Choice {
+            id,
+            label: m.label(),
+            hint: "",
+            checked: self.media.shown[m.index()],
+            action: Action::Column(m),
+        };
+        let mut items = vec![
             Item::Choice {
                 id: "hidden",
                 label: tr!("Mostrar itens ocultos", "Show hidden items"),
@@ -171,7 +189,29 @@ impl FolderView {
                 "Ctrl+3",
                 Density::Comfortable,
             ),
-        ]
+        ];
+        items.extend([
+            Item::Divider,
+            Item::Caption(tr!("Agrupar por", "Group by")),
+            group(
+                "group-none",
+                tr!("Não agrupar", "Don't group"),
+                GroupBy::None,
+            ),
+            group("group-type", tr!("Tipo", "Type"), GroupBy::Type),
+            group(
+                "group-date",
+                tr!("Data de modificação", "Date modified"),
+                GroupBy::Date,
+            ),
+            group("group-size", tr!("Tamanho", "Size"), GroupBy::Size),
+            Item::Divider,
+            Item::Caption(tr!("Colunas", "Columns")),
+            column("col-dims", MediaCol::Dimensions),
+            column("col-duration", MediaCol::Duration),
+            column("col-taken", MediaCol::Taken),
+        ]);
+        items
     }
 
     fn run(&mut self, action: Action, cx: &mut Context<Self>) {
@@ -186,6 +226,8 @@ impl FolderView {
                 self.sort.1 = d;
                 self.resort(cx);
             }
+            Action::Group(g) => self.set_group_by(g, cx),
+            Action::Column(m) => self.toggle_media_column(m, cx),
             Action::Sort(_) | Action::Direction(_) => {}
         }
         self.view_menu = false;
@@ -209,6 +251,8 @@ impl FolderView {
             .top(px(space(11)))
             .right(px(space(2)))
             .w(px(MENU_WIDTH))
+            .max_h(gpui::relative(0.85))
+            .overflow_y_scroll()
             .py(px(space(1)))
             .flex()
             .flex_col()

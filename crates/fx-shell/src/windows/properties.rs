@@ -57,6 +57,22 @@ pub fn item_properties(path: &Path) -> io::Result<Vec<(String, String)>> {
     Ok(out)
 }
 
+/// The formatted values of `names` for a list column (T6.10), in that
+/// order. Never opens a slow item (a cloud file is not downloaded for it).
+pub fn property_values(path: &Path, names: &[&str]) -> io::Result<Vec<Option<String>>> {
+    // SAFETY: COM for this (worker) thread; a second call is harmless.
+    let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+    // SAFETY: the path is a NUL-terminated string kept alive by HSTRING.
+    let store: IPropertyStore = unsafe {
+        SHGetPropertyStoreFromParsingName(&HSTRING::from(path.as_os_str()), None, GPS_BESTEFFORT)
+    }
+    .map_err(io::Error::from)?;
+    Ok(names
+        .iter()
+        .map(|name| one(&store, name).map(|(_, value)| value))
+        .collect())
+}
+
 fn one(store: &IPropertyStore, name: &str) -> Option<(String, String)> {
     let mut raw = std::ptr::null_mut();
     // SAFETY: the name is NUL-terminated (HSTRING); `raw` receives an
@@ -104,5 +120,11 @@ mod tests {
         assert!(props.len() >= 3, "{props:?}");
         assert!(props.iter().any(|(_, v)| v.contains("10")), "{props:?}");
         assert!(super::item_properties(&dir.path().join("nada")).is_err());
+        let values = super::property_values(&f, &["System.Size", "System.Media.Duration"]).unwrap();
+        assert!(
+            values[0].as_deref().is_some_and(|v| v.contains("10")),
+            "{values:?}"
+        );
+        assert_eq!(values[1], None, "a text file has no duration");
     }
 }

@@ -62,7 +62,7 @@ Entrar em ZIP, 7z e tar como numa pasta (mesma lista e busca); extrair arrastand
 Lateral direita com metadados reais (dimensões, EXIF, duração, autor), lidos em segundo plano, sem custo de memória parado.
 
 ### T6.10 — Colunas de metadados e agrupar por
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-23 · Resumo: o menu Exibir e a paleta ganham "Agrupar por" (tipo, data de modificação, tamanho, como o Explorador; pastas sempre primeiro) e as colunas Dimensões, Duração e Data da foto; a ordem agrupada sai com a ordenação num worker e os cabeçalhos dos grupos são achados num worker a cada mudança das linhas (100 mil linhas: tipo 2,1 ms, data 1,9 ms, tamanho 0,4 ms, fora da interface), desenhados como linhas próprias na vista de detalhes e lidos pelo leitor de tela; as colunas leem o Property System numa thread só para as linhas desenhadas, sem baixar arquivos de nuvem (`fx-core/src/grouping.rs`, 4 testes novos). Conferida nas capturas.
 
 Dimensões, duração, data da foto como colunas; agrupar por tipo, data ou tamanho, sem travar.
 

@@ -588,7 +588,7 @@ impl FolderView {
                 .selection
                 .position(super::rows_of(&self.filtered, &self.list), i)
             {
-                let item = if self.grid { pos / self.grid_cols } else { pos };
+                let item = self.list_item(pos);
                 self.scroll
                     .scroll_to_item(item, gpui::ScrollStrategy::Center);
             }

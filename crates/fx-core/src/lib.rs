@@ -13,6 +13,7 @@ pub mod format;
 pub mod frecency;
 pub mod fuzzy;
 pub mod git_status;
+pub mod grouping;
 pub mod highlight;
 mod history;
 mod list;

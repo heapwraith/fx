@@ -207,7 +207,8 @@ impl FolderView {
                 .set_offset(point(px(0.0), px(y))),
             (None, Some(i)) => {
                 if let Some(pos) = self.selection.position(self.list.order(), i) {
-                    self.scroll.scroll_to_item(pos, ScrollStrategy::Center);
+                    let item = self.list_item(pos);
+                    self.scroll.scroll_to_item(item, ScrollStrategy::Center);
                 }
             }
             (None, None) => {}

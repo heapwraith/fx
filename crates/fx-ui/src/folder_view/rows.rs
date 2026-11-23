@@ -8,21 +8,38 @@ impl FolderView {
         range: Range<usize>,
         focused: bool,
         cx: &mut Context<Self>,
-    ) -> Vec<impl IntoElement + use<>> {
+    ) -> Vec<gpui::AnyElement> {
         if let Some(trace) = &self.trace {
             trace.borrow_mut().record_rows_built(range.len());
         }
+        // Lines are rows or group headers (T6.10).
+        let slots: Vec<groups::Slot> = range.map(|line| self.slot(line)).collect();
         let t = self.look.theme;
         let row_h = self.look.density.row_height();
         let columns = self.columns;
         let widths = self.widths;
-        let first = range.start;
+        let first = slots
+            .iter()
+            .find_map(|s| match s {
+                groups::Slot::Row(p) => Some(*p),
+                groups::Slot::Header(_) => None,
+            })
+            .unwrap_or(0);
+        let shown_entries: Vec<u32> = slots
+            .iter()
+            .filter_map(|s| match s {
+                groups::Slot::Row(p) => self.rows().get(*p).copied(),
+                groups::Slot::Header(_) => None,
+            })
+            .collect();
+        self.want_media(&shown_entries, cx);
         // Icons of the rows drawn; unknown ones are requested after this pass.
         let icons = self.icons.read(cx);
         let show_icons = icons.enabled();
         let mut missing = Vec::new();
-        let rows: Vec<(u32, Option<Arc<Image>>)> = range
-            .filter_map(|row| self.rows().get(row).copied())
+        let rows: Vec<(u32, Option<Arc<Image>>)> = shown_entries
+            .iter()
+            .copied()
             .map(|i| {
                 if !show_icons {
                     return (i, None);
@@ -40,7 +57,8 @@ impl FolderView {
         }
         let shown: Vec<u32> = rows.iter().map(|&(i, _)| i).collect();
         self.publish_a11y(first, &shown);
-        rows.into_iter()
+        let mut built = rows
+            .into_iter()
             .map(|(i, icon)| {
                 let is_dir = self.list.attributes(i).is_dir();
                 let selected = self.selection.is_selected(i);
@@ -192,7 +210,20 @@ impl FolderView {
                                         .text_color(rgba(t.text_secondary))
                                         .child(local_date(self.list.modified(i))),
                                 )
-                            }),
+                            })
+                            .children(
+                                MediaCol::ALL
+                                    .into_iter()
+                                    .filter(|m| columns.media[m.index()])
+                                    .map(|m| {
+                                        div()
+                                            .w(px(widths.media[m.index()]))
+                                            .flex_none()
+                                            .truncate()
+                                            .text_color(rgba(t.text_secondary))
+                                            .children(self.media_value(i, m))
+                                    }),
+                            ),
                     )
                     .on_mouse_down(
                         MouseButton::Left,
@@ -233,8 +264,44 @@ impl FolderView {
                                 cx.stop_propagation();
                             }))
                     })
+                    .into_any_element()
+            })
+            .collect::<Vec<_>>()
+            .into_iter();
+        slots
+            .into_iter()
+            .filter_map(|s| match s {
+                groups::Slot::Row(_) => built.next(),
+                groups::Slot::Header(k) => {
+                    Some(self.render_group_header(k, row_h).into_any_element())
+                }
             })
             .collect()
+    }
+
+    /// The header of group `k`: its name over a line, as tall as a row.
+    fn render_group_header(&self, k: usize, row_h: f32) -> impl IntoElement + use<> {
+        let t = self.look.theme;
+        div()
+            .id(SharedString::from(format!("group-{k}")))
+            .w_full()
+            .h(px(row_h))
+            .px(px(space(4)))
+            .flex()
+            .items_end()
+            .child(
+                div()
+                    .w_full()
+                    .pb(px(space(1)))
+                    .flex()
+                    .items_center()
+                    .gap(px(space(2)))
+                    .text_size(px(CAPTION_SIZE))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(rgba(t.text_secondary))
+                    .child(div().flex_none().child(self.group_label(k)))
+                    .child(div().flex_1().h(px(1.0)).bg(rgba(t.divider))),
+            )
     }
 
     pub(super) fn render_scrollbar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {

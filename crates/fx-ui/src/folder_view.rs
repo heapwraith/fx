@@ -27,6 +27,7 @@ mod duplicates;
 mod edit_ops;
 mod git;
 mod grid;
+mod groups;
 mod image_actions;
 mod keys;
 mod navigation;
@@ -38,6 +39,7 @@ mod terminal;
 mod timeline;
 mod view_menu;
 
+pub use groups::MediaCol;
 pub use image_actions::ImageAction;
 pub use view_menu::ViewEvent;
 
@@ -235,6 +237,10 @@ pub struct FolderView {
     details: Option<details::Details>,
     /// Git status of the items (T6.12).
     git: git::Git,
+    /// "Agrupar por" and its headers (T6.10).
+    groups: groups::Groups,
+    /// The media columns and their values (T6.10).
+    media: groups::Media,
     /// The embedded terminal (Ctrl+J, T3.5).
     terminal: Option<terminal::Terminal>,
     /// Width of the breadcrumb area in the last frame (T2.3), and whether
@@ -257,6 +263,8 @@ struct Columns {
     kind: bool,
     size: bool,
     date: bool,
+    /// The media columns turned on that fit (T6.10), after the others.
+    media: [bool; 3],
 }
 
 impl Columns {
@@ -266,19 +274,33 @@ impl Columns {
         kind: true,
         size: true,
         date: true,
+        media: [false; 3],
     };
 
-    fn for_width(width: f32, w: Widths) -> Self {
+    fn for_width(width: f32, w: Widths, media: [bool; 3]) -> Self {
         if width <= 0.0 {
             return Self::ALL; // before the first layout
         }
         let room = width - SCROLLBAR_WIDTH - 2.0 * space(4) - ICON_SIZE - Self::NAME_MIN;
         let gap = space(3);
-        Self {
+        let mut c = Self {
             size: room >= w.size + gap,
             date: room >= w.size + w.date + 2.0 * gap,
             kind: room >= w.size + w.date + w.kind + 3.0 * gap,
+            media: [false; 3],
+        };
+        let mut used = [(c.size, w.size), (c.date, w.date), (c.kind, w.kind)]
+            .iter()
+            .filter(|(on, _)| *on)
+            .map(|(_, width)| width + gap)
+            .sum::<f32>();
+        for k in 0..3 {
+            if media[k] && room >= used + w.media[k] + gap {
+                c.media[k] = true;
+                used += w.media[k] + gap;
+            }
         }
+        c
     }
 }
 
@@ -288,6 +310,7 @@ struct Widths {
     kind: f32,
     size: f32,
     date: f32,
+    media: [f32; 3],
 }
 
 impl Default for Widths {
@@ -296,6 +319,7 @@ impl Default for Widths {
             kind: TYPE_COL,
             size: SIZE_COL,
             date: DATE_COL,
+            media: MediaCol::ALL.map(MediaCol::default_width),
         }
     }
 }
@@ -305,6 +329,7 @@ enum Col {
     Kind,
     Size,
     Date,
+    Media(MediaCol),
 }
 
 impl Widths {
@@ -313,6 +338,7 @@ impl Widths {
             Col::Kind => self.kind,
             Col::Size => self.size,
             Col::Date => self.date,
+            Col::Media(m) => self.media[m.index()],
         }
     }
 
@@ -322,6 +348,7 @@ impl Widths {
             Col::Kind => self.kind = w,
             Col::Size => self.size = w,
             Col::Date => self.date = w,
+            Col::Media(m) => self.media[m.index()] = w,
         }
     }
 }
@@ -427,6 +454,8 @@ impl FolderView {
             duplicates: None,
             details: None,
             git: git::Git::default(),
+            groups: groups::Groups::default(),
+            media: groups::Media::default(),
         };
         crate::visits::visit(&view.path);
         view.start_loading(cx);
@@ -554,6 +583,10 @@ impl FolderView {
                 .set_offset(point(px(0.0), px(y)));
         }
         self.try_rename_listed();
+        // New entries were placed by the sort alone: group them again.
+        if self.groups.by != fx_core::grouping::GroupBy::None {
+            self.resort(cx);
+        }
         cx.notify();
     }
 
@@ -618,16 +651,17 @@ impl FolderView {
                 }
                 view.status = Status::Sorting;
                 cx.notify();
-                Some((view.list.clone(), view.sort))
+                Some((view.list.clone(), view.sort, view.groups.by))
             }) else {
                 return;
             };
-            let (list, (key, direction)) = list;
+            let (list, (key, direction), by) = list;
+            let now = groups::now();
             // The clone is dropped before we return to the UI thread, so
             // `Arc::make_mut` below does not copy the list.
             let order = background
                 .spawn(async move {
-                    let order = list.sorted_order(key, direction);
+                    let order = groups::order_for(&list, key, direction, by, now);
                     drop(list);
                     order
                 })
@@ -728,8 +762,12 @@ impl FolderView {
                             local_date(self.list.modified(i))
                         )
                     };
-                    match self.git.states.get(self.list.name(i)) {
+                    let base = match self.git.states.get(self.list.name(i)) {
                         Some(state) => format!("{base}, {}", git::words(*state)),
+                        None => base,
+                    };
+                    match self.group_of_pos(first + k) {
+                        Some(group) => format!("{base}, {group}"),
                         None => base,
                     }
                 },
@@ -804,7 +842,7 @@ impl FolderView {
         let rows = rows_of(&self.filtered, &self.list);
         if let Some(pos) = self.selection.position(rows, entry) {
             self.selection.select_only(entry);
-            let item = if self.grid { pos / self.grid_cols } else { pos };
+            let item = self.list_item(pos);
             self.scroll.scroll_to_item(item, ScrollStrategy::Center);
         }
     }
@@ -855,10 +893,11 @@ impl FolderView {
         let (ticket, generation) = (self.sort_ticket, self.generation);
         let (key, direction) = self.sort;
         let list = self.list.clone();
+        let (by, now) = (self.groups.by, groups::now());
         cx.spawn(async move |this, cx| {
             let order = cx
                 .background_spawn(async move {
-                    let order = list.sorted_order(key, direction);
+                    let order = groups::order_for(&list, key, direction, by, now);
                     drop(list);
                     order
                 })
@@ -889,7 +928,7 @@ impl FolderView {
             .and_then(|c| self.selection.position(rows, c));
         match pos {
             Some(pos) => {
-                let item = if self.grid { pos / self.grid_cols } else { pos };
+                let item = self.list_item(pos);
                 self.scroll.scroll_to_item(item, ScrollStrategy::Center);
             }
             None => self.scroll.scroll_to_item(0, ScrollStrategy::Top),
@@ -1029,7 +1068,7 @@ impl FolderView {
             ScrollStrategy::Bottom
         };
         // In the grid each list item is a row of tiles.
-        let item = if self.grid { pos / self.grid_cols } else { pos };
+        let item = self.list_item(pos);
         self.scroll.scroll_to_item(item, strategy);
     }
 
@@ -1069,7 +1108,7 @@ impl FolderView {
                     .selection
                     .position(rows_of(&self.filtered, &self.list), c)
             {
-                let item = if grid { pos / self.grid_cols } else { pos };
+                let item = self.list_item(pos);
                 self.scroll.scroll_to_item(item, ScrollStrategy::Center);
             }
         }
@@ -1081,6 +1120,7 @@ impl FolderView {
     fn refilter(&mut self) {
         let text = (!self.filter_text.is_empty()).then(|| self.list.filter(&self.filter_text));
         self.filtered = self.list.visible(text, self.look.show_hidden);
+        self.groups.rows_version = self.groups.rows_version.wrapping_add(1);
     }
 
     /// Ctrl+H or the View menu (for the whole window, through `TabsView`).
@@ -1286,12 +1326,12 @@ impl FolderView {
     fn header_cell(
         &self,
         label: &'static str,
-        key: SortKey,
+        key: Option<SortKey>,
         col: Option<Col>,
         cx: &mut Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
         let t = self.look.theme;
-        let arrow = (self.sort.0 == key).then_some(match self.sort.1 {
+        let arrow = (Some(self.sort.0) == key).then_some(match self.sort.1 {
             Direction::Ascending => ICON_SORT_UP,
             Direction::Descending => ICON_SORT_DOWN,
         });
@@ -1307,7 +1347,7 @@ impl FolderView {
             .text_color(rgba(t.text_secondary))
             .hover(|s| s.text_color(rgba(t.text)))
             // Sizes line up on the right, like the column.
-            .when(key == SortKey::Size, |d| d.justify_end())
+            .when(key == Some(SortKey::Size), |d| d.justify_end())
             .child(div().min_w_0().truncate().child(label))
             .when_some(arrow, |d, glyph| {
                 d.child(
@@ -1318,9 +1358,11 @@ impl FolderView {
                         .child(glyph),
                 )
             })
-            .on_click(cx.listener(move |view, _: &gpui::ClickEvent, _, cx| {
-                view.sort_by(key, cx);
-            }));
+            .when_some(key, |d, key| {
+                d.on_click(cx.listener(move |view, _: &gpui::ClickEvent, _, cx| {
+                    view.sort_by(key, cx);
+                }))
+            });
         if let Some(col) = col {
             let width = self.widths.get(col);
             cell = cell.w(px(width)).flex_none().child(
@@ -1463,6 +1505,7 @@ impl Render for FolderView {
             handle.set_overlay(crate::a11y::Layer::Tab, self.tab_overlay());
         }
         self.refresh_details(cx);
+        self.refresh_groups(cx);
         self.trace_frame(window);
         self.sync_quick_look(window, cx);
         self.sync_terminal_size();
@@ -1473,18 +1516,14 @@ impl Render for FolderView {
             let width = f32::from(self.scroll.0.borrow().base_handle.bounds().size.width);
             self.grid_cols = grid::columns(width);
         }
-        let count = if self.grid {
-            self.rows().len().div_ceil(self.grid_cols)
-        } else {
-            self.rows().len()
-        };
+        let count = self.list_count();
         if let Some(trace) = &self.trace {
             trace.borrow_mut().set_list_items(count);
         }
         let grid_view = self.grid;
         let cols = self.grid_cols;
         let list_width = f32::from(self.scroll.0.borrow().base_handle.bounds().size.width);
-        self.columns = Columns::for_width(list_width, self.widths);
+        self.columns = Columns::for_width(list_width, self.widths, self.media.shown);
         // `list_width` is the last frame's. Once this frame is laid out, check
         // the new width: after a resize, draw once more so the columns (and
         // grid tiles) follow it.
@@ -1564,7 +1603,7 @@ impl Render for FolderView {
                                     .child(
                                         self.header_cell(
                                             tr!("Nome", "Name"),
-                                            SortKey::Name,
+                                            Some(SortKey::Name),
                                             None,
                                             cx,
                                         )
@@ -1573,7 +1612,7 @@ impl Render for FolderView {
                                     .when(!grid_view && columns.kind, |d| {
                                         d.child(self.header_cell(
                                             tr!("Tipo", "Type"),
-                                            SortKey::Type,
+                                            Some(SortKey::Type),
                                             Some(Col::Kind),
                                             cx,
                                         ))
@@ -1581,7 +1620,7 @@ impl Render for FolderView {
                                     .when(!grid_view && columns.size, |d| {
                                         d.child(self.header_cell(
                                             tr!("Tamanho", "Size"),
-                                            SortKey::Size,
+                                            Some(SortKey::Size),
                                             Some(Col::Size),
                                             cx,
                                         ))
@@ -1589,11 +1628,24 @@ impl Render for FolderView {
                                     .when(!grid_view && columns.date, |d| {
                                         d.child(self.header_cell(
                                             tr!("Modificado em", "Date modified"),
-                                            SortKey::Modified,
+                                            Some(SortKey::Modified),
                                             Some(Col::Date),
                                             cx,
                                         ))
                                     })
+                                    .children(
+                                        MediaCol::ALL
+                                            .into_iter()
+                                            .filter(|m| !grid_view && columns.media[m.index()])
+                                            .map(|m| {
+                                                self.header_cell(
+                                                    m.label(),
+                                                    None,
+                                                    Some(Col::Media(m)),
+                                                    cx,
+                                                )
+                                            }),
+                                    )
                                     .children(self.resize_tracker(cx))
                                     // Room for the scrollbar, so columns line up with the rows
                                     // (the negative margin cancels the gap before it).
@@ -1734,6 +1786,14 @@ impl FolderView {
             "timeline" => self.toggle_timeline(cx),
             "duplicates" => self.toggle_duplicates(cx),
             "details" => self.toggle_details(cx),
+            // Grouped by type with every media column (T6.10).
+            "group" => {
+                self.set_group_by(fx_core::grouping::GroupBy::Type, cx);
+                for col in MediaCol::ALL {
+                    self.toggle_media_column(col, cx);
+                }
+            }
+            "viewmenu" => self.toggle_view_menu(cx),
             _ => {}
         }
     }
@@ -1816,7 +1876,7 @@ mod tests {
     fn narrow_lists_drop_type_then_date_then_size() {
         let w = Widths::default();
         let at = |width: f32| {
-            let c = Columns::for_width(width, w);
+            let c = Columns::for_width(width, w, [false; 3]);
             (c.kind, c.size, c.date)
         };
         assert_eq!(at(0.0), (true, true, true));
@@ -1826,6 +1886,6 @@ mod tests {
         assert_eq!(at(300.0), (false, false, false));
         // Wider columns need more room.
         let wide = Widths { date: 300.0, ..w };
-        assert!(!Columns::for_width(600.0, wide).date);
+        assert!(!Columns::for_width(600.0, wide, [false; 3]).date);
     }
 }

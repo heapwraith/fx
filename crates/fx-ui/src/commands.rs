@@ -3,8 +3,9 @@
 //! active tab, so the palette and the keyboard can never disagree. A few have
 //! no key and act directly.
 
-use crate::folder_view::ImageAction;
+use crate::folder_view::{ImageAction, MediaCol};
 use fx_core::SortKey;
+use fx_core::grouping::GroupBy;
 use fx_core::tr;
 use fx_shell::images::ImageKind;
 
@@ -42,11 +43,14 @@ pub enum Action {
     UpdateChecks,
     /// Asks (or not) before sending items to the Recycle Bin.
     ConfirmRecycle,
-    /// T6.13: asks a name and saves this window's tabs as a workspace.
     /// T6.11: compares the two panes of the dual view.
     Compare,
     /// T6.16: copies of the selected images.
     Image(crate::folder_view::ImageAction),
+    /// T6.10: "Agrupar por" and the media columns.
+    Group(GroupBy),
+    MediaColumn(MediaCol),
+    /// T6.13: asks a name and saves this window's tabs as a workspace.
     SaveWorkspace,
 }
 
@@ -117,9 +121,11 @@ impl Command {
             Action::ReportCrash | Action::CrashReports => "\u{E7BA}", // Warning
             Action::Update | Action::UpdateChecks => "\u{E895}", // Sync
             Action::ConfirmRecycle => "\u{E74D}",
-            Action::SaveWorkspace => "\u{E74E}", // Save
-            Action::Compare => "\u{E8F9}",       // Switch
-            Action::Image(_) => "\u{EB9F}",      // Photo
+            Action::SaveWorkspace => "\u{E74E}",  // Save
+            Action::Compare => "\u{E8F9}",        // Switch
+            Action::Image(_) => "\u{EB9F}",       // Photo
+            Action::Group(_) => "\u{F168}",       // GroupList
+            Action::MediaColumn(_) => "\u{E71D}", // AllApps (columns)
         }
     }
 
@@ -208,6 +214,31 @@ pub const COMMANDS: &[Command] = &[
             "Images: copy at half size",
         ),
         Action::Image(ImageAction::Half),
+    ),
+    direct(
+        ("Agrupar por tipo", "Group by type"),
+        Action::Group(GroupBy::Type),
+    ),
+    direct(
+        ("Agrupar por data de modificação", "Group by date modified"),
+        Action::Group(GroupBy::Date),
+    ),
+    direct(
+        ("Agrupar por tamanho", "Group by size"),
+        Action::Group(GroupBy::Size),
+    ),
+    direct(("Não agrupar", "Don't group"), Action::Group(GroupBy::None)),
+    direct(
+        ("Coluna: dimensões", "Column: dimensions"),
+        Action::MediaColumn(MediaCol::Dimensions),
+    ),
+    direct(
+        ("Coluna: duração", "Column: duration"),
+        Action::MediaColumn(MediaCol::Duration),
+    ),
+    direct(
+        ("Coluna: data da foto", "Column: date taken"),
+        Action::MediaColumn(MediaCol::Taken),
     ),
     direct(
         (
