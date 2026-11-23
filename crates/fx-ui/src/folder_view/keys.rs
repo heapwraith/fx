@@ -39,6 +39,14 @@ impl FolderView {
         if self.disk_map_key(ks, window, cx) {
             return;
         }
+        // Ctrl+Shift+L: the timeline of the disks (T6.2).
+        if ks.key == "l" && m.control && m.shift && !m.alt {
+            self.toggle_timeline(cx);
+            return;
+        }
+        if self.timeline_key(ks, window, cx) {
+            return;
+        }
         if self.search.is_none() && self.columns_key(ks, window, cx) {
             return;
         }

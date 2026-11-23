@@ -6,6 +6,7 @@
 
 mod index;
 pub mod protocol;
+pub mod recent;
 mod search;
 
 pub use index::{FileId, Index, IndexFull, Record};

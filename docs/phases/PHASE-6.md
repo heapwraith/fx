@@ -20,7 +20,7 @@
 Treemap de qualquer pasta ou disco mostrando o que ocupa espaço, em milissegundos; clicar navega; Delete libera (com confirmação e desfazer). **Base:** o índice já sabe o tamanho de tudo (totais de pastas em 32 ms por milhão). **Concorrentes:** WizTree/TreeSize são apps separados; o Explorador não tem.
 
 ### T6.2 — Linha do tempo do disco
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: o `fx-indexd` guarda as últimas 50 mil mudanças do diário USN (registros de fechamento: criado, alterado, apagado, renomeado; sem pastas de sistema e temporárias) e responde a um pedido novo (`FXQ4`; as buscas seguem `FXQ3`, compatíveis com um serviço antigo); Ctrl+Shift+L mostra 10 minutos, 1 hora ou 24 horas, atualizando sozinha a cada 3 s, com Enter mostrando o item na pasta; sem o serviço, diz como ativar (7 testes novos). Conferida a tela sem serviço; com dados reais, depende de ativar o serviço (administrador).
 
 "O que mudou nos últimos 10 minutos, 1 hora, hoje", no disco todo: criados, alterados, apagados; achar "aquele arquivo que baixei agora há pouco". **Base:** o `fx-indexd` já segue o diário USN a cada 250 ms. **Concorrentes:** ninguém expõe o USN ao usuário.
 

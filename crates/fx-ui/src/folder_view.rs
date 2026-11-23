@@ -31,6 +31,7 @@ mod quick_look;
 mod rows;
 mod search;
 mod terminal;
+mod timeline;
 mod view_menu;
 
 pub use view_menu::ViewEvent;
@@ -221,6 +222,8 @@ pub struct FolderView {
     miller: Option<columns::Columns>,
     /// The disk map (Ctrl+Shift+M, T6.1).
     disk_map: Option<disk_map::DiskMap>,
+    /// The timeline of the disks (Ctrl+Shift+L, T6.2).
+    timeline: Option<timeline::Timeline>,
     /// The embedded terminal (Ctrl+J, T3.5).
     terminal: Option<terminal::Terminal>,
     /// Width of the breadcrumb area in the last frame (T2.3), and whether
@@ -409,6 +412,7 @@ impl FolderView {
             stale_images: Vec::new(),
             search: None,
             disk_map: None,
+            timeline: None,
         };
         crate::visits::visit(&view.path);
         view.start_loading(cx);
@@ -1629,6 +1633,7 @@ impl Render for FolderView {
             .children(self.render_search(cx))
             .children(self.render_columns(cx))
             .children(self.render_disk_map(cx))
+            .children(self.render_timeline(cx))
             .children(self.render_terminal(cx))
             .children(self.render_batch_rename(cx))
             .children(self.render_view_menu(cx))
@@ -1673,6 +1678,7 @@ impl FolderView {
             "search" => self.open_search(cx),
             "columns" => self.toggle_columns(window, cx),
             "map" => self.toggle_disk_map(cx),
+            "timeline" => self.toggle_timeline(cx),
             _ => {}
         }
     }
@@ -1681,6 +1687,7 @@ impl FolderView {
     fn tab_overlay(&self) -> Option<crate::a11y::Overlay> {
         self.batch_rename_overlay()
             .or_else(|| self.disk_map_overlay())
+            .or_else(|| self.timeline_overlay())
             .or_else(|| self.quick_look_overlay())
             .or_else(|| self.view_menu_overlay())
             .or_else(|| self.search_overlay())

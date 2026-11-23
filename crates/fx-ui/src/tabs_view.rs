@@ -211,7 +211,7 @@ impl TabsView {
             "sidebar" => self.sidebar_focus = Some(arg.parse().unwrap_or(0)),
             "guide" => self.open_guide(cx),
             "history" => self.history_open = true,
-            "search" | "columns" | "map" => {
+            "search" | "columns" | "map" | "timeline" => {
                 let tab = self.current();
                 tab.update(cx, |tab, cx| tab.debug_open(kind, window, cx));
             }

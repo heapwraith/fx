@@ -24,6 +24,8 @@ pub struct Engine {
     ready: AtomicBool,
     /// Lowercase profile folders of the other users, with a trailing `\`.
     hidden: Vec<String>,
+    /// The latest changes on the disks (T6.2).
+    recent: std::sync::Mutex<fx_index::recent::Recent>,
 }
 
 impl Engine {
@@ -41,6 +43,7 @@ impl Engine {
             volumes: RwLock::new(Vec::new()),
             ready: AtomicBool::new(false),
             hidden,
+            recent: std::sync::Mutex::default(),
         }
     }
 
@@ -80,8 +83,21 @@ impl Engine {
             for (k, watcher) in watchers.iter_mut().enumerate() {
                 let mut volumes = self.write();
                 if let Some(v) = volumes.get_mut(k) {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0, |d| d.as_secs() as i64);
+                    let mut record = |path, kind, is_dir| {
+                        self.recent.lock().unwrap_or_else(|e| e.into_inner()).push(
+                            fx_index::recent::Change {
+                                path,
+                                kind,
+                                is_dir,
+                                at: now,
+                            },
+                        );
+                    };
                     // A journal error (e.g. it wrapped) only delays changes.
-                    let _ = watcher.apply(&mut v.index);
+                    let _ = watcher.apply(&mut v.index, &mut record);
                 }
             }
         }
@@ -101,6 +117,27 @@ impl Engine {
         } else {
             Status::Indexing
         };
+        if let Some(since) = request.recent_since {
+            use std::os::windows::ffi::OsStrExt;
+            let recent = self.recent.lock().unwrap_or_else(|e| e.into_inner());
+            let hits = recent
+                .since(since, request.limit as usize, |c| !self.is_hidden(&c.path))
+                .into_iter()
+                .map(|c| RemoteHit {
+                    path: c.path.as_os_str().encode_wide().collect(),
+                    is_dir: c.is_dir,
+                    size: 0,
+                    modified: filetime_of(c.at),
+                    change: Some(c.kind),
+                })
+                .collect();
+            return Response {
+                status,
+                items,
+                index_bytes,
+                hits,
+            };
+        }
         if !request.sizes_of.is_empty() {
             let hits = self.folder_totals(&volumes, &request.sizes_of);
             return Response {
@@ -161,6 +198,7 @@ impl Engine {
                         is_dir: v.index.is_dir(h.slot),
                         size: v.index.size(h.slot),
                         modified: v.index.modified(h.slot),
+                        change: None,
                     },
                 ));
             }
@@ -203,6 +241,7 @@ impl Engine {
                 is_dir: true,
                 size: bytes,
                 modified: v.index.modified(slot),
+                change: None,
             })
             .collect()
     }
@@ -211,6 +250,11 @@ impl Engine {
         let p = prefix(path);
         self.hidden.iter().any(|h| p.starts_with(h.as_str()))
     }
+}
+
+/// Unix seconds to FILETIME ticks.
+fn filetime_of(unix: i64) -> u64 {
+    u64::try_from(unix + 11_644_473_600).unwrap_or(0) * 10_000_000
 }
 
 /// FILETIME ticks to Unix seconds.
@@ -257,6 +301,43 @@ pub fn run_foreground(user_sid: &str) -> std::io::Result<()> {
 mod tests {
     use super::*;
     use fx_index::Record;
+
+    /// T6.2: the changes since a time, newest first, without other users'.
+    #[test]
+    fn recent_changes_are_answered_newest_first() {
+        let e = Engine::with_hidden(vec![prefix(std::path::Path::new(r"C:\Users\Ana"))]);
+        for (path, at) in [
+            (r"C:\Users\Bia\Downloads\a.zip", 100),
+            (r"C:\Users\Ana\segredo.txt", 150),
+            (r"C:\Users\Bia\notas.txt", 200),
+        ] {
+            e.recent.lock().unwrap().push(fx_index::recent::Change {
+                path: path.into(),
+                kind: fx_index::protocol::ChangeKind::Created,
+                is_dir: false,
+                at,
+            });
+        }
+        let r = e.answer(&Request {
+            limit: 10,
+            recent_since: Some(90),
+            ..Default::default()
+        });
+        let paths: Vec<String> = r
+            .hits
+            .iter()
+            .map(|h| String::from_utf16_lossy(&h.path))
+            .collect();
+        assert_eq!(
+            paths,
+            [r"C:\Users\Bia\notas.txt", r"C:\Users\Bia\Downloads\a.zip"]
+        );
+        assert_eq!(
+            r.hits[0].change,
+            Some(fx_index::protocol::ChangeKind::Created)
+        );
+        assert_eq!(unix_seconds(r.hits[0].modified), 200);
+    }
 
     const ROOT: u64 = 5;
 
@@ -345,6 +426,7 @@ mod tests {
             limit: 50,
             filter: docs.clone(),
             sizes_of: Vec::new(),
+            recent_since: None,
         });
         assert_eq!(
             paths(&r),
@@ -362,6 +444,7 @@ mod tests {
                 ..Default::default()
             },
             sizes_of: Vec::new(),
+            recent_since: None,
         });
         assert_eq!(
             paths(&r),
@@ -381,6 +464,7 @@ mod tests {
             limit: 50,
             filter: big,
             sizes_of: Vec::new(),
+            recent_since: None,
         });
         assert_eq!(
             paths(&r),
@@ -397,6 +481,7 @@ mod tests {
         let ask = |p: &str| {
             let r = e.answer(&Request {
                 sizes_of: p.encode_utf16().collect(),
+                recent_since: None,
                 ..Default::default()
             });
             let mut v: Vec<(String, u64)> = r

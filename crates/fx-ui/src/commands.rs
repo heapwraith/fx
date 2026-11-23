@@ -93,7 +93,8 @@ impl Command {
                 "ctrl-b" => "\u{E8A0}",                       // OpenPane
                 "ctrl-h" => "\u{E890}",                       // View
                 "ctrl-shift-h" => "\u{E81C}",
-                "ctrl-shift-m" => "\u{E9D9}", // Diagnostic (chart)                 // History
+                "ctrl-shift-m" => "\u{E9D9}", // Diagnostic (chart)
+                "ctrl-shift-l" => "\u{E823}", // Recent (clock)                 // History
                 "f1" => "\u{E897}",           // Help
                 "ctrl-j" => "\u{E756}",       // CommandPrompt
                 _ => "\u{E756}",
@@ -167,6 +168,13 @@ pub const COMMANDS: &[Command] = &[
             "Disk map (what takes space)",
         ),
         "ctrl-shift-m",
+    ),
+    tab(
+        (
+            "Linha do tempo (o que mudou nos discos)",
+            "Timeline (what changed on the disks)",
+        ),
+        "ctrl-shift-l",
     ),
     direct(
         (

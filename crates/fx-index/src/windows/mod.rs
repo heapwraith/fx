@@ -28,6 +28,8 @@ const RECORD_NUMBER_MASK: u64 = 0x0000_FFFF_FFFF_FFFF;
 const USN_REASON_FILE_CREATE: u32 = 0x0000_0100;
 const USN_REASON_FILE_DELETE: u32 = 0x0000_0200;
 const USN_REASON_RENAME_NEW_NAME: u32 = 0x0000_2000;
+const USN_REASON_DATA_CHANGE: u32 = 0x0000_0007; // overwrite, extend, truncation
+const USN_REASON_CLOSE: u32 = 0x8000_0000;
 
 /// `\\.\C:` from `C`, `C:` or `C:\`.
 fn device_path(volume: &str) -> io::Result<String> {
@@ -216,9 +218,15 @@ impl JournalWatcher {
         Ok(Self { journal })
     }
 
-    /// Reads pending journal records and applies them. Returns how many records
+    /// Reads pending journal records and applies them; each finished change
+    /// (a record with "close", which gathers all its reasons) is also handed
+    /// to `changed_item` for the timeline (T6.2). Returns how many records
     /// changed the index.
-    pub fn apply(&mut self, index: &mut Index) -> io::Result<usize> {
+    pub fn apply(
+        &mut self,
+        index: &mut Index,
+        changed_item: &mut dyn FnMut(std::path::PathBuf, crate::protocol::ChangeKind, bool),
+    ) -> io::Result<usize> {
         let mut changed = 0;
         loop {
             let records = self.journal.read().map_err(to_io)?;
@@ -227,6 +235,24 @@ impl JournalWatcher {
             }
             for r in records {
                 let id = record_number(r.file_id);
+                if r.reason & USN_REASON_CLOSE != 0 {
+                    use crate::protocol::ChangeKind;
+                    let kind = if r.reason & USN_REASON_FILE_DELETE != 0 {
+                        Some(ChangeKind::Deleted)
+                    } else if r.reason & USN_REASON_FILE_CREATE != 0 {
+                        Some(ChangeKind::Created)
+                    } else if r.reason & USN_REASON_RENAME_NEW_NAME != 0 {
+                        Some(ChangeKind::Renamed)
+                    } else if r.reason & USN_REASON_DATA_CHANGE != 0 {
+                        Some(ChangeKind::Modified)
+                    } else {
+                        None
+                    };
+                    if let Some(kind) = kind {
+                        let is_dir = std::fs::symlink_metadata(&r.path).is_ok_and(|m| m.is_dir());
+                        changed_item(r.path.clone(), kind, is_dir);
+                    }
+                }
                 if r.reason & USN_REASON_FILE_DELETE != 0 {
                     if index.remove(id) {
                         changed += 1;
@@ -303,14 +329,14 @@ mod tests {
         let unique = format!("fx-usn-{}-{}", std::process::id(), index.len());
         let created = dir.path().join(format!("{unique}.txt"));
         std::fs::write(&created, b"fx").unwrap();
-        watcher.apply(&mut index).unwrap();
+        watcher.apply(&mut index, &mut |_, _, _| {}).unwrap();
         let slot = find(&index, &format!("{unique}.txt")).expect("created file not indexed");
         let path = index.path(slot).unwrap();
         assert!(created.ends_with(&path) || path.ends_with(created.file_name().unwrap()));
 
         let renamed = dir.path().join(format!("{unique}-renamed.txt"));
         std::fs::rename(&created, &renamed).unwrap();
-        watcher.apply(&mut index).unwrap();
+        watcher.apply(&mut index, &mut |_, _, _| {}).unwrap();
         assert!(
             find(&index, &format!("{unique}.txt")).is_none(),
             "old name still indexed"
@@ -321,7 +347,7 @@ mod tests {
         );
 
         std::fs::remove_file(&renamed).unwrap();
-        watcher.apply(&mut index).unwrap();
+        watcher.apply(&mut index, &mut |_, _, _| {}).unwrap();
         assert!(
             find(&index, &format!("{unique}-renamed.txt")).is_none(),
             "deleted file still indexed"

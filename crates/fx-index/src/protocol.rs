@@ -6,18 +6,25 @@
 //!
 //! Request:  `FXQ3` · limit u32 · query length u32 · query (UTF-8) · filter
 //!           · folder length u32 · folder (UTF-16LE; empty: a search)
+//!           `FXQ4` is the same followed by since i64 (Unix seconds): the
+//!           changes on the disks since then (T6.2), instead of a search. An
+//!           ordinary request stays `FXQ3`, so a new app still searches with a
+//!           service that is not restarted yet.
 //! Filter:   extension count u8 · (length u8 · extension)* · folders u8
 //!           (0 any, 1 files, 2 folders) · size min u64 · size max u64
 //!           · modified min i64 · modified max i64 (Unix seconds; the
 //!           extremes mean "no bound")
 //! Response: total length u32 · `FXR1` · status u8 · items u64 · index bytes u64
 //!           · count u32 · hits
-//! Hit:      flags u8 (bit 0: folder) · size u64 · modified u64 (FILETIME)
+//! Hit:      flags u8 (bit 0: folder; bits 1-3: the change, for FXQ4: 1
+//!           created, 2 modified, 3 deleted, 4 renamed) · size u64
+//!           · modified u64 (FILETIME; for a change, when it happened)
 //!           · path length u32 (UTF-16 units) · path (UTF-16LE)
 
 use std::io::{self, Read, Write};
 
 const REQUEST_MAGIC: &[u8; 4] = b"FXQ3";
+const RECENT_MAGIC: &[u8; 4] = b"FXQ4";
 /// Most extensions in a filter, and the longest one.
 const MAX_EXTS: usize = 64;
 const MAX_EXT_LEN: usize = 16;
@@ -41,6 +48,9 @@ pub struct Request {
     /// Not empty: instead of a search, the totals of the subfolders of this
     /// absolute folder (T2.7), one hit per subfolder with its total as size.
     pub sizes_of: Vec<u16>,
+    /// Some: instead of a search, the changes since this Unix time (T6.2),
+    /// newest first.
+    pub recent_since: Option<i64>,
 }
 
 /// The non-name part of `fx_core::search_filter::Filters`.
@@ -156,6 +166,38 @@ pub struct RemoteHit {
     pub size: u64,
     /// FILETIME ticks.
     pub modified: u64,
+    /// For a change (T6.2): what happened (`modified` is when).
+    pub change: Option<ChangeKind>,
+}
+
+/// What happened to an item, in the timeline (T6.2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChangeKind {
+    Created,
+    Modified,
+    Deleted,
+    Renamed,
+}
+
+impl ChangeKind {
+    fn code(self) -> u8 {
+        match self {
+            ChangeKind::Created => 1,
+            ChangeKind::Modified => 2,
+            ChangeKind::Deleted => 3,
+            ChangeKind::Renamed => 4,
+        }
+    }
+
+    fn from_code(c: u8) -> Option<Self> {
+        match c {
+            1 => Some(ChangeKind::Created),
+            2 => Some(ChangeKind::Modified),
+            3 => Some(ChangeKind::Deleted),
+            4 => Some(ChangeKind::Renamed),
+            _ => None,
+        }
+    }
 }
 
 impl RemoteHit {
@@ -212,8 +254,12 @@ impl Request {
         if query.len() > MAX_QUERY {
             return Err(invalid("query too long"));
         }
-        let mut buf = Vec::with_capacity(12 + query.len());
-        buf.extend_from_slice(REQUEST_MAGIC);
+        let mut buf = Vec::with_capacity(20 + query.len());
+        buf.extend_from_slice(if self.recent_since.is_some() {
+            RECENT_MAGIC
+        } else {
+            REQUEST_MAGIC
+        });
         buf.extend_from_slice(&self.limit.min(MAX_HITS).to_le_bytes());
         buf.extend_from_slice(&(query.len() as u32).to_le_bytes());
         buf.extend_from_slice(query);
@@ -225,6 +271,9 @@ impl Request {
         for u in &self.sizes_of {
             buf.extend_from_slice(&u.to_le_bytes());
         }
+        if let Some(since) = self.recent_since {
+            buf.extend_from_slice(&since.to_le_bytes());
+        }
         w.write_all(&buf)?;
         w.flush()
     }
@@ -234,9 +283,11 @@ impl Request {
     pub fn read_from(r: &mut impl Read) -> io::Result<Self> {
         let mut magic = [0u8; 4];
         r.read_exact(&mut magic)?;
-        if &magic != REQUEST_MAGIC {
-            return Err(invalid("bad request"));
-        }
+        let recent = match &magic {
+            m if m == REQUEST_MAGIC => false,
+            m if m == RECENT_MAGIC => true,
+            _ => return Err(invalid("bad request")),
+        };
         let limit = read_u32(r)?.min(MAX_HITS);
         let len = read_u32(r)? as usize;
         if len > MAX_QUERY {
@@ -256,11 +307,17 @@ impl Request {
             r.read_exact(&mut u)?;
             sizes_of.push(u16::from_le_bytes(u));
         }
+        let recent_since = if recent {
+            Some(read_u64(r)? as i64)
+        } else {
+            None
+        };
         Ok(Self {
             query,
             limit,
             filter,
             sizes_of,
+            recent_since,
         })
     }
 }
@@ -279,7 +336,7 @@ impl Response {
         body.extend_from_slice(&(hits.len() as u32).to_le_bytes());
         for h in hits {
             let path = &h.path[..h.path.len().min(MAX_PATH_UNITS as usize)];
-            body.push(u8::from(h.is_dir));
+            body.push(u8::from(h.is_dir) | (h.change.map_or(0, ChangeKind::code) << 1));
             body.extend_from_slice(&h.size.to_le_bytes());
             body.extend_from_slice(&h.modified.to_le_bytes());
             body.extend_from_slice(&(path.len() as u32).to_le_bytes());
@@ -339,6 +396,7 @@ impl Response {
                 is_dir: flags[0] & 1 != 0,
                 size,
                 modified,
+                change: ChangeKind::from_code((flags[0] >> 1) & 0b111),
             });
         }
         Ok(Self {
@@ -360,7 +418,40 @@ mod tests {
             is_dir,
             size: 1 << 33,
             modified: 133_000_000_000_000_000,
+            change: None,
         }
+    }
+
+    #[test]
+    fn recent_changes_round_trip_and_ordinary_requests_stay_fxq3() {
+        let plain = Request {
+            query: "x".into(),
+            limit: 5,
+            ..Default::default()
+        };
+        let mut buf = Vec::new();
+        plain.write_to(&mut buf).unwrap();
+        assert_eq!(&buf[..4], b"FXQ3", "an old service still understands it");
+        let recent = Request {
+            limit: 1000,
+            recent_since: Some(1_795_000_000),
+            ..Default::default()
+        };
+        let mut buf = Vec::new();
+        recent.write_to(&mut buf).unwrap();
+        assert_eq!(&buf[..4], b"FXQ4");
+        assert_eq!(Request::read_from(&mut buf.as_slice()).unwrap(), recent);
+        let mut deleted = hit(r"C:\Downloads\a.zip", false);
+        deleted.change = Some(ChangeKind::Deleted);
+        let resp = Response {
+            status: Status::Ready,
+            items: 1,
+            index_bytes: 1,
+            hits: vec![deleted, hit(r"C:\Fotos", true)],
+        };
+        let mut buf = Vec::new();
+        resp.write_to(&mut buf).unwrap();
+        assert_eq!(Response::read_from(&mut buf.as_slice()).unwrap(), resp);
     }
 
     #[test]
@@ -377,6 +468,7 @@ mod tests {
                 modified_max: Some(-5),
             },
             sizes_of: r"C:\Users".encode_utf16().collect(),
+            recent_since: None,
         };
         let mut buf = Vec::new();
         req.write_to(&mut buf).unwrap();

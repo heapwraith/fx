@@ -208,6 +208,7 @@ pub fn service() -> std::io::Result<()> {
                     limit: 1000,
                     filter: SearchFilter::from_filters(&filters),
                     sizes_of: Vec::new(),
+                    recent_since: None,
                 };
                 let started = Instant::now();
                 fx_index::pipe::query(&request, 2000)?;

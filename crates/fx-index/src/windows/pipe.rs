@@ -263,6 +263,7 @@ mod tests {
                         is_dir: false,
                         size: u64::from(r.limit),
                         modified: 0,
+                        change: None,
                     }],
                 });
                 serve_on(&name, &pipe_sddl(&sid), &stop, handler)
