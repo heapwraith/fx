@@ -216,6 +216,13 @@ pub const COMMANDS: &[Command] = &[
         Action::Image(ImageAction::Half),
     ),
     direct(
+        (
+            "Imagens: renomear pela data da foto",
+            "Images: rename by date taken",
+        ),
+        Action::Image(ImageAction::RenameByDate),
+    ),
+    direct(
         ("Agrupar por tipo", "Group by type"),
         Action::Group(GroupBy::Type),
     ),

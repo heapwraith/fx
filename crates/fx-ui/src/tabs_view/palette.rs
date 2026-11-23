@@ -485,7 +485,9 @@ impl TabsView {
                 Action::About => self.open_settings(super::settings::Section::About, cx),
                 Action::SaveWorkspace => self.open_palette_naming(cx),
                 Action::Compare => self.start_compare(cx),
-                Action::Image(action) => tab.update(cx, |view, cx| view.image_action(action, cx)),
+                Action::Image(action) => {
+                    tab.update(cx, |view, cx| view.image_action(action, window, cx))
+                }
                 Action::Group(by) => tab.update(cx, |view, cx| view.set_group_by(by, cx)),
                 Action::MediaColumn(col) => {
                     tab.update(cx, |view, cx| view.toggle_media_column(col, cx))

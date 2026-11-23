@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use futures::StreamExt;
 use fx_core::{tr, trf};
 use fx_shell::images::{ImageKind, convert_image};
-use gpui::Context;
+use gpui::{Context, Window};
 
 use super::FolderView;
 
@@ -18,6 +18,9 @@ use super::FolderView;
 pub enum ImageAction {
     To(ImageKind),
     Half,
+    /// Rename by the date taken (`2024-07-15 14.30.22.jpg`), as one
+    /// operation that undo reverts.
+    RenameByDate,
 }
 
 fn is_image(path: &Path) -> bool {
@@ -40,7 +43,7 @@ fn copy_name(src: &Path, action: ImageAction) -> (PathBuf, ImageKind) {
         .map_or_else(String::new, |s| s.to_string_lossy().into_owned());
     let (kind, name) = match action {
         ImageAction::To(kind) => (kind, format!("{stem}.{}", kind.extension())),
-        ImageAction::Half => {
+        ImageAction::Half | ImageAction::RenameByDate => {
             let png = src
                 .extension()
                 .is_some_and(|e| e.eq_ignore_ascii_case("png"));
@@ -88,7 +91,12 @@ fn make_copy(src: &Path, action: ImageAction) -> std::io::Result<PathBuf> {
 
 impl FolderView {
     /// Runs `action` on the selected images (palette).
-    pub fn image_action(&mut self, action: ImageAction, cx: &mut Context<Self>) {
+    pub fn image_action(
+        &mut self,
+        action: ImageAction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let images: Vec<PathBuf> = self
             .selected_paths()
             .into_iter()
@@ -99,6 +107,10 @@ impl FolderView {
                 tr!("Selecione uma ou mais imagens", "Select one or more images").to_owned(),
                 cx,
             );
+            return;
+        }
+        if action == ImageAction::RenameByDate {
+            self.rename_by_date(images, window, cx);
             return;
         }
         let total = images.len();
@@ -149,6 +161,137 @@ impl FolderView {
             });
         })
         .detach();
+    }
+}
+
+/// The renames by date (worker thread: checks the folder for free names).
+fn plan_renames(read: Vec<(PathBuf, Option<i64>)>) -> (Vec<(PathBuf, std::ffi::OsString)>, usize) {
+    let without = read.iter().filter(|(_, t)| t.is_none()).count();
+    let photos: Vec<(std::ffi::OsString, Option<i64>)> = read
+        .iter()
+        .map(|(p, t)| (p.file_name().unwrap_or_default().to_os_string(), *t))
+        .collect();
+    let dir = read
+        .first()
+        .and_then(|(p, _)| p.parent())
+        .map(Path::to_path_buf)
+        .unwrap_or_default();
+    let names = fx_core::photo_names::plan(&photos, |name| dir.join(name).exists());
+    let pairs = read
+        .into_iter()
+        .zip(names)
+        .filter_map(|((path, _), new)| Some((path, new?)))
+        .collect();
+    (pairs, without)
+}
+
+impl FolderView {
+    /// Reads the dates on a thread (with real progress), then renames the
+    /// photos that have one through the engine (never replacing; undo).
+    fn rename_by_date(
+        &mut self,
+        images: Vec<PathBuf>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        enum Step {
+            Read(usize),
+            /// The renames, and how many photos have no date.
+            Done(Vec<(PathBuf, std::ffi::OsString)>, usize),
+        }
+        let total = images.len();
+        let (tx, mut rx) = futures::channel::mpsc::unbounded::<Step>();
+        let _ = std::thread::Builder::new()
+            .name("fx-exif".into())
+            .spawn(move || {
+                let mut out = Vec::with_capacity(images.len());
+                for (k, path) in images.into_iter().enumerate() {
+                    let local = fx_shell::photo_taken(&path).ok().flatten().map(|t| {
+                        let secs = t
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map_or(0, |d| d.as_secs() as i64);
+                        secs + fx_shell::utc_offset_at(t)
+                    });
+                    out.push((path, local));
+                    if (k + 1) % 8 == 0 {
+                        let _ = tx.unbounded_send(Step::Read(k + 1));
+                    }
+                }
+                let (pairs, without) = plan_renames(out);
+                let _ = tx.unbounded_send(Step::Done(pairs, without));
+            });
+        let window_handle = window.window_handle();
+        cx.spawn(async move |this, cx| {
+            while let Some(step) = rx.next().await {
+                match step {
+                    Step::Read(done) => {
+                        let _ = this.update(cx, |view, cx| {
+                            view.show_notice(
+                                trf!(
+                                    "Lendo datas das fotos: {} de {}…",
+                                    "Reading photo dates: {} of {}…",
+                                    done,
+                                    total
+                                ),
+                                cx,
+                            );
+                        });
+                    }
+                    Step::Done(pairs, without) => {
+                        let _ = window_handle.update(cx, |_, window, cx| {
+                            let _ = this.update(cx, |view, cx| {
+                                view.apply_dates(pairs, without, window, cx)
+                            });
+                        });
+                    }
+                }
+            }
+        })
+        .detach();
+    }
+
+    fn apply_dates(
+        &mut self,
+        pairs: Vec<(PathBuf, std::ffi::OsString)>,
+        without: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if pairs.is_empty() {
+            self.show_notice(
+                if without > 0 {
+                    tr!(
+                        "Nenhuma das imagens tem data da foto",
+                        "None of the images has a date taken"
+                    )
+                } else {
+                    tr!(
+                        "As fotos já têm o nome pela data",
+                        "The photos are already named by date"
+                    )
+                }
+                .to_owned(),
+                cx,
+            );
+            return;
+        }
+        let renamed = pairs.len();
+        self.submit_job(fx_ops::Job::batch_rename(pairs), window, cx);
+        let text = if without == 0 {
+            trf!(
+                "Renomeando {} fotos pela data; Ctrl+Z desfaz",
+                "Renaming {} photos by date; Ctrl+Z undoes",
+                renamed
+            )
+        } else {
+            trf!(
+                "Renomeando {} fotos pela data; {} sem data ficam como estão",
+                "Renaming {} photos by date; {} without a date stay as they are",
+                renamed,
+                without
+            )
+        };
+        self.show_notice(text, cx);
     }
 }
 

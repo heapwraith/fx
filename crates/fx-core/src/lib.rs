@@ -23,6 +23,7 @@ pub mod miller;
 pub mod naming;
 pub mod natural;
 pub mod package;
+pub mod photo_names;
 mod pinned;
 pub mod preview;
 pub mod search_filter;
