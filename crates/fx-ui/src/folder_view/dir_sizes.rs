@@ -39,7 +39,7 @@ impl DirSizes {
 
     pub(super) fn label(&self, entry: u32, bytes: u64) -> String {
         if self.done.contains(&entry) {
-            fx_core::format::size_kb(bytes)
+            fx_core::format::size(bytes)
         } else if self.running {
             "…".to_owned()
         } else {

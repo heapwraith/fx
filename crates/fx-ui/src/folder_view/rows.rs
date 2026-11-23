@@ -67,7 +67,7 @@ impl FolderView {
                 let size: SharedString = if is_dir {
                     self.dir_sizes.label(i, self.list.size(i)).into()
                 } else {
-                    size_kb(self.list.size(i)).into()
+                    size(self.list.size(i)).into()
                 };
                 div()
                     .id(i as usize)

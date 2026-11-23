@@ -57,7 +57,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, channel};
 use std::time::{Duration, Instant, SystemTime};
 
-use fx_core::format::{date_time, items, size_kb};
+use fx_core::format::{date_time, items, size};
 use fx_core::{
     Change, Direction, Entry, FileList, History, MoveMode, Selection, SortKey, Step, next_sort,
     type_label,
@@ -829,7 +829,7 @@ impl FolderView {
                         trf!(
                             "{}, modificado em {}",
                             "{}, modified {}",
-                            size_kb(self.list.size(i)),
+                            size(self.list.size(i)),
                             local_date(self.list.modified(i))
                         )
                     };

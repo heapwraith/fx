@@ -860,7 +860,7 @@ impl FolderView {
                                 .child(if f.is_dir {
                                     String::new()
                                 } else {
-                                    fx_core::format::size_kb(f.size)
+                                    fx_core::format::size(f.size)
                                 }),
                         )
                         .child(

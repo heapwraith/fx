@@ -24,6 +24,17 @@ pub fn classify(arg: &OsStr) -> ShellArgument {
         // Not Unicode: only a real path can be like that.
         return ShellArgument::Path(PathBuf::from(arg));
     };
+    // Windows hands a drive as `"D:\"`, where the backslash escapes the
+    // closing quote: it arrives as `D:"`. A name cannot hold a quote, so a
+    // trailing one is always that backslash.
+    let restored;
+    let (arg, text) = match text.strip_suffix('"') {
+        Some(head) => {
+            restored = format!("{head}\\");
+            (OsStr::new(restored.as_str()), restored.as_str())
+        }
+        None => (arg, text),
+    };
     let virtual_name = || ShellArgument::Virtual(arg.to_owned());
     if text
         .get(..6)
@@ -105,5 +116,15 @@ mod tests {
             path(r"C:\Users\ana")
         );
         assert_eq!(classify(OsStr::new(pc)), virt(pc), "This PC itself");
+    }
+
+    #[test]
+    fn a_trailing_backslash_eaten_by_the_quotes_comes_back() {
+        // `"D:\"` on the command line arrives as `D:"` (the backslash
+        // escapes the closing quote).
+        assert_eq!(classify(OsStr::new("D:\"")), path(r"D:\"));
+        assert_eq!(classify(OsStr::new("C:\\Users\"")), path(r"C:\Users\"));
+        let pc = "::{20D04FE0-3AEA-1069-A2D8-08002B30309D}";
+        assert_eq!(classify(OsStr::new(&format!("{pc}\\C:\""))), path(r"C:\"));
     }
 }

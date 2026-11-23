@@ -821,7 +821,7 @@ fn zip_listing(path: &Path) -> Option<Content> {
             let size = if e.is_dir {
                 String::new()
             } else {
-                fx_core::format::size_kb(e.size)
+                fx_core::format::size(e.size)
             };
             (e.name.clone().into(), size.into())
         })

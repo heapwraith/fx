@@ -4,11 +4,30 @@ use std::time::{Duration, SystemTime};
 
 use crate::locale::english;
 
-/// Explorer-style size: bytes are shown in whole KB, rounded up ("0 KB" only for
-/// empty files), with thousands separators: `1 KB`, `12.345 KB`.
-pub fn size_kb(bytes: u64) -> String {
+/// File size for lists: whole KB below 1 MB, rounded up like Explorer ("0 KB"
+/// only for empty files), then MB, GB or TB (binary units) with one decimal
+/// below 100: `14 KB`, `17,6 MB`, `250 GB`.
+pub fn size(bytes: u64) -> String {
     let kb = bytes.div_ceil(1024);
-    format!("{} KB", group_thousands(kb, english()))
+    if kb < 1024 {
+        return format!("{kb} KB");
+    }
+    const UNITS: [&str; 3] = ["MB", "GB", "TB"];
+    // From the rounded-up KB, so 1 byte short of 1 MB reads "1,0 MB".
+    let mut value = kb as f64 / 1024.0;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    let text = if value < 100.0 {
+        // Truncated, not rounded: 99.96 MB must not read "100,0 MB".
+        let t = format!("{:.1}", (value * 10.0).floor() / 10.0);
+        if english() { t } else { t.replace('.', ",") }
+    } else {
+        group_thousands(value.floor() as u64, english())
+    };
+    format!("{text} {}", UNITS[unit])
 }
 
 /// Short size for capacities: "931 GB", "1,8 TB", "512 MB" (binary units,
@@ -100,13 +119,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn sizes_round_up_to_kb() {
-        assert_eq!(size_kb(0), "0 KB");
-        assert_eq!(size_kb(1), "1 KB");
-        assert_eq!(size_kb(1024), "1 KB");
-        assert_eq!(size_kb(1025), "2 KB");
-        assert_eq!(size_kb(12_345 * 1024), "12.345 KB");
-        assert_eq!(size_kb(1_234_567 * 1024), "1.234.567 KB");
+    fn sizes_climb_from_kb_to_tb() {
+        const KB: u64 = 1024;
+        const MB: u64 = KB * KB;
+        const GB: u64 = MB * KB;
+        assert_eq!(size(0), "0 KB");
+        assert_eq!(size(1), "1 KB");
+        assert_eq!(size(KB), "1 KB");
+        assert_eq!(size(KB + 1), "2 KB");
+        assert_eq!(size(MB - KB - 1), "1023 KB");
+        assert_eq!(size(MB - 1), "1,0 MB");
+        assert_eq!(size(MB), "1,0 MB");
+        assert_eq!(size(18_068 * KB), "17,6 MB");
+        assert_eq!(size(100 * MB - 100 * KB), "99,9 MB");
+        assert_eq!(size(250 * MB), "250 MB");
+        assert_eq!(size(1023 * MB), "1.023 MB");
+        assert_eq!(size(GB + GB / 5), "1,2 GB");
+        assert_eq!(size(250 * GB), "250 GB");
+        assert_eq!(size(1_979_120_929_996), "1,8 TB");
+        assert_eq!(size(5000 * GB * KB), "5.000 TB");
     }
 
     #[test]
