@@ -159,6 +159,10 @@ pub struct Theme {
     /// accent, comments the secondary text.
     pub syntax_string: Color,
     pub syntax_number: Color,
+    /// Text on an accent fill (primary buttons).
+    pub on_accent: Color,
+    /// Fill of a dangerous primary button (delete for good).
+    pub danger: Color,
     /// Built from the Windows high contrast colors (T3.8): no Mica, no
     /// translucent fills.
     pub high_contrast: bool,
@@ -182,6 +186,8 @@ impl Theme {
         thumb_hover: 0x0000008A,
         syntax_string: 0xA0461AFF,
         syntax_number: 0x6A3FA0FF,
+        on_accent: 0xFFFFFFFF,
+        danger: 0xC42B1CFF,
         high_contrast: false,
     };
 
@@ -200,6 +206,8 @@ impl Theme {
         thumb_hover: 0xFFFFFF8A,
         syntax_string: 0xE8A87CFF,
         syntax_number: 0xC6A0F6FF,
+        on_accent: 0x000000FF,
+        danger: 0xC42B1CFF,
         high_contrast: false,
     };
 
@@ -237,6 +245,8 @@ impl Theme {
             thumb_hover: c.highlight,
             syntax_string: c.window_text,
             syntax_number: c.window_text,
+            on_accent: c.highlight_text,
+            danger: c.highlight,
             high_contrast: true,
         }
     }
@@ -359,6 +369,11 @@ mod tests {
                 let c = contrast(fg, t.base);
                 assert!(c >= 4.5, "{:?} syntax {name}: {c:.2}", t.mode);
             }
+            // Primary buttons: text on the accent and white on the danger red.
+            let c = contrast(t.on_accent, t.accent);
+            assert!(c >= 4.5, "{:?} on accent: {c:.2}", t.mode);
+            let c = contrast(0xFFFFFFFF, t.danger);
+            assert!(c >= 4.5, "{:?} on danger: {c:.2}", t.mode);
             // The focus ring and the selection indicator must stand out (3:1, WCAG 1.4.11).
             assert!(contrast(t.focus, layer) >= 3.0, "{:?} focus", t.mode);
             assert!(contrast(t.accent, layer) >= 3.0, "{:?} accent", t.mode);

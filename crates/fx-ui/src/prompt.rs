@@ -144,8 +144,9 @@ impl Render for FxPrompt {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = self.theme;
         let danger = matches!(self.level, PromptLevel::Critical);
-        let on_accent = if t.mode == Mode::Dark {
-            0x000000FF
+        // Danger keeps white on red, except in high contrast (system colors).
+        let on_danger = if t.high_contrast {
+            t.on_accent
         } else {
             0xFFFFFFFF
         };
@@ -160,8 +161,8 @@ impl Render for FxPrompt {
                 .rounded(px(RADIUS))
                 .cursor_pointer()
                 .when(primary, |d| {
-                    d.bg(rgba(if danger { 0xC42B1CFF } else { t.accent }))
-                        .text_color(rgba(if danger { 0xFFFFFFFF } else { on_accent }))
+                    d.bg(rgba(if danger { t.danger } else { t.accent }))
+                        .text_color(rgba(if danger { on_danger } else { t.on_accent }))
                 })
                 .when(!primary, |d| {
                     d.border_1()

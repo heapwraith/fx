@@ -11,7 +11,40 @@ pub const TAGS: [(&str, &str, u32); 7] = [
     ("cinza", "gray", 0x8B8D98FF),
 ];
 
-/// The bit of a tag named in either language (or by its number 1-7).
+/// Names the user gave to the tags (T5.5), in bit order; `None`: the
+/// built-in name. Set once the saved names load and on every rename.
+static CUSTOM: std::sync::RwLock<[Option<String>; 7]> =
+    std::sync::RwLock::new([None, None, None, None, None, None, None]);
+
+/// Gives tag `k` its own name (`None` or empty: back to the built-in one).
+pub fn set_name(k: usize, name: Option<String>) {
+    let name = name.map(|n| n.trim().to_owned()).filter(|n| !n.is_empty());
+    if let Some(slot) = CUSTOM
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get_mut(k)
+    {
+        *slot = name;
+    }
+}
+
+/// The name of tag `k`: the user's, else the built-in one in the
+/// interface language.
+pub fn name(k: usize) -> String {
+    let custom = CUSTOM
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get(k)
+        .cloned()
+        .flatten();
+    custom.unwrap_or_else(|| {
+        let (pt, en, _) = TAGS[k.min(TAGS.len() - 1)];
+        if crate::locale::english() { en } else { pt }.to_owned()
+    })
+}
+
+/// The bit of a tag named in either language, by the user's name for it
+/// (case ignored), or by its number 1-7.
 pub fn bit_for(name: &str) -> Option<u8> {
     let n = name.trim().to_lowercase();
     if let Ok(k) = n.parse::<usize>()
@@ -19,8 +52,13 @@ pub fn bit_for(name: &str) -> Option<u8> {
     {
         return Some(1 << (k - 1));
     }
-    TAGS.iter()
-        .position(|(pt, en, _)| *pt == n || *en == n)
+    let custom = CUSTOM
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .iter()
+        .position(|c| c.as_deref().is_some_and(|c| c.to_lowercase() == n));
+    custom
+        .or_else(|| TAGS.iter().position(|(pt, en, _)| *pt == n || *en == n))
         .map(|i| 1 << i)
 }
 
@@ -45,5 +83,20 @@ mod tests {
         assert_eq!(bit_for("rosa"), None);
         let c: Vec<usize> = colors(0b100_0001).map(|(i, _)| i).collect();
         assert_eq!(c, [0, 6]);
+    }
+
+    #[test]
+    fn custom_names_are_found_and_shown() {
+        set_name(5, Some(" Trabalho ".into()));
+        assert_eq!(name(5), "Trabalho");
+        assert_eq!(bit_for("trabalho"), Some(1 << 5));
+        assert_eq!(
+            bit_for("roxo"),
+            Some(1 << 5),
+            "the built-in name still works"
+        );
+        set_name(5, Some(String::new()));
+        assert_eq!(bit_for("trabalho"), None);
+        assert!(name(5) == "roxo" || name(5) == "purple");
     }
 }

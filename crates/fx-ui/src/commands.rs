@@ -58,6 +58,8 @@ pub enum Action {
     TabToWindow,
     /// T6.17: compares the selected files.
     DiffFiles,
+    /// T5.4: the embedded terminal with this shell (`true`: Command Prompt).
+    EmbeddedTerminal(bool),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -127,14 +129,15 @@ impl Command {
             Action::ReportCrash | Action::CrashReports => "\u{E7BA}", // Warning
             Action::Update | Action::UpdateChecks => "\u{E895}", // Sync
             Action::ConfirmRecycle => "\u{E74D}",
-            Action::SaveWorkspace => "\u{E74E}",  // Save
-            Action::Compare => "\u{E8F9}",        // Switch
-            Action::Image(_) => "\u{EB9F}",       // Photo
-            Action::Group(_) => "\u{F168}",       // GroupList
-            Action::MediaColumn(_) => "\u{E71D}", // AllApps (columns)
-            Action::CompressZip => "\u{F012}",    // ZipFolder
-            Action::TabToWindow => "\u{E8A7}",    // OpenInNewWindow
-            Action::DiffFiles => "\u{E8F9}",      // Switch
+            Action::SaveWorkspace => "\u{E74E}",       // Save
+            Action::Compare => "\u{E8F9}",             // Switch
+            Action::Image(_) => "\u{EB9F}",            // Photo
+            Action::Group(_) => "\u{F168}",            // GroupList
+            Action::MediaColumn(_) => "\u{E71D}",      // AllApps (columns)
+            Action::CompressZip => "\u{F012}",         // ZipFolder
+            Action::TabToWindow => "\u{E8A7}",         // OpenInNewWindow
+            Action::DiffFiles => "\u{E8F9}",           // Switch
+            Action::EmbeddedTerminal(_) => "\u{E756}", // CommandPrompt
         }
     }
 
@@ -242,6 +245,20 @@ pub const COMMANDS: &[Command] = &[
             "Compare files (selected)",
         ),
         Action::DiffFiles,
+    ),
+    direct(
+        (
+            "Terminal embutido: PowerShell",
+            "Embedded terminal: PowerShell",
+        ),
+        Action::EmbeddedTerminal(false),
+    ),
+    direct(
+        (
+            "Terminal embutido: Prompt de Comando",
+            "Embedded terminal: Command Prompt",
+        ),
+        Action::EmbeddedTerminal(true),
     ),
     direct(
         ("Mover aba para nova janela", "Move tab to new window"),

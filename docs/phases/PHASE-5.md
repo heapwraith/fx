@@ -25,12 +25,12 @@ Toda a lista de `docs/TESTES-FINAIS.md` (Narrador, Explorador, totais pelo servi
 Site do projeto, guia de uso (atalhos, busca, painel duplo, etiquetas, terminal, gerenciador padrão) e vídeo de 30 s lado a lado com o Explorador.
 
 ## T5.4 — Terminal embutido completo (T3.5)
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-23 · Resumo: o terminal acompanha a pasta da aba quando o shell espera num prompt vazio (`Set-Location -LiteralPath` ou `cd /d`, nunca no meio do que se digita); "Terminal embutido: Prompt de Comando" na paleta abre o cmd (Ctrl+J reabre o último usado); a roda rola o histórico (até 2 mil linhas, o cursor some e a legenda diz quantas linhas acima); arrastar seleciona texto, Ctrl+Shift+C (ou Ctrl+C com seleção) copia, Ctrl+Shift+V cola; alto contraste com as cores do sistema. P4 digitando no terminal (`fx-bench terminal`): p95 4,55 ms, máximo 4,59 ms. Conferido de ponta a ponta com teclado e mouse (cópia de "ola-fx", `cd` ao abrir uma pasta).
 
 Seguir a pasta da aba (`cd`) quando ela muda, cmd além do PowerShell, rolar o histórico com a roda, copiar texto, e medir P4 com o terminal aberto.
 
 ## T5.5 — Pendências de funcionalidades
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-23 · Resumo: painéis extras (caminho e vista em colunas de cada um) e a vista em colunas da aba salvos na sessão (tabelas `tab_layout` e `tab_panes`; conferido fechando e reabrindo); etiquetas na grade e nas colunas, nomes próprios para etiquetas ("Renomear etiqueta" na paleta, guardados no `tags.db`, valem em `etiqueta:`) e "Etiqueta: …" na paleta abrindo a busca por etiqueta; a busca "nesta pasta" e os totais entram em pastas da nuvem (o tipo do ponto de reparse decide: só links, junções e pontos de montagem ficam de fora); terminal, botão de perigo e etiquetas com as cores do sistema no alto contraste; ícones do shell nos resultados da busca e na vista em colunas; com o filtro deixando um item só, Espaço abre o Quick Look dele.
 
 - Painel duplo e vista em colunas salvos na sessão.
 - Etiquetas na grade e nas colunas; editar nomes de etiquetas; filtro por etiqueta na paleta.

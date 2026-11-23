@@ -43,7 +43,7 @@ use std::time::Instant;
 
 use fixtures::{Outcome, Spec};
 
-const USAGE: &str = "usage: fx-bench fixtures [--clean] | enum | list | open | scroll | responsive <folder> | type | nav | path | tabs | drives | grid | copy | menu | features | memory | index (--volume C: | --synthetic N) | search (--volume C: | --synthetic N | --service) [--interactive] | all";
+const USAGE: &str = "usage: fx-bench fixtures [--clean] | enum | list | open | scroll | responsive <folder> | type | nav | path | tabs | drives | grid | copy | menu | features | terminal | memory | index (--volume C: | --synthetic N) | search (--volume C: | --synthetic N | --service) [--interactive] | all";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -64,6 +64,7 @@ fn main() -> ExitCode {
         ["copy"] => ui_bench::copy_while_using(),
         ["menu"] => ui_bench::menu_latency(),
         ["features"] => ui_bench::features(),
+        ["terminal"] => ui_bench::terminal(),
         ["memory"] => ui_bench::memory(),
         ["all"] => run_all(),
         ["index", "--volume", volume] => index_bench::volume(volume),

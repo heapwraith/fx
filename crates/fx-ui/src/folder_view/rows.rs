@@ -144,6 +144,10 @@ impl FolderView {
                                                 .size(px(8.0))
                                                 .rounded_full()
                                                 .bg(rgba(c))
+                                                // High contrast: outlined in the system text color.
+                                                .when(t.high_contrast, |d| {
+                                                    d.border_1().border_color(rgba(t.text))
+                                                })
                                         }))
                                         .children(self.git.states.get(self.list.name(i)).map(
                                             |state| {

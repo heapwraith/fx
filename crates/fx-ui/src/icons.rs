@@ -91,6 +91,23 @@ impl Icons {
         !self.cache.contains_key(key)
     }
 
+    /// The icon of an item drawn now (search results, columns; T5.5): the
+    /// cached one, or `None` after asking for it once.
+    pub fn get_or_request(
+        &mut self,
+        path: &std::path::Path,
+        name: &str,
+        is_dir: bool,
+    ) -> Option<Arc<Image>> {
+        let dir = path.parent().unwrap_or(path);
+        let key = fx_shell::icons::icon_key(dir, name, is_dir);
+        if let Some(image) = self.get(&key) {
+            return Some(image);
+        }
+        self.request([key]);
+        None
+    }
+
     /// Asks for every key not asked before.
     pub fn request(&mut self, keys: impl IntoIterator<Item = IconKey>) {
         let Some(service) = &self.service else { return };

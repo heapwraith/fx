@@ -80,6 +80,13 @@ pub struct TabState {
     pub sort: Option<(String, bool)>,
     /// Widths of the Size, Type and Date columns; `None`: defaults.
     pub widths: Option<[f32; 3]>,
+    /// The column view was open (T5.5).
+    pub columns: bool,
+    /// The extra panes beside this one (F3, Ctrl+F3; T5.5): folder and
+    /// whether the column view was open in it.
+    pub panes: Vec<(PathBuf, bool)>,
+    /// The pane with the focus: 0 is this one, `k` is `panes[k - 1]`.
+    pub focused_pane: usize,
 }
 
 /// An operation that can be undone, saved for the next session (T6.6):
@@ -199,6 +206,13 @@ const SCHEMA: &str = "
     CREATE TABLE IF NOT EXISTS tab_view (
         win INTEGER NOT NULL, tab INTEGER NOT NULL, sort TEXT, descending INTEGER,
         size_w REAL, type_w REAL, date_w REAL);
+    -- T5.5: column view and split panes of each tab.
+    CREATE TABLE IF NOT EXISTS tab_layout (
+        win INTEGER NOT NULL, tab INTEGER NOT NULL, columns INTEGER NOT NULL,
+        focused INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS tab_panes (
+        win INTEGER NOT NULL, tab INTEGER NOT NULL, pos INTEGER NOT NULL, path TEXT NOT NULL,
+        columns INTEGER NOT NULL);
     -- T6.5: how often and how recently each folder was opened.
     CREATE TABLE IF NOT EXISTS visits (
         path TEXT PRIMARY KEY, rank REAL NOT NULL, last INTEGER NOT NULL);
@@ -238,7 +252,7 @@ impl Db {
     pub fn save(&mut self, s: &Session) -> rusqlite::Result<()> {
         let tx = self.conn.transaction()?;
         tx.execute_batch(
-            "DELETE FROM windows; DELETE FROM tabs; DELETE FROM tab_selected; DELETE FROM tab_history; DELETE FROM tab_view;",
+            "DELETE FROM windows; DELETE FROM tabs; DELETE FROM tab_selected; DELETE FROM tab_history; DELETE FROM tab_view; DELETE FROM tab_layout; DELETE FROM tab_panes;",
         )?;
         for (w, win) in s.windows.iter().enumerate() {
             let b = win.bounds;
@@ -271,6 +285,18 @@ impl Db {
                             w3.map(|v| v[1]),
                             w3.map(|v| v[2])
                         ],
+                    )?;
+                }
+                if tab.columns || !tab.panes.is_empty() {
+                    tx.execute(
+                        "INSERT INTO tab_layout (win, tab, columns, focused) VALUES (?1, ?2, ?3, ?4)",
+                        params![w as i64, t as i64, tab.columns, tab.focused_pane as i64],
+                    )?;
+                }
+                for (k, (p, columns)) in tab.panes.iter().enumerate() {
+                    tx.execute(
+                        "INSERT INTO tab_panes (win, tab, pos, path, columns) VALUES (?1, ?2, ?3, ?4, ?5)",
+                        params![w as i64, t as i64, k as i64, text(p), columns],
                     )?;
                 }
                 for name in &tab.selected {
@@ -510,6 +536,26 @@ impl Db {
                     Err(rusqlite::Error::QueryReturnedNoRows) => {}
                     Err(e) => return Err(e),
                 }
+                match self.conn.query_row(
+                    "SELECT columns, focused FROM tab_layout WHERE win = ?1 AND tab = ?2",
+                    [*id, pos],
+                    |r| Ok((r.get::<_, bool>(0)?, r.get::<_, i64>(1)?)),
+                ) {
+                    Ok((columns, focused)) => {
+                        tab.columns = columns;
+                        tab.focused_pane = focused.max(0) as usize;
+                    }
+                    Err(rusqlite::Error::QueryReturnedNoRows) => {}
+                    Err(e) => return Err(e),
+                }
+                let mut panes = self.conn.prepare(
+                    "SELECT path, columns FROM tab_panes WHERE win = ?1 AND tab = ?2 ORDER BY pos",
+                )?;
+                tab.panes = panes
+                    .query_map([*id, pos], |r| {
+                        Ok((PathBuf::from(r.get::<_, String>(0)?), r.get::<_, bool>(1)?))
+                    })?
+                    .collect::<rusqlite::Result<_>>()?;
                 win.tabs.push(tab);
             }
         }
@@ -692,6 +738,12 @@ mod tests {
                         forward: vec![PathBuf::from(r"C:\Fotos\2026")],
                         sort: Some(("modified".into(), true)),
                         widths: Some([90.0, 140.0, 150.0]),
+                        columns: true,
+                        panes: vec![
+                            (PathBuf::from(r"D:\"), false),
+                            (PathBuf::from(r"C:\Fotos\2026"), true),
+                        ],
+                        focused_pane: 2,
                     },
                     TabState {
                         path: PathBuf::from(r"D:\Projetos"),

@@ -74,6 +74,41 @@ impl TabsView {
         )
     }
 
+    /// Reopens a saved tab's extra panes (session, T5.5).
+    pub(super) fn restore_panes(
+        &mut self,
+        tab: &Entity<FolderView>,
+        panes: Vec<(std::path::PathBuf, bool)>,
+        focused: usize,
+        cx: &mut Context<Self>,
+    ) {
+        if panes.is_empty() {
+            return;
+        }
+        let views: Vec<_> = panes
+            .into_iter()
+            .take(MAX_PANES - 1)
+            .map(|(path, columns)| {
+                let view = Self::new_tab(
+                    path,
+                    self.look,
+                    self.trace.clone(),
+                    None,
+                    self.media.clone(),
+                    None,
+                    cx,
+                );
+                if columns {
+                    view.update(cx, |v, cx| v.open_columns_view(cx));
+                }
+                view
+            })
+            .collect();
+        let focused = focused.min(views.len());
+        self.seconds
+            .insert(tab.entity_id(), Second { views, focused });
+    }
+
     /// F3: splits the active tab in two, or closes the split.
     pub(super) fn toggle_dual(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let id: EntityId = self.tabs.active().entity_id();

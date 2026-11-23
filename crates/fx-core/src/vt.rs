@@ -99,6 +99,58 @@ impl Screen {
         s.trim_end().to_owned()
     }
 
+    /// Lines in the history and the grid together (scrollback, T5.4).
+    pub fn total_lines(&self) -> usize {
+        self.history.len() + self.rows
+    }
+
+    /// Line `k` of history followed by grid (0 is the oldest kept).
+    pub fn line(&self, k: usize) -> Option<&[Cell]> {
+        match k.checked_sub(self.history.len()) {
+            None => self.history.get(k).map(Vec::as_slice),
+            Some(r) => self.grid.get(r).map(Vec::as_slice),
+        }
+    }
+
+    /// The first line shown when scrolled `back` lines up (clamped to the
+    /// history), as an index for [`Screen::line`].
+    pub fn first_shown(&self, back: usize) -> usize {
+        self.history.len() - back.min(self.history.len())
+    }
+
+    /// The text from `from` to `to` (line, column; either order), lines
+    /// joined with CR LF and trailing spaces dropped: what a selection copies.
+    pub fn text_between(&self, from: (usize, usize), to: (usize, usize)) -> String {
+        let (a, b) = if from <= to { (from, to) } else { (to, from) };
+        let mut out = Vec::new();
+        for k in a.0..=b.0 {
+            let Some(cells) = self.line(k) else { break };
+            let start = if k == a.0 { a.1.min(cells.len()) } else { 0 };
+            let end = if k == b.0 {
+                (b.1 + 1).min(cells.len())
+            } else {
+                cells.len()
+            };
+            let text: String = cells[start..end.max(start)].iter().map(|c| c.ch).collect();
+            out.push(text.trim_end().to_owned());
+        }
+        out.join("\r\n")
+    }
+
+    /// Whether the shell waits at its prompt with nothing typed: the cursor
+    /// line ends in `>` (PowerShell `PS C:\x> `, cmd `C:\x>`) right before
+    /// the cursor and is blank after it. Used to follow the tab's folder
+    /// without mixing a `cd` into what someone is typing.
+    pub fn at_empty_prompt(&self) -> bool {
+        let (row, col) = self.cursor;
+        let Some(cells) = self.grid.get(row) else {
+            return false;
+        };
+        let before: String = cells[..col.min(cells.len())].iter().map(|c| c.ch).collect();
+        let after_blank = cells[col.min(cells.len())..].iter().all(|c| c.ch == ' ');
+        after_blank && before.trim_end().ends_with('>')
+    }
+
     /// Feeds bytes from the terminal.
     pub fn feed(&mut self, bytes: &[u8]) {
         let mut data = std::mem::take(&mut self.pending);
@@ -275,6 +327,26 @@ impl Screen {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scrollback_selection_and_prompt() {
+        let mut s = Screen::new(10, 2);
+        s.feed(b"one\r\ntwo\r\nthree\r\nPS C:\\> ");
+        assert_eq!(s.history.len(), 2);
+        assert_eq!(s.total_lines(), 4);
+        assert_eq!(s.first_shown(0), 2, "the grid");
+        assert_eq!(s.first_shown(1), 1);
+        assert_eq!(s.first_shown(99), 0, "clamped to the history");
+        assert_eq!(s.text_between((0, 1), (1, 1)), "ne\r\ntw");
+        assert_eq!(
+            s.text_between((2, 4), (0, 0)),
+            "one\r\ntwo\r\nthree",
+            "either order"
+        );
+        assert!(s.at_empty_prompt());
+        s.feed(b"dir");
+        assert!(!s.at_empty_prompt(), "something typed");
+    }
 
     #[test]
     fn text_newlines_and_wrap() {

@@ -37,7 +37,7 @@ mod path_bar;
 mod quick_look;
 mod rows;
 mod search;
-mod terminal;
+pub mod terminal;
 mod timeline;
 mod view_menu;
 
@@ -95,7 +95,7 @@ const THUMB_MIN: f32 = 24.0;
 /// Width of the accent bar on the selected row (Fluent list selection).
 const INDICATOR_WIDTH: f32 = 3.0;
 /// File icons are drawn at 16 px (small shell icons).
-const ICON_SIZE: f32 = 16.0;
+pub(super) const ICON_SIZE: f32 = 16.0;
 /// Enter opens at most this many selected files at once.
 const MAX_OPEN: usize = 32;
 
@@ -671,8 +671,23 @@ impl FolderView {
     ) {
         cx.spawn(async move |this, cx| {
             let background = cx.background_executor().clone();
-            let mut rx = crate::chan::stream(rx);
-            while let Some(batch) = rx.next().await {
+            // The listing is waited for on a background task, not through
+            // `chan::stream`: the wait lasts only while the folder is read
+            // (not the long waits D-066 moved off the pool), and the relay
+            // thread cost ~10 ms before the first frame with rows (P2,
+            // measured 82 → 72 ms on flat-100k). Batches come one at a
+            // time: joining the queued ones measured slower (the first
+            // frame waits for a bigger update).
+            let mut rx = rx;
+            loop {
+                let (back, batch) = background
+                    .spawn(async move {
+                        let batch = rx.recv();
+                        (rx, batch)
+                    })
+                    .await;
+                rx = back;
+                let Ok(batch) = batch else { break };
                 let current = this.update(cx, |view, cx| {
                     if view.generation != generation {
                         return false;
@@ -1014,13 +1029,20 @@ impl FolderView {
                 self.sort.1 == Direction::Descending,
             )),
             widths: Some([self.widths.size, self.widths.kind, self.widths.date]),
+            columns: self.miller.is_some(),
+            // Filled in by the tab row, which owns the panes.
+            panes: Vec::new(),
+            focused_pane: 0,
         }
     }
 
     /// Restores a saved tab (right after `new` on the same folder): view,
     /// history, and the selection and scroll once the folder is read.
-    pub fn apply_saved(&mut self, t: crate::store::TabState) {
+    pub fn apply_saved(&mut self, t: crate::store::TabState, cx: &mut Context<Self>) {
         self.grid = t.grid;
+        if t.columns && self.miller.is_none() {
+            self.open_columns(cx);
+        }
         if let Some(key) = t.sort.as_ref().and_then(|(k, _)| SortKey::from_id(k)) {
             let desc = t.sort.as_ref().is_some_and(|(_, d)| *d);
             let dir = if desc {

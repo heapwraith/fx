@@ -53,6 +53,19 @@ enum Item {
     Search(crate::store::SearchState),
     /// Forgets a saved search (offered only when searching).
     RemoveSearch(String),
+    /// Every item with this tag, wherever it is (T5.5): index in `TAGS`.
+    Tag(usize),
+    /// Asks a new name for tag `k` (offered only when searching).
+    RenameTag(usize),
+}
+
+/// What the palette is asking a name for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Naming {
+    /// A workspace to save (T6.13).
+    Workspace,
+    /// Tag `k` (T5.5).
+    Tag(usize),
 }
 
 impl Item {
@@ -66,6 +79,12 @@ impl Item {
             }
             Item::Search(q) => trf!("Busca: {}", "Search: {}", q.query),
             Item::RemoveSearch(query) => trf!("Esquecer busca: {}", "Forget search: {}", query),
+            Item::Tag(k) => trf!("Etiqueta: {}", "Tag: {}", fx_core::tags::name(*k)),
+            Item::RenameTag(k) => trf!(
+                "Renomear etiqueta: {}",
+                "Rename tag: {}",
+                fx_core::tags::name(*k)
+            ),
         }
     }
 }
@@ -77,8 +96,8 @@ pub(super) struct Palette {
     shown: Vec<usize>,
     cursor: usize,
     scroll: UniformListScrollHandle,
-    /// Typing the name of a workspace to save (T6.13), not searching.
-    naming: bool,
+    /// Typing a name (a workspace to save, a tag), not searching.
+    naming: Option<Naming>,
 }
 
 impl Palette {
@@ -87,7 +106,7 @@ impl Palette {
     fn filter(&mut self) {
         self.cursor = 0;
         self.scroll.scroll_to_item(0, ScrollStrategy::Top);
-        if self.naming {
+        if self.naming.is_some() {
             self.shown.clear();
             return;
         }
@@ -145,15 +164,20 @@ impl TabsView {
 
     /// The palette asking the name of a workspace to save (T6.13).
     pub(super) fn open_palette_naming(&mut self, cx: &mut Context<Self>) {
+        self.open_naming(Naming::Workspace, String::new(), cx);
+    }
+
+    fn open_naming(&mut self, naming: Naming, query: String, cx: &mut Context<Self>) {
         let mut p = Palette {
             query: String::new(),
             items: Vec::new(),
             shown: Vec::new(),
             cursor: 0,
             scroll: UniformListScrollHandle::new(),
-            naming: true,
+            naming: Some(naming),
         };
         p.filter();
+        p.query = query;
         self.palette = Some(p);
         cx.notify();
     }
@@ -212,13 +236,15 @@ impl TabsView {
         let saved = crate::searches::list();
         items.extend(saved.iter().map(|q| Item::RemoveSearch(q.query.clone())));
         items.extend(saved.into_iter().map(Item::Search));
+        items.extend((0..fx_core::tags::TAGS.len()).map(Item::Tag));
+        items.extend((0..fx_core::tags::TAGS.len()).map(Item::RenameTag));
         let mut palette = Palette {
             query: String::new(),
             items,
             shown: Vec::new(),
             cursor: 0,
             scroll: UniformListScrollHandle::new(),
-            naming: false,
+            naming: None,
         };
         palette.filter();
         self.palette = Some(palette);
@@ -247,12 +273,27 @@ impl TabsView {
                 cx.notify();
                 return;
             }
-            "enter" if p.naming => {
+            "enter" if p.naming.is_some() => {
                 let name = p.query.trim().to_owned();
-                if !name.is_empty() {
-                    self.palette = None;
-                    self.save_workspace(name, cx);
-                    self.focus_active(window, cx);
+                match p.naming {
+                    Some(Naming::Tag(k)) => {
+                        // Empty: back to the built-in name.
+                        self.palette = None;
+                        crate::tags::rename(k, &name);
+                        let text = trf!(
+                            "Etiqueta agora se chama \"{}\"",
+                            "Tag is now called \"{}\"",
+                            fx_core::tags::name(k)
+                        );
+                        self.current().update(cx, |v, cx| v.show_notice(text, cx));
+                        self.focus_active(window, cx);
+                    }
+                    _ if !name.is_empty() => {
+                        self.palette = None;
+                        self.save_workspace(name, cx);
+                        self.focus_active(window, cx);
+                    }
+                    _ => {}
                 }
                 cx.notify();
                 return;
@@ -312,8 +353,10 @@ impl TabsView {
         use crate::a11y::{Item as A11yItem, Overlay};
         let p = self.palette.as_ref()?;
         let mut items = vec![A11yItem::Input {
-            label: if p.naming {
+            label: if p.naming == Some(Naming::Workspace) {
                 tr!("Nome do espaço de trabalho", "Workspace name")
+            } else if p.naming.is_some() {
+                tr!("Nome da etiqueta", "Tag name")
             } else {
                 tr!("Comando ou pasta", "Command or folder")
             }
@@ -345,7 +388,14 @@ impl TabsView {
                         q.root.display()
                     )
                 }),
-                Item::RemoveWorkspace(_) | Item::RemoveSearch(_) => None,
+                Item::Tag(_) => Some(
+                    tr!(
+                        "itens com esta etiqueta, em qualquer pasta",
+                        "items with this tag, in any folder"
+                    )
+                    .to_owned(),
+                ),
+                Item::RemoveWorkspace(_) | Item::RemoveSearch(_) | Item::RenameTag(_) => None,
             };
             items.push(A11yItem::Choice {
                 label: p.items[i].label(),
@@ -363,10 +413,15 @@ impl TabsView {
             Overlay {
                 title: tr!("Paleta de comandos", "Command palette").to_owned(),
                 description: Some(
-                    if p.naming {
+                    if p.naming == Some(Naming::Workspace) {
                         tr!(
                             "Digite o nome do espaço de trabalho. Enter salva as abas desta janela, Esc cancela.",
                             "Type the workspace name. Enter saves this window's tabs, Esc cancels."
+                        )
+                    } else if p.naming.is_some() {
+                        tr!(
+                            "Digite o novo nome da etiqueta. Enter renomeia (vazio volta ao nome da cor), Esc cancela.",
+                            "Type the tag's new name. Enter renames (empty goes back to the color's name), Esc cancels."
                         )
                     } else {
                         tr!(
@@ -407,6 +462,19 @@ impl TabsView {
             }
             Item::Workspace { name, .. } => self.open_workspace(&name, cx),
             Item::Search(q) => tab.update(cx, |view, cx| view.open_saved_search(&q, cx)),
+            Item::RenameTag(k) => self.open_naming(Naming::Tag(k), fx_core::tags::name(k), cx),
+            Item::Tag(k) => {
+                let query = format!("{}:{}", tr!("etiqueta", "tag"), fx_core::tags::name(k));
+                tab.update(cx, |view, cx| {
+                    let root = view.path().to_path_buf();
+                    let q = crate::store::SearchState {
+                        query,
+                        disk: true,
+                        root,
+                    };
+                    view.open_saved_search(&q, cx);
+                });
+            }
             Item::RemoveSearch(query) => {
                 crate::searches::remove(&query);
                 let text = trf!("Busca \"{}\" esquecida", "Search \"{}\" forgotten", query);
@@ -491,6 +559,10 @@ impl TabsView {
                 Action::Group(by) => tab.update(cx, |view, cx| view.set_group_by(by, cx)),
                 Action::CompressZip => tab.update(cx, |view, cx| view.compress_zip(cx)),
                 Action::DiffFiles => tab.update(cx, |view, cx| view.open_file_diff(cx)),
+                Action::EmbeddedTerminal(cmd) => tab.update(cx, |view, cx| {
+                    use crate::folder_view::terminal::Shell;
+                    view.open_terminal(if cmd { Shell::Cmd } else { Shell::PowerShell }, cx);
+                }),
                 Action::TabToWindow => {
                     let i = self.tabs.active_index();
                     self.tab_to_window(i, window, cx);
@@ -541,6 +613,18 @@ impl TabsView {
                     label: item.label().into(),
                     detail: super::workspace::tabs_text(*tabs).into(),
                     shortcut: tr!("Nova janela", "New window").into(),
+                },
+                item @ Item::RenameTag(_) => Row {
+                    glyph: "\u{E8AC}", // Rename
+                    label: item.label().into(),
+                    detail: SharedString::default(),
+                    shortcut: SharedString::default(),
+                },
+                item @ Item::Tag(_) => Row {
+                    glyph: "\u{E8EC}", // Tag
+                    label: item.label().into(),
+                    detail: tr!("em qualquer pasta", "in any folder").into(),
+                    shortcut: tr!("Etiqueta", "Tag").into(),
                 },
                 item @ Item::Search(q) => Row {
                     glyph: "\u{E721}", // Search
@@ -627,7 +711,7 @@ impl TabsView {
             .w_full()
             .max_w(px(PANEL_WIDTH))
             // Naming a workspace needs only a line, not the list's height.
-            .when(!p.naming, |d| d.h(px(400.0)))
+            .when(p.naming.is_none(), |d| d.h(px(400.0)))
             .flex()
             .flex_col()
             .rounded(px(RADIUS * 2.0))
@@ -647,11 +731,13 @@ impl TabsView {
                     .border_b_1()
                     .border_color(rgba(t.divider))
                     .child(if p.query.is_empty() {
-                        div().text_color(rgba(t.text_secondary)).child(if p.naming {
+                        div().text_color(rgba(t.text_secondary)).child(if p.naming == Some(Naming::Workspace) {
                             tr!(
                                 "Nome do espaço de trabalho (ex.: Trabalho)…",
                                 "Workspace name (e.g. Work)…"
                             )
+                        } else if p.naming.is_some() {
+                            tr!("Nome da etiqueta (ex.: Urgente)…", "Tag name (e.g. Urgent)…")
                         } else {
                             tr!("Digite um comando ou uma pasta…", "Type a command or a folder…")
                         })
@@ -659,7 +745,24 @@ impl TabsView {
                         div().truncate().child(format!("{}|", p.query))
                     }),
             )
-            .child(if p.naming {
+            .child(if let Some(Naming::Tag(k)) = p.naming {
+                let (pt, en, color) = fx_core::tags::TAGS[k];
+                let color_name = if fx_core::locale::english() { en } else { pt };
+                div()
+                    .flex()
+                    .justify_center()
+                    .items_center()
+                    .gap(px(space(2)))
+                    .py(px(space(6)))
+                    .px(px(space(4)))
+                    .text_color(rgba(t.text_secondary))
+                    .child(div().flex_none().size(px(10.0)).rounded_full().bg(rgba(color)))
+                    .child(trf!(
+                        "Enter dá esse nome à etiqueta {color_name}; vazio volta ao nome da cor. Vale na paleta e em etiqueta:.",
+                        "Enter gives the {color_name} tag that name; empty goes back to the color's name. Works in the palette and in tag:."
+                    ))
+                    .into_any_element()
+            } else if p.naming.is_some() {
                 // Saving a workspace: what Enter will do.
                 let tabs = super::workspace::tabs_text(self.tabs.iter().count());
                 div()
@@ -699,8 +802,8 @@ impl TabsView {
                     .border_color(rgba(t.divider))
                     .text_size(px(CAPTION_SIZE))
                     .text_color(rgba(t.text_secondary))
-                    .child(if p.naming {
-                        tr!("Enter salva · Esc cancela", "Enter saves · Esc cancels").to_owned()
+                    .child(if p.naming.is_some() {
+                        tr!("Enter confirma · Esc cancela", "Enter confirms · Esc cancels").to_owned()
                     } else if p.shown.is_empty() {
                         tr!("Nada encontrado", "Nothing found").to_owned()
                     } else {
@@ -767,7 +870,7 @@ mod tests {
             shown: Vec::new(),
             cursor: 0,
             scroll: UniformListScrollHandle::new(),
-            naming: false,
+            naming: None,
         };
         p.filter();
         p
@@ -831,7 +934,7 @@ mod tests {
         p.query = "excluir trab".into();
         p.filter();
         assert!(matches!(p.items[p.shown[0]], Item::RemoveWorkspace(_)));
-        p.naming = true;
+        p.naming = Some(Naming::Workspace);
         p.filter();
         assert!(p.shown.is_empty());
     }

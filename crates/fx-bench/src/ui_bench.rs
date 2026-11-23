@@ -578,6 +578,21 @@ fn run_key_script_with(
     read_trace(child.id())
 }
 
+/// P4 with the embedded terminal open (T5.4): "report-123" typed into
+/// PowerShell on `flat-100k` (the shell echoes every key), key -> frame.
+pub fn terminal() -> std::io::Result<()> {
+    let folder = flat_100k()?;
+    let trace = run_key_script_with(&folder, "type-p4.ps1", &[("FX_BENCH_TERMINAL", "1")])?;
+    report_keys(
+        &trace,
+        "P4: key -> frame presented, typing into the embedded terminal (release)",
+        &[("terminal", "keys into PowerShell")],
+        "T5.4",
+        "flat-100k",
+        "bench/type-p4.ps1 into the terminal panel (FX_BENCH_TERMINAL=1)",
+    )
+}
+
 /// Prints and saves P4 per kind of key (`input_<kind>_ms` in the trace).
 fn report_keys(
     trace: &TraceFile,

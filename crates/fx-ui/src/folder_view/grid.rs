@@ -90,13 +90,38 @@ impl FolderView {
                 let selected = self.selection.is_selected(i);
                 let is_cursor = cursor == Some(i);
                 let name: SharedString = self.list.name(i).to_owned().into();
+                let tags = crate::tags::mask_of(&self.path.join(self.list.os_name(i)));
                 let image_box = div()
+                    .relative()
                     .size(px(IMAGE_BOX))
                     .flex()
                     .items_center()
                     .justify_center()
                     .when_some(thumb, |d, image| d.child(img(image)))
-                    .when_some(icon, |d, image| d.child(img(image).size(px(ICON_SIZE))));
+                    .when_some(icon, |d, image| d.child(img(image).size(px(ICON_SIZE))))
+                    // Tags (T5.5): dots over the top right corner, as in the list.
+                    .when(tags != 0, |d| {
+                        d.child(
+                            div()
+                                .absolute()
+                                .top(px(space(1)))
+                                .right(px(space(1)))
+                                .flex()
+                                .gap(px(2.0))
+                                .children(fx_core::tags::colors(tags).map(|(_, c)| {
+                                    div()
+                                        .size(px(8.0))
+                                        .rounded_full()
+                                        .border_1()
+                                        .border_color(rgba(if t.high_contrast {
+                                            t.text
+                                        } else {
+                                            t.base
+                                        }))
+                                        .bg(rgba(c))
+                                })),
+                        )
+                    });
                 row = row.child(
                     div()
                         .id(i as usize)

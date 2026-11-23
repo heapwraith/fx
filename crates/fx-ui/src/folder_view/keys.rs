@@ -26,6 +26,9 @@ impl FolderView {
             return;
         }
         if self.terminal_key(ks, cx) {
+            if let Some(trace) = &self.trace {
+                trace.borrow_mut().input_started(started, "terminal");
+            }
             return;
         }
         if self.batch_rename_key(ks, window, cx) {
@@ -100,15 +103,27 @@ impl FolderView {
             cx.notify();
             return;
         }
-        // Quick Look: Space (with no filter being typed) opens and closes it;
-        // Esc closes it. Arrows keep moving the cursor; the preview follows.
+        // Quick Look: Space opens and closes it when no filter is typed, or
+        // when the filter leaves one item (that one is previewed; with more,
+        // Space goes into the filter); Esc closes it. Arrows keep moving the
+        // cursor; the preview follows.
         let plain_key = !m.control && !m.alt && !m.shift && !m.platform;
+        let only_match = match rows_of(&self.filtered, &self.list) {
+            [one] if !self.filter_text.is_empty() => Some(*one),
+            _ => None,
+        };
+        let space_previews = self.filter_text.is_empty() || only_match.is_some();
         if plain_key
-            && ((ks.key == "space" && self.filter_text.is_empty())
+            && ((ks.key == "space" && (space_previews || self.quick_look_open()))
                 || (ks.key == "escape" && self.quick_look_open()))
             && self.renaming.is_none()
             && self.edit.is_none()
         {
+            if let Some(one) = only_match
+                && self.selection.cursor() != Some(one)
+            {
+                self.selection.select_only(one);
+            }
             self.toggle_quick_look(started, cx);
             cx.notify();
             return;

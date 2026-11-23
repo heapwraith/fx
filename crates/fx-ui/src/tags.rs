@@ -20,6 +20,8 @@ use rusqlite::{Connection, params};
 enum Write {
     /// Key, path as written, mask (0: delete).
     Set(String, String, u8),
+    /// The user's name for tag `k` (`None`: the built-in one; T5.5).
+    Name(usize, Option<String>),
 }
 
 struct Store {
@@ -121,6 +123,16 @@ fn set_locked(s: &mut Store, path: &Path, mask: u8) {
     }
 }
 
+/// Gives tag `k` its own name (empty: back to the built-in one), kept with
+/// the tags.
+pub fn rename(k: usize, name: &str) {
+    let name = Some(name.trim().to_owned()).filter(|n| !n.is_empty());
+    fx_core::tags::set_name(k, name.clone());
+    if let Some(w) = &lock().writer {
+        let _ = w.send(Write::Name(k, name));
+    }
+}
+
 /// `old` was renamed or moved to `new` (by fx): its tags, and those of
 /// everything below it, follow.
 pub fn moved(old: &Path, new: &Path) {
@@ -163,8 +175,17 @@ fn spawn_worker(db: PathBuf) -> std::io::Result<Sender<Write>> {
             };
             let _ = conn.execute_batch(
                 "CREATE TABLE IF NOT EXISTS tags \
-                 (key TEXT PRIMARY KEY, path TEXT NOT NULL, mask INTEGER NOT NULL);",
+                 (key TEXT PRIMARY KEY, path TEXT NOT NULL, mask INTEGER NOT NULL); \
+                 CREATE TABLE IF NOT EXISTS tag_names (bit INTEGER PRIMARY KEY, name TEXT NOT NULL);",
             );
+            if let Ok(mut stmt) = conn.prepare("SELECT bit, name FROM tag_names")
+                && let Ok(rows) =
+                    stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+            {
+                for (k, name) in rows.flatten() {
+                    fx_core::tags::set_name(k.max(0) as usize, Some(name));
+                }
+            }
             // Load, under what the UI may already have changed.
             if let Ok(mut stmt) = conn.prepare("SELECT key, path, mask FROM tags")
                 && let Ok(rows) = stmt.query_map([], |r| {
@@ -190,6 +211,14 @@ fn spawn_worker(db: PathBuf) -> std::io::Result<Sender<Write>> {
                         "INSERT INTO tags (key, path, mask) VALUES (?1, ?2, ?3) \
                          ON CONFLICT(key) DO UPDATE SET path = ?2, mask = ?3",
                         params![k, path, i64::from(mask)],
+                    ),
+                    Write::Name(k, None) => {
+                        conn.execute("DELETE FROM tag_names WHERE bit = ?1", params![k as i64])
+                    }
+                    Write::Name(k, Some(name)) => conn.execute(
+                        "INSERT INTO tag_names (bit, name) VALUES (?1, ?2) \
+                         ON CONFLICT(bit) DO UPDATE SET name = ?2",
+                        params![k as i64, name],
                     ),
                 };
             }

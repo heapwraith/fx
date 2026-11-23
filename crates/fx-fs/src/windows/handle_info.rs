@@ -114,7 +114,9 @@ fn parse_block(block: &[u8], batcher: &mut Batcher<'_>) -> bool {
         let size = u64_at(record, offset_of!(FILE_ID_BOTH_DIR_INFO, EndOfFile));
         let modified = u64_at(record, offset_of!(FILE_ID_BOTH_DIR_INFO, LastWriteTime));
         let attributes = u32_at(record, offset_of!(FILE_ID_BOTH_DIR_INFO, FileAttributes));
-        if let Some(entry) = make_entry(&name, size, modified, attributes)
+        // For a reparse point, EaSize holds its tag.
+        let reparse_tag = u32_at(record, offset_of!(FILE_ID_BOTH_DIR_INFO, EaSize));
+        if let Some(entry) = make_entry(&name, size, modified, attributes, reparse_tag)
             && !batcher.push(entry)
         {
             return false;

@@ -58,8 +58,15 @@ fn std_read_dir(dir: &Path, batcher: &mut Batcher<'_>) -> io::Result<()> {
     Ok(())
 }
 
-/// Builds an [`Entry`] from raw Win32 fields. Returns `None` for `.` and `..`.
-fn make_entry(name: &[u16], size: u64, last_write: u64, attributes: u32) -> Option<Entry> {
+/// Builds an [`Entry`] from raw Win32 fields, with the reparse tag the
+/// listing gives for reparse points. Returns `None` for `.` and `..`.
+fn make_entry(
+    name: &[u16],
+    size: u64,
+    last_write: u64,
+    attributes: u32,
+    reparse_tag: u32,
+) -> Option<Entry> {
     const DOT: u16 = b'.' as u16;
     if name == [DOT] || name == [DOT, DOT] {
         return None;
@@ -68,7 +75,7 @@ fn make_entry(name: &[u16], size: u64, last_write: u64, attributes: u32) -> Opti
         name: OsString::from_wide(name),
         size,
         modified: filetime_to_system_time(last_write),
-        attributes: map_attributes(attributes),
+        attributes: map_attributes_tagged(attributes, Some(reparse_tag)),
     })
 }
 
@@ -116,14 +123,35 @@ fn is_cloud(raw: u32) -> bool {
         != 0
 }
 
+/// Attributes when the reparse tag is not known (metadata, watcher): a
+/// reparse point is a link unless it looks like a cloud placeholder.
 fn map_attributes(raw: u32) -> Attributes {
-    let mut a = Attributes::empty();
+    map_attributes_tagged(raw, None)
+}
+
+/// A reparse point is a link to stay out of only when its tag says it
+/// stands for another name (symbolic link, junction, mount point: the
+/// "name surrogate" bit); cloud placeholders (OneDrive and other providers)
+/// and other tags are plain items to walk into (T5.5).
+fn map_attributes_tagged(raw: u32, reparse_tag: Option<u32>) -> Attributes {
+    /// IsReparseTagNameSurrogate.
+    const NAME_SURROGATE: u32 = 0x2000_0000;
+    let link = raw & FILE_ATTRIBUTE_REPARSE_POINT.0 != 0
+        && match reparse_tag {
+            Some(tag) => tag & NAME_SURROGATE != 0,
+            None => !is_cloud(raw),
+        };
+    let raw = raw & !FILE_ATTRIBUTE_REPARSE_POINT.0;
+    let mut a = if link {
+        Attributes::LINK
+    } else {
+        Attributes::empty()
+    };
     for (win, neutral) in [
         (FILE_ATTRIBUTE_DIRECTORY.0, Attributes::DIRECTORY),
         (FILE_ATTRIBUTE_HIDDEN.0, Attributes::HIDDEN),
         (FILE_ATTRIBUTE_SYSTEM.0, Attributes::SYSTEM),
         (FILE_ATTRIBUTE_READONLY.0, Attributes::READONLY),
-        (FILE_ATTRIBUTE_REPARSE_POINT.0, Attributes::LINK),
         (FILE_ATTRIBUTE_OFFLINE.0, Attributes::OFFLINE),
         (FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS.0, Attributes::RECALL),
         (FILE_ATTRIBUTE_RECALL_ON_OPEN.0, Attributes::RECALL),
@@ -250,9 +278,15 @@ mod tests {
 
     #[test]
     fn dots_are_skipped_and_attributes_mapped() {
-        assert!(make_entry(&wide("."), 0, 0, 16).is_none());
-        assert!(make_entry(&wide(".."), 0, 0, 16).is_none());
-        let e = make_entry(&wide("..a"), 7, 0, 16 | 2).unwrap();
+        assert!(make_entry(&wide("."), 0, 0, 16, 0).is_none());
+        assert!(make_entry(&wide(".."), 0, 0, 16, 0).is_none());
+        // A junction is a link; a OneDrive folder placeholder is not.
+        let reparse_dir = 16 | FILE_ATTRIBUTE_REPARSE_POINT.0;
+        let junction = make_entry(&wide("j"), 0, 0, reparse_dir, 0xA000_0003).unwrap();
+        assert!(junction.attributes.contains(Attributes::LINK));
+        let cloud = make_entry(&wide("c"), 0, 0, reparse_dir, 0x9000_601A).unwrap();
+        assert!(!cloud.attributes.contains(Attributes::LINK) && cloud.attributes.is_dir());
+        let e = make_entry(&wide("..a"), 7, 0, 16 | 2, 0).unwrap();
         assert_eq!(e.size, 7);
         assert!(e.attributes.is_dir());
         assert!(e.attributes.contains(Attributes::HIDDEN));

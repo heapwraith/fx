@@ -7,6 +7,10 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualizador.
 
 ### Adicionado
+- **Terminal completo:** acompanha a pasta da aba, Prompt de Comando além do PowerShell, histórico com a roda do mouse, selecionar com o mouse, copiar e colar.
+- **Sessão com painéis:** os painéis lado a lado e a vista em colunas voltam como estavam ao reabrir o fx.
+- **Etiquetas com nome próprio**, visíveis também na grade e nas colunas, e "Etiqueta: …" na paleta para achar tudo o que tem uma etiqueta.
+- Ícones de verdade nos resultados da busca e na vista em colunas; Espaço abre o Quick Look quando o filtro deixa um item só.
 - **Instalador próprio** (fx-setup), com a interface do fx: instala só para o usuário, troca os arquivos de uma vez (volta ao que havia se algo falhar) e desinstala sem deixar nada. Substitui o Inno Setup.
 - **Atualizações automáticas:** a versão nova é baixada e conferida (SHA-256) em segundo plano e aplicada ao fechar o fx; "Atualizar o fx" na paleta reinicia na hora. Pode ser desligado.
 - Telas **"Sobre o fx"** e **"Como usar o fx"** (F1; abre sozinha na primeira vez).
@@ -55,6 +59,9 @@ Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualiz
 - Esperas da interface não ocupam mais o pool de threads do Windows; a atualização roda numa thread própria.
 
 ### Corrigido
+- Abrir uma pasta grande voltou a ser mais rápido (P2: mediana de 82 para 73–78 ms em 100 mil arquivos), desfazendo a espera dos lotes por uma thread intermediária.
+- A busca "nesta pasta" e os totais entram em pastas do OneDrive (antes eram tratadas como links).
+- Terminal, botões de perigo e etiquetas seguem as cores do alto contraste.
 - "Compactar em ZIP" criava `nome (2).zip` mesmo sem existir `nome.zip`.
 - **Revisão de código completa (D-066):**
   - Enter segurado não confirma mais um diálogo (a paleta podia confirmar "Excluir permanentemente" sem ser vista); diálogos e sobreposições bloqueiam o mouse; as Configurações não deixam mais Delete chegar à lista escondida; excluir pelo menu de contexto também pede confirmação; na vista em colunas, Delete age no item visível.

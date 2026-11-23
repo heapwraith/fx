@@ -78,6 +78,8 @@ fn push(data: &WIN32_FIND_DATAW, batcher: &mut Batcher<'_>) -> bool {
         size,
         modified,
         data.dwFileAttributes,
+        // For a reparse point, the listing puts its tag here.
+        data.dwReserved0,
     ) {
         Some(entry) => batcher.push(entry),
         None => true,

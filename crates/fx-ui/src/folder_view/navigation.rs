@@ -176,6 +176,7 @@ impl FolderView {
             .set_offset(point(px(0.0), px(0.0)));
         window.set_window_title(&window_title(&self.path));
         self.start_loading(cx);
+        self.terminal_follow();
         cx.notify();
     }
 

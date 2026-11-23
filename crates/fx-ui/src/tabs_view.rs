@@ -183,6 +183,13 @@ impl TabsView {
             seconds: std::collections::HashMap::new(),
         };
         view.focus_active(window, cx);
+        // P4 with the terminal open (`fx-bench terminal`, T5.4).
+        if std::env::var_os("FX_BENCH_TERMINAL").is_some_and(|v| v == "1") {
+            let tab = view.current();
+            tab.update(cx, |tab, cx| {
+                tab.open_terminal(crate::folder_view::terminal::Shell::PowerShell, cx);
+            });
+        }
         // Visual checks without sending input (debug builds only):
         // `FX_OPEN=settings[:section]|palette|guide|history|search|columns`.
         if cfg!(debug_assertions)
@@ -265,7 +272,25 @@ impl TabsView {
                 f32::from(b.size.height),
             ]),
             active: self.tabs.active_index(),
-            tabs: self.tabs.iter().map(|t| t.read(cx).export()).collect(),
+            tabs: self
+                .tabs
+                .iter()
+                .map(|t| {
+                    let mut state = t.read(cx).export();
+                    if let Some(s) = self.seconds.get(&t.entity_id()) {
+                        state.panes = s
+                            .views
+                            .iter()
+                            .map(|v| {
+                                let v = v.read(cx);
+                                (v.path().to_path_buf(), v.columns_open())
+                            })
+                            .collect();
+                        state.focused_pane = s.focused;
+                    }
+                    state
+                })
+                .collect(),
         }
     }
 
@@ -292,12 +317,16 @@ impl TabsView {
         cx: &mut Context<Self>,
     ) {
         let mut saved = state.tabs.into_iter();
-        if let Some(first) = saved.next() {
-            self.tabs
-                .active()
-                .update(cx, |tab, _| tab.apply_saved(first));
+        if let Some(mut first) = saved.next() {
+            let panes = std::mem::take(&mut first.panes);
+            let focused = first.focused_pane;
+            let tab = self.tabs.active().clone();
+            tab.update(cx, |tab, cx| tab.apply_saved(first, cx));
+            self.restore_panes(&tab, panes, focused, cx);
         }
-        for t in saved {
+        for mut t in saved {
+            let panes = std::mem::take(&mut t.panes);
+            let focused = t.focused_pane;
             let tab = Self::new_tab(
                 t.path.clone(),
                 self.look,
@@ -307,7 +336,8 @@ impl TabsView {
                 self.a11y.clone(),
                 cx,
             );
-            tab.update(cx, |tab, _| tab.apply_saved(t));
+            tab.update(cx, |tab, cx| tab.apply_saved(t, cx));
+            self.restore_panes(&tab, panes, focused, cx);
             self.tabs.open(tab);
         }
         self.tabs

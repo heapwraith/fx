@@ -789,7 +789,9 @@ impl FolderView {
         let cursor = s.cursor;
         let (accent, secondary, hover) = (t.selected, t.text_secondary, t.hover);
         let view = cx.entity().downgrade();
-        let list = uniform_list("search-results", hits.len(), move |range, _, _| {
+        let icons = self.icons.clone();
+        let shell_icons = icons.read(cx).enabled();
+        let list = uniform_list("search-results", hits.len(), move |range, _, cx| {
             range
                 .map(|i| {
                     let f = &hits[i];
@@ -814,13 +816,24 @@ impl FolderView {
                         .on_mouse_move(move |ev, window, cx| {
                             let _ = drag.update(cx, |v, cx| v.result_dragged(ev, window, cx));
                         })
-                        .child(
+                        .child(if shell_icons {
+                            let image = icons.update(cx, |icons, _| {
+                                icons.get_or_request(&f.path, &f.name, f.is_dir)
+                            });
+                            // Fixed slot: the icon arriving later moves nothing.
+                            div()
+                                .flex_none()
+                                .size(px(super::ICON_SIZE))
+                                .when_some(image, |d, image| {
+                                    d.child(gpui::img(image).size(px(super::ICON_SIZE)))
+                                })
+                        } else {
                             div()
                                 .flex_none()
                                 .font_family(icon_font)
                                 .text_color(rgba(secondary))
-                                .child(if f.is_dir { ICON_FOLDER } else { ICON_PAGE }),
-                        )
+                                .child(if f.is_dir { ICON_FOLDER } else { ICON_PAGE })
+                        })
                         .child(
                             div()
                                 .flex_1()

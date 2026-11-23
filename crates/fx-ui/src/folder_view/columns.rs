@@ -75,6 +75,23 @@ impl FolderView {
             self.close_columns(window, cx);
             return;
         }
+        self.open_columns(cx);
+    }
+
+    /// Whether the column view is open (session, T5.5).
+    pub fn columns_open(&self) -> bool {
+        self.miller.is_some()
+    }
+
+    /// Opens the column view (a restored pane, T5.5).
+    pub fn open_columns_view(&mut self, cx: &mut Context<Self>) {
+        if self.miller.is_none() {
+            self.open_columns(cx);
+        }
+    }
+
+    /// Opens the columns at the current folder.
+    pub(super) fn open_columns(&mut self, cx: &mut Context<Self>) {
         self.miller = Some(Columns {
             model: Miller::new(&self.path, START_COLUMNS),
             entries: HashMap::new(),
@@ -267,7 +284,11 @@ impl FolderView {
                     let entries = entries.clone();
                     let view = view.clone();
                     let (sel, acc, sec) = (t.selected, t.accent, t.text_secondary);
-                    uniform_list(("column", k), entries.len(), move |range, _, _| {
+                    let icons = self.icons.clone();
+                    let shell_icons = icons.read(cx).enabled();
+                    let dir = col.dir.clone();
+                    let (hc, hc_text) = (t.high_contrast, t.text);
+                    uniform_list(("column", k), entries.len(), move |range, _, cx| {
                         range
                             .map(|i| {
                                 let e = &entries[i];
@@ -290,16 +311,43 @@ impl FolderView {
                                         let _ =
                                             view.update(cx, |v, cx| v.column_clicked(k, i, ev, cx));
                                     })
-                                    .child(
+                                    .child(if shell_icons {
+                                        let path = dir.join(e.name.as_ref());
+                                        let image = icons.update(cx, |icons, _| {
+                                            icons.get_or_request(&path, &e.name, e.is_dir)
+                                        });
+                                        div().flex_none().size(px(super::ICON_SIZE)).when_some(
+                                            image,
+                                            |d, image| {
+                                                d.child(gpui::img(image).size(px(super::ICON_SIZE)))
+                                            },
+                                        )
+                                    } else {
                                         div()
                                             .flex_none()
                                             .font_family(icon_font)
                                             .text_size(px(CAPTION_SIZE))
                                             .text_color(rgba(sec))
-                                            .child(if e.is_dir { ICON_FOLDER } else { ICON_PAGE }),
-                                    )
+                                            .child(if e.is_dir { ICON_FOLDER } else { ICON_PAGE })
+                                    })
                                     .child(
                                         div().flex_1().min_w_0().truncate().child(e.name.clone()),
+                                    )
+                                    // Tags (T5.5), as in the list.
+                                    .children(
+                                        fx_core::tags::colors(crate::tags::mask_of(
+                                            &dir.join(e.name.as_ref()),
+                                        ))
+                                        .map(|(_, c)| {
+                                            div()
+                                                .flex_none()
+                                                .size(px(8.0))
+                                                .rounded_full()
+                                                .bg(rgba(c))
+                                                .when(hc, |d| {
+                                                    d.border_1().border_color(rgba(hc_text))
+                                                })
+                                        }),
                                     )
                                     .when(e.is_dir, |d| {
                                         d.child(

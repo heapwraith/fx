@@ -6,6 +6,7 @@
 #   click:x,y          left click at client coordinates (px)
 #   rclick:x,y         right click
 #   move:x,y           moves the pointer
+#   drag:x,y,x2,y2     presses the left button at x,y, moves to x2,y2 in steps, releases
 #   wait:ms            sleeps
 #   shot:C:\out.png    saves a screenshot of the window
 # It SENDS REAL INPUT to the fx window: do not use mouse or keyboard meanwhile.
@@ -99,6 +100,16 @@ foreach ($step in $Steps.Split(';')) {
             $s = ToScreen $arg; [Drv]::SetCursorPos($s.X, $s.Y) | Out-Null; Start-Sleep -Milliseconds 80
             [Drv]::mouse_event(8, 0, 0, 0, [UIntPtr]::Zero); [Drv]::mouse_event(16, 0, 0, 0, [UIntPtr]::Zero)
             Start-Sleep -Milliseconds 80
+        }
+        'drag' {
+            $c = $arg.Split(','); $a = ToScreen "$($c[0]),$($c[1])"; $z = ToScreen "$($c[2]),$($c[3])"
+            [Drv]::SetCursorPos($a.X, $a.Y) | Out-Null; Start-Sleep -Milliseconds 80
+            [Drv]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 60
+            for ($k = 1; $k -le 10; $k++) {
+                $x = $a.X + ($z.X - $a.X) * $k / 10; $y = $a.Y + ($z.Y - $a.Y) * $k / 10
+                [Drv]::SetCursorPos([int]$x, [int]$y) | Out-Null; Start-Sleep -Milliseconds 30
+            }
+            [Drv]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 80
         }
         'wait' { Start-Sleep -Milliseconds ([int]$arg) }
         'shot' {
