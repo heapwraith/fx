@@ -52,6 +52,8 @@ pub enum Action {
     MediaColumn(MediaCol),
     /// T6.13: asks a name and saves this window's tabs as a workspace.
     SaveWorkspace,
+    /// T6.7: a ZIP of the selection.
+    CompressZip,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,6 +128,7 @@ impl Command {
             Action::Image(_) => "\u{EB9F}",       // Photo
             Action::Group(_) => "\u{F168}",       // GroupList
             Action::MediaColumn(_) => "\u{E71D}", // AllApps (columns)
+            Action::CompressZip => "\u{F012}",    // ZipFolder
         }
     }
 
@@ -222,6 +225,11 @@ pub const COMMANDS: &[Command] = &[
         ),
         Action::Image(ImageAction::RenameByDate),
     ),
+    tab(
+        ("Extrair (arquivos compactados)", "Extract (archives)"),
+        "ctrl-e",
+    ),
+    direct(("Compactar em ZIP", "Compress to ZIP"), Action::CompressZip),
     direct(
         ("Agrupar por tipo", "Group by type"),
         Action::Group(GroupBy::Type),

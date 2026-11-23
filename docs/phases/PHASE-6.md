@@ -47,7 +47,7 @@ O histórico de operações sobrevive ao fechar o fx ("desfazer a limpeza de ont
 ## Grupo B — Paridade que falta, feita do jeito fx
 
 ### T6.7 — Arquivos compactados como pastas
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-23 · Resumo: Enter num ZIP abre como pasta (mesma lista, ordenação, filtro e migalhas), lido do diretório central sem descompactar nada (`fx-core/src/archive.rs`, `fx-fs/src/windows/archive.rs`); dentro, só leitura: Ctrl+E extrai a seleção (ou tudo) ao lado do arquivo, Ctrl+C extrai e põe na área de transferência, Enter extrai e abre o arquivo, arrastar para fora entrega os itens ao Explorador; fora, Ctrl+E em ZIP, 7z, RAR ou tar extrai cada um numa pasta com o nome dele; "Compactar em ZIP" na paleta. Extração sempre numa pasta nova do %TEMP% (thread, progresso real) e depois copiada pelo motor (conflitos perguntam, Ctrl+Z desfaz); nomes com `..`, unidade ou separador nunca são listados nem extraídos e links no resultado cancelam tudo. ZIP extraído e criado pelo .NET do Windows num PowerShell oculto (lista de caminhos em arquivo UTF-8, sem perda de nomes Unicode); 7z/RAR/tar pelo `tar.exe` do Windows, inteiros (ele não lista nomes fora da página de código sem perda, por isso não abrem como pasta). Sem dependência nova; a feature `Win32_System_SystemServices` do windows-rs foi acrescentada e depois não ficou em uso (removida). 6 testes novos.
 
 Entrar em ZIP, 7z e tar como numa pasta (mesma lista e busca); extrair arrastando; compactar pela paleta. Extração segura: sem caminhos maliciosos, com conflitos e desfazer.
 

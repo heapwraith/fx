@@ -16,6 +16,18 @@ impl FolderView {
             self.go_to(path, None, window, cx);
             return true;
         }
+        // Archives (T6.7): a ZIP opens like a folder; a file inside one is
+        // extracted and opened.
+        if self.archive.is_some() {
+            let name = self.list.name(i).to_owned();
+            self.open_in_archive(name, window, cx);
+            return true;
+        }
+        if fx_core::archive::is_zip(self.list.name(i)) {
+            let path = self.path.join(self.list.os_name(i));
+            self.go_to(path, None, window, cx);
+            return true;
+        }
         let rows = rows_of(&self.filtered, &self.list);
         let files: Vec<u32> = if self.selection.is_selected(i) {
             self.selection
@@ -150,6 +162,7 @@ impl FolderView {
         self.stop_dir_sizes();
         crate::visits::visit(&path);
         self.forget_git();
+        self.archive = None;
         self.path = path;
         self.list = Arc::new(FileList::new());
         self.filter_text.clear();

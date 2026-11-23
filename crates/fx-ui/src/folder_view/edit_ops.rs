@@ -87,7 +87,7 @@ impl Rename {
     }
 }
 
-fn count(n: usize) -> String {
+pub(super) fn count(n: usize) -> String {
     fx_core::format::items(n)
 }
 
@@ -161,11 +161,19 @@ impl FolderView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
+        if self.archive_key(ks, window, cx) {
+            return true;
+        }
         let m = ks.modifiers;
         let plain = !m.control && !m.alt && !m.shift && !m.platform;
         let only_ctrl = m.control && !m.alt && !m.shift;
         let ctrl_shift = m.control && m.shift && !m.alt;
         match ks.key.as_str() {
+            // Archives (T6.7).
+            "e" if only_ctrl => {
+                self.extract(window, cx);
+                true
+            }
             "delete" if plain => {
                 let items = self.targets();
                 if !items.is_empty() {

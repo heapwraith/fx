@@ -4,6 +4,7 @@
 //! Everything here must be unit-testable on any machine.
 #![forbid(unsafe_code)]
 
+pub mod archive;
 pub mod batch_rename;
 pub mod compare;
 pub mod complete;

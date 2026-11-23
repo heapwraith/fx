@@ -38,6 +38,7 @@ Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualiz
 - **Arquivos repetidos** (Ctrl+Shift+D): acha cópias idênticas na pasta e subpastas, comparando o conteúdo de verdade, e manda as marcadas para a Lixeira com desfazer.
 - **Painel de detalhes** (Alt+Shift+P): dimensões, duração, data da foto, câmera, autor e outros dados do item, como o Windows os mostra.
 - **Agrupar por e colunas de mídia** (menu Exibir, paleta): agrupar por tipo, data ou tamanho, com cabeçalhos na lista; colunas Dimensões, Duração e Data da foto.
+- **Arquivos compactados:** Enter num ZIP abre como pasta; Ctrl+E extrai (também 7z, RAR e tar), Ctrl+C copia de dentro dele e "Compactar em ZIP" na paleta cria um, tudo com progresso real, conflitos perguntando e desfazer.
 - **Status do Git:** em pastas de repositórios, cada item mostra se está alterado (M), novo (?), adicionado (A), renomeado (R), apagado (D) ou em conflito (!).
 - **Comparar pastas:** com o painel duplo, "Comparar com o outro painel" mostra o que difere entre as duas pastas e copia para um lado ou outro, perguntando nos conflitos.
 - **Ações rápidas com imagens** (paleta): copiar as imagens selecionadas como JPG ou PNG, ou com metade do tamanho (o original nunca muda), e renomear fotos pela data em que foram tiradas, com desfazer.

@@ -17,6 +17,7 @@
 //! bar is in `path_bar.rs`.
 
 mod actions;
+mod archive;
 mod batch_rename;
 mod columns;
 mod details;
@@ -241,6 +242,8 @@ pub struct FolderView {
     groups: groups::Groups,
     /// The media columns and their values (T6.10).
     media: groups::Media,
+    /// The ZIP the folder shown is inside of (T6.7): read-only.
+    archive: Option<PathBuf>,
     /// The embedded terminal (Ctrl+J, T3.5).
     terminal: Option<terminal::Terminal>,
     /// Width of the breadcrumb area in the last frame (T2.3), and whether
@@ -456,6 +459,7 @@ impl FolderView {
             git: git::Git::default(),
             groups: groups::Groups::default(),
             media: groups::Media::default(),
+            archive: None,
         };
         crate::visits::visit(&view.path);
         view.start_loading(cx);
@@ -477,10 +481,37 @@ impl FolderView {
         let (watcher_tx, watcher_rx) = channel::<fx_fs::Watcher>();
         Self::receive_watcher(watcher_rx, self.generation, cx);
         let (tx, rx) = channel::<Vec<Entry>>();
+        let (archive_tx, archive_rx) = channel::<PathBuf>();
+        Self::receive_archive(archive_rx, self.generation, cx);
         let worker_path = self.path.clone();
         let worker = std::thread::Builder::new()
             .name("fx-enumerate".into())
             .spawn(move || {
+                // Inside a ZIP (T6.7): its listing, no watcher.
+                if let Some(archive) = fx_fs::archive::archive_of(&worker_path) {
+                    let name = archive.file_name().map(|n| n.to_string_lossy().into_owned());
+                    if !name.as_deref().is_some_and(fx_core::archive::is_zip) {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Unsupported,
+                            tr!(
+                                "este tipo de arquivo compactado não abre como pasta; Ctrl+E nele extrai tudo",
+                                "this kind of archive does not open as a folder; Ctrl+E on it extracts everything"
+                            ),
+                        ));
+                    }
+                    let _ = archive_tx.send(archive.clone());
+                    let entries = fx_fs::archive::list_zip_folder(&archive, &worker_path, |local| {
+                        fx_shell::utc_offset_at(
+                            std::time::UNIX_EPOCH
+                                + std::time::Duration::from_secs(local.max(0) as u64),
+                        )
+                    })?;
+                    let n = entries.len();
+                    if n > 0 {
+                        let _ = tx.send(entries);
+                    }
+                    return Ok(n);
+                }
                 if let Ok(w) = fx_fs::watch(&worker_path, changes_tx) {
                     let _ = watcher_tx.send(w);
                 }
@@ -493,6 +524,28 @@ impl FolderView {
             }
             Err(e) => Status::Failed(read_failure(&e)),
         };
+    }
+
+    /// The folder shown is inside a ZIP (T6.7).
+    fn receive_archive(rx: Receiver<PathBuf>, generation: u64, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            if let Some(zip) = crate::chan::next(rx).await {
+                let _ = this.update(cx, |view, cx| {
+                    if view.generation == generation {
+                        view.archive = Some(zip);
+                        view.show_notice(
+                            tr!(
+                                "Arquivo compactado (só leitura): Ctrl+E extrai, Ctrl+C copia, Enter abre",
+                                "Archive (read-only): Ctrl+E extracts, Ctrl+C copies, Enter opens"
+                            )
+                            .to_owned(),
+                            cx,
+                        );
+                    }
+                });
+            }
+        })
+        .detach();
     }
 
     /// Keeps the watcher the worker made (dropped if the view moved on).

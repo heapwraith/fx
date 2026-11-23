@@ -16,6 +16,8 @@ pub mod tree;
 mod windows;
 
 #[cfg(windows)]
+pub use windows::archive;
+#[cfg(windows)]
 pub use windows::ops::{com_init, copy_file, is_aborted, is_cross_device, rename_no_replace};
 #[cfg(windows)]
 pub use windows::recycle;

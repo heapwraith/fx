@@ -10,6 +10,8 @@ pub struct ZipEntry {
     pub is_dir: bool,
     pub size: u64,
     pub compressed: u64,
+    /// MS-DOS date (high 16 bits) and time (low 16 bits), local time.
+    pub dos_time: u32,
 }
 
 /// The listing: entries in archive order, and whether the list was cut at
@@ -83,6 +85,7 @@ pub fn parse_central(dir: &[u8], total: u64, max: usize) -> Option<ZipListing> {
             break;
         }
         let flags = u16_at(dir, i + 8)?;
+        let dos_time = u32::from(u16_at(dir, i + 14)?) << 16 | u32::from(u16_at(dir, i + 12)?);
         let mut compressed = u64::from(u32_at(dir, i + 20)?);
         let mut size = u64::from(u32_at(dir, i + 24)?);
         let name_len = usize::from(u16_at(dir, i + 28)?);
@@ -119,6 +122,7 @@ pub fn parse_central(dir: &[u8], total: u64, max: usize) -> Option<ZipListing> {
             is_dir,
             size,
             compressed,
+            dos_time,
         });
         i += 46 + name_len + extra_len + comment_len;
     }

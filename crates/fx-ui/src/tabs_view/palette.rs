@@ -489,6 +489,7 @@ impl TabsView {
                     tab.update(cx, |view, cx| view.image_action(action, window, cx))
                 }
                 Action::Group(by) => tab.update(cx, |view, cx| view.set_group_by(by, cx)),
+                Action::CompressZip => tab.update(cx, |view, cx| view.compress_zip(cx)),
                 Action::MediaColumn(col) => {
                     tab.update(cx, |view, cx| view.toggle_media_column(col, cx))
                 }
