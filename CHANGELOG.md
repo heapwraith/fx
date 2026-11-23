@@ -59,6 +59,7 @@ Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualiz
 - Esperas da interface não ocupam mais o pool de threads do Windows; a atualização roda numa thread própria.
 
 ### Corrigido
+- Desinstalar não deixa mais uma cópia do desinstalador na pasta temporária.
 - O serviço de busca no disco não fica mais com uma conexão presa para sempre quando um programa conecta e não fala nada.
 - Abrir uma pasta grande voltou a ser mais rápido (P2: mediana de 82 para 73–78 ms em 100 mil arquivos), desfazendo a espera dos lotes por uma thread intermediária.
 - A busca "nesta pasta" e os totais entram em pastas do OneDrive (antes eram tratadas como links).

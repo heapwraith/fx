@@ -125,6 +125,30 @@ pub fn create_shortcut(lnk: &Path, target: &Path, description: &str) -> io::Resu
     Ok(())
 }
 
+/// Deletes `file` a moment after this process ends (T5.6): the copy of the
+/// uninstaller in %TEMP% cannot delete itself while it runs, so a hidden
+/// `cmd` waits about 2 s and removes it. Nothing is shown.
+pub fn delete_after_exit(file: &Path) -> io::Result<()> {
+    use std::os::windows::process::CommandExt;
+    /// CREATE_NO_WINDOW | DETACHED_PROCESS is not allowed together; no window.
+    const NO_WINDOW: u32 = 0x0800_0000;
+    let path = file
+        .to_str()
+        .filter(|p| !p.contains('"'))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path"))?;
+    std::process::Command::new("cmd.exe")
+        // Quotes kept as written: `ping` is the classic short wait.
+        .raw_arg(format!(
+            "/d /c ping -n 3 127.0.0.1 >nul & del /f /q \"{path}\""
+        ))
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .creation_flags(NO_WINDOW)
+        .spawn()
+        .map(|_| ())
+}
+
 /// Waits until process `pid` has ended (or `timeout`); `true` if it ended
 /// or does not exist. The update helper (T4.4) waits for fx to close before
 /// replacing its files.
@@ -243,6 +267,21 @@ mod tests {
             wait_for_exit(0xFFFF_FFF0, std::time::Duration::from_millis(10)),
             "no such process"
         );
+    }
+
+    #[test]
+    fn a_file_is_deleted_after_the_caller_ends() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("fx-uninstall-test.exe");
+        std::fs::write(&f, b"x").unwrap();
+        delete_after_exit(&f).unwrap();
+        for _ in 0..50 {
+            if !f.exists() {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        panic!("not deleted");
     }
 
     #[test]

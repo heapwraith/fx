@@ -86,6 +86,7 @@ fn main() -> ExitCode {
     let Some(target) = Target::user(value_of("--test-root").map(Path::new)) else {
         return ExitCode::FAILURE;
     };
+    remove_stale_copies();
     if flag("--uninstall") {
         // The installed copy cannot delete itself: run from a copy in %TEMP%.
         if let Ok(exe) = std::env::current_exe()
@@ -99,14 +100,20 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             };
         }
-        if flag("--quiet") {
-            return match transaction::uninstall(&target, &[], &mut |_| {}) {
+        let code = if flag("--quiet") {
+            match transaction::uninstall(&target, &[], &mut |_| {}) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(_) => ExitCode::FAILURE,
-            };
+            }
+        } else {
+            run_ui(Screen::Confirm { remove_data: false }, None, target);
+            ExitCode::SUCCESS
+        };
+        // This copy in %TEMP% goes once it has ended (T5.6).
+        if let Some(me) = running_copy() {
+            let _ = fx_shell::install::delete_after_exit(&me);
         }
-        run_ui(Screen::Confirm { remove_data: false }, None, target);
-        return ExitCode::SUCCESS;
+        return code;
     }
     let package = match pack::read_self() {
         Ok(Some(p)) => Arc::new(p),
@@ -150,9 +157,41 @@ fn damaged(e: &std::io::Error) -> String {
     )
 }
 
+/// The name of the uninstaller's copies in %TEMP%.
+const COPY_PREFIX: &str = "fx-uninstall-";
+
+/// This program, when it is a copy of the uninstaller in %TEMP%.
+fn running_copy() -> Option<PathBuf> {
+    let me = std::env::current_exe().ok()?;
+    let name = me.file_name()?.to_str()?;
+    (name.starts_with(COPY_PREFIX)
+        && name.ends_with(".exe")
+        && me.parent() == Some(std::env::temp_dir().as_path()))
+    .then_some(me)
+}
+
+/// Copies left by earlier uninstalls (killed before cleaning up): removed;
+/// one still running is locked and stays.
+fn remove_stale_copies() {
+    let me = std::env::current_exe().ok();
+    let Ok(entries) = std::fs::read_dir(std::env::temp_dir()) else {
+        return;
+    };
+    for e in entries.flatten() {
+        let path = e.path();
+        let ours = e
+            .file_name()
+            .to_str()
+            .is_some_and(|n| n.starts_with(COPY_PREFIX) && n.ends_with(".exe"));
+        if ours && me.as_deref() != Some(path.as_path()) {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+}
+
 fn copy_to_temp(exe: &Path) -> Option<PathBuf> {
     let bytes = std::fs::read(exe).ok()?;
-    let copy = std::env::temp_dir().join(format!("fx-uninstall-{}.exe", std::process::id()));
+    let copy = std::env::temp_dir().join(format!("{COPY_PREFIX}{}.exe", std::process::id()));
     std::fs::write(&copy, pack::program_of(&bytes)).ok()?;
     Some(copy)
 }
