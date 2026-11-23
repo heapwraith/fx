@@ -25,6 +25,7 @@ mod disk_map;
 mod dnd;
 mod duplicates;
 mod edit_ops;
+mod git;
 mod grid;
 mod keys;
 mod navigation;
@@ -230,6 +231,8 @@ pub struct FolderView {
     duplicates: Option<duplicates::Duplicates>,
     /// The details panel (Alt+Shift+P, T6.9).
     details: Option<details::Details>,
+    /// Git status of the items (T6.12).
+    git: git::Git,
     /// The embedded terminal (Ctrl+J, T3.5).
     terminal: Option<terminal::Terminal>,
     /// Width of the breadcrumb area in the last frame (T2.3), and whether
@@ -421,6 +424,7 @@ impl FolderView {
             timeline: None,
             duplicates: None,
             details: None,
+            git: git::Git::default(),
         };
         crate::visits::visit(&view.path);
         view.start_loading(cx);
@@ -503,6 +507,10 @@ impl FolderView {
     /// the first visible row) where it is on screen. A lost-events overflow
     /// reads the folder again.
     fn apply_changes(&mut self, changes: Vec<Change>, cx: &mut Context<Self>) {
+        // A change can change what git says.
+        if !self.git.states.is_empty() || !changes.is_empty() {
+            self.refresh_git(cx);
+        }
         if changes.is_empty() {
             return;
         }
@@ -648,6 +656,7 @@ impl FolderView {
                 let pending = std::mem::take(&mut view.pending_changes);
                 view.apply_changes(pending, cx);
                 view.start_dir_sizes(cx);
+                view.refresh_git(cx);
                 cx.notify();
             });
         })
@@ -706,15 +715,21 @@ impl FolderView {
                 entry: i,
                 position: first + k,
                 name: self.list.name(i).to_owned(),
-                description: if self.list.attributes(i).is_dir() {
-                    tr!("pasta", "folder").to_owned()
-                } else {
-                    trf!(
-                        "{}, modificado em {}",
-                        "{}, modified {}",
-                        size_kb(self.list.size(i)),
-                        local_date(self.list.modified(i))
-                    )
+                description: {
+                    let base = if self.list.attributes(i).is_dir() {
+                        tr!("pasta", "folder").to_owned()
+                    } else {
+                        trf!(
+                            "{}, modificado em {}",
+                            "{}, modified {}",
+                            size_kb(self.list.size(i)),
+                            local_date(self.list.modified(i))
+                        )
+                    };
+                    match self.git.states.get(self.list.name(i)) {
+                        Some(state) => format!("{base}, {}", git::words(*state)),
+                        None => base,
+                    }
                 },
                 selected: self.selection.is_selected(i),
             })

@@ -127,6 +127,21 @@ impl FolderView {
                                                 .rounded_full()
                                                 .bg(rgba(c))
                                         }))
+                                        .children(self.git.states.get(self.list.name(i)).map(
+                                            |state| {
+                                                div()
+                                                    .flex_none()
+                                                    .text_size(px(CAPTION_SIZE))
+                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                    .text_color(rgba(match state {
+                                                        fx_core::git_status::GitState::Untracked => {
+                                                            t.text_secondary
+                                                        }
+                                                        _ => t.accent,
+                                                    }))
+                                                    .child(state.letter())
+                                            },
+                                        ))
                                         .children(cloud_glyph(self.list.attributes(i)).map(
                                             |(glyph, strong)| {
                                                 div()

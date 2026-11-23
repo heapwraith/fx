@@ -72,7 +72,7 @@ Dimensões, duração, data da foto como colunas; agrupar por tipo, data ou tama
 Painel duplo mostrando o que difere entre duas pastas; sincronizar pelo motor seguro, com desfazer.
 
 ### T6.12 — Status do Git
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: em pastas de repositórios, cada item mostra uma letra (M, A, ?, R, D, !) lida de `git status --porcelain=v2 -z` (`fx-core/src/git_status.rs`), rodado numa thread sem janela de console e com tempo limite de 3 s (`fx_shell::run_hidden`); pastas herdam o estado mais urgente do que têm dentro; relê ao abrir a pasta e quando ela muda, nunca dois ao mesmo tempo; o leitor de tela ouve o estado em palavras; sem git ou fora de repositório, nada aparece (3 testes novos). Conferida num repositório de teste.
 
 Ícone de modificado/novo nos itens de pastas que são repositórios, lido em segundo plano.
 
