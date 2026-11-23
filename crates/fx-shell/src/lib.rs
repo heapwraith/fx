@@ -24,9 +24,9 @@ pub use windows::{
     A11y, DragResult, Instance, LatestTree, animations_enabled, claim_instance, clear_clipboard,
     clipboard_files, drag_files, drives, drop_keys, is_elevated, item_properties, known_folder,
     known_folders, launch, loaded_modules, preview_image, process_start_time, property_values,
-    run_hidden, set_clipboard_files, shifted_digit, show_context_menu, start_icon_service,
-    start_thumb_service, supports_mica, system_language_is_portuguese, watch_drives, window_id,
-    windows_build,
+    run_hidden, set_clipboard_files, set_dark_frame, shifted_digit, show_context_menu,
+    start_icon_service, start_thumb_service, supports_mica, system_language_is_portuguese,
+    watch_drives, window_id, windows_build,
 };
 #[cfg(windows)]
 pub use windows::{conpty, contrast::high_contrast, default_manager, install, net, preview_host};

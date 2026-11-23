@@ -104,6 +104,8 @@ features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_Globalization",
     "Win32_Graphics_Gdi",
+    # The window frame in the theme picked in the app (D-074).
+    "Win32_Graphics_Dwm",
     # Image quick actions (WIC, T6.16).
     "Win32_Graphics_Imaging",
     "Win32_System_Com_StructuredStorage",

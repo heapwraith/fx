@@ -74,6 +74,9 @@ pub struct TabsView {
     tab_scroll: ScrollHandle,
     /// Active tab at the last render (to scroll a newly active tab into view).
     shown_active: Option<usize>,
+    /// The frame (title bar) last set dark or light; `None`: set it at the
+    /// next render (new window, or Windows reset it on a theme change).
+    frame_dark: Option<bool>,
     /// Operation history panel (Ctrl+Shift+H or the clock button).
     history_open: bool,
     /// "Sobre" or "Como usar" (T4.6).
@@ -181,6 +184,7 @@ impl TabsView {
             apply_all: false,
             tab_scroll: ScrollHandle::new(),
             shown_active: None,
+            frame_dark: None,
             history_open: false,
             guide: false,
             settings: None,
@@ -471,6 +475,8 @@ impl TabsView {
     /// The system theme changed: every tab follows. Returns whether Mica shows.
     pub fn set_system_mode(&mut self, system: Mode, cx: &mut Context<Self>) -> bool {
         self.look.theme = Theme::current(crate::prefs::theme().mode(system));
+        // Windows sets the frame to its own theme when that changes.
+        self.frame_dark = None;
         self.look.mica = self.look.mica_supported
             && self.look.theme.mode == system
             && !self.look.theme.high_contrast;
@@ -913,6 +919,14 @@ impl Render for TabsView {
             }
         }
         let t = self.look.theme;
+        // The frame follows the app's theme, even when Windows uses the other.
+        let dark = t.mode == Mode::Dark;
+        if self.frame_dark != Some(dark) {
+            self.frame_dark = Some(dark);
+            if let Some(hwnd) = fx_shell::window_id(window) {
+                fx_shell::set_dark_frame(hwnd, dark);
+            }
+        }
         let wide = f32::from(window.viewport_size().width) >= SIDEBAR_MIN_WINDOW;
         // Read by the Quick Look of the tabs drawn next (T5.6).
         OVERLAY_OPEN.store(
