@@ -47,7 +47,6 @@ mod visits;
 mod workspaces;
 
 use futures::StreamExt;
-use fx_core::tr;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -429,16 +428,7 @@ fn open_folder_window(
             }
             if crash::take_notice() {
                 let tab = view.read(cx).current();
-                tab.update(cx, |tab, cx| {
-                    tab.show_notice(
-                        tr!(
-                            "Falha na última abertura · Ctrl+K: relatar",
-                            "Crashed last time · Ctrl+K: report"
-                        )
-                        .to_owned(),
-                        cx,
-                    );
-                });
+                tab.update(cx, |tab, cx| tab.show_crash_notice(cx));
             }
             // Follow the Windows light/dark setting live.
             let themed = view.clone();

@@ -196,6 +196,9 @@ pub struct FolderView {
     /// A message for the status bar (e.g. a file that could not be opened),
     /// cleared by the next key.
     notice: Option<String>,
+    /// "Crashed last time": worded when drawn, so it follows a language
+    /// switch (the other notices are text already, cleared by the switch).
+    crash_notice: bool,
     /// UI Automation of the window (task T1.10).
     a11y: Option<A11yHandle>,
     ops: Entity<Ops>,
@@ -434,6 +437,7 @@ impl FolderView {
             watcher: None,
             pending_changes: Vec::new(),
             notice: None,
+            crash_notice: false,
             a11y,
             ops,
             renaming: None,
@@ -942,6 +946,20 @@ impl FolderView {
         cx.notify();
     }
 
+    /// The crash of the last run, until the next key.
+    pub fn show_crash_notice(&mut self, cx: &mut Context<Self>) {
+        self.crash_notice = true;
+        cx.notify();
+    }
+
+    /// The language changed: notices written in the other one go (the
+    /// status shows its own text again, in the new language).
+    pub fn drop_worded_notices(&mut self, cx: &mut Context<Self>) {
+        self.notice = None;
+        self.ops.update(cx, |ops, _| ops.drop_notice());
+        cx.notify();
+    }
+
     /// Grid ⇄ list (the button next to the path bar; command palette).
     pub fn toggle_grid(&mut self, cx: &mut Context<Self>) {
         self.set_grid(!self.grid);
@@ -1274,6 +1292,13 @@ impl FolderView {
     }
 
     fn status_text(&self, cx: &gpui::App) -> String {
+        if self.crash_notice {
+            return tr!(
+                "Falha na última abertura · Ctrl+K: relatar",
+                "Crashed last time · Ctrl+K: report"
+            )
+            .to_owned();
+        }
         if let Some(notice) = &self.notice {
             return notice.clone();
         }

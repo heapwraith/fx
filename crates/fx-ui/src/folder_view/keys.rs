@@ -18,7 +18,7 @@ impl FolderView {
         let m = ks.modifiers;
         let only_ctrl = m.control && !m.alt && !m.shift;
         let only_alt = m.alt && !m.control && !m.shift;
-        if self.notice.take().is_some() {
+        if self.notice.take().is_some() | std::mem::take(&mut self.crash_notice) {
             cx.notify();
         }
         if ks.key == "j" && m.control && !m.alt && !m.shift {

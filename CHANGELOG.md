@@ -21,6 +21,7 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 ### Corrigido
 - **Linha do tempo:** os caminhos apareciam como `\\.\C:\…`, e por isso os arquivos de outros usuários do Windows não eram escondidos. O serviço precisa ser reinstalado (Desativar e Ativar em Configurações › Sistema) para levar a correção.
 - **Quick Look de imagens:** uma imagem quadrada passava da borda de baixo e era cortada; agora encaixa e fica centralizada, sem ampliar imagens pequenas.
+- Avisos da barra de status ficavam no idioma antigo depois de trocar o idioma (por exemplo, "Crashed last time · Ctrl+K: report" em português); agora o aviso de falha acompanha o idioma e os outros dão lugar ao status no idioma novo.
 - Uma cópia em que todos os conflitos foram pulados dizia "Concluído · 27 B" com a barra cheia; agora diz "Nada mudou · 1 pulado(s)" (e o status, "nada copiado: 1 item pulado").
 - Comparar pastas sem diferenças mostra a frase no meio, como estado vazio; a paleta chama o Ctrl+F de "Buscar nesta pasta e subpastas"; o desinstalador aponta Configurações › Sistema para remover o serviço.
 - Configurações: o primeiro Tab numa seção nova pulava o primeiro controle; o espaço vazio em "Sobre" e o texto de ajuda confuso no rodapé.

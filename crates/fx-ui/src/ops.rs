@@ -423,6 +423,11 @@ impl Ops {
             .map(|(text, _)| text.as_str())
     }
 
+    /// Forgets the status message (the language changed).
+    pub fn drop_notice(&mut self) {
+        self.notice = None;
+    }
+
     fn say(&mut self, text: impl Into<String>) {
         self.notice = Some((text.into(), Instant::now()));
     }

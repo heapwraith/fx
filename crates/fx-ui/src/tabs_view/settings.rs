@@ -374,6 +374,9 @@ impl TabsView {
             Act::Language(english) => {
                 if fx_core::locale::english() != english {
                     crate::i18n::switch();
+                    for tab in self.tabs.iter() {
+                        tab.update(cx, |view, cx| view.drop_worded_notices(cx));
+                    }
                     cx.refresh_windows();
                 }
             }
