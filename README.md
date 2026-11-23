@@ -91,6 +91,7 @@ Para contribuir, pessoa ou agente, comece por [`CLAUDE.md`](CLAUDE.md) e pela pa
 | [`SAFETY.md`](docs/SAFETY.md) | Segurança de dados e limites de autonomia |
 | [`PRODUCT.md`](docs/PRODUCT.md) | Princípios de produto, layout e atalhos |
 | [`DECISIONS.md`](docs/DECISIONS.md) | Registro de decisões (D-001 em diante) |
+| [`GUIA.md`](docs/GUIA.md) | Guia de uso: atalhos, busca, painéis, etiquetas, terminal |
 | [`TESTES-FINAIS.md`](docs/TESTES-FINAIS.md) | Testes manuais pendentes |
 | [`SIGNING.md`](docs/SIGNING.md) | Como ativar a assinatura digital |
 

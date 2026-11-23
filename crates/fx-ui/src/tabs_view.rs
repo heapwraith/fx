@@ -585,9 +585,12 @@ impl TabsView {
             return;
         }
         // F6: the sidebar by keyboard (as in Explorer); ↑/↓ choose, Enter
-        // opens, Esc or F6 go back to the list.
+        // opens, Esc or F6 go back to the list. With split panes F6 moves
+        // the selection to the next pane instead (handled below, as in
+        // two-pane managers), unless the sidebar already has the focus.
         let plain = !m.control && !m.alt && !m.shift && !m.platform;
-        if ks.key == "f6" && plain {
+        let split = self.other().is_some();
+        if ks.key == "f6" && plain && (!split || self.sidebar_focus.is_some()) {
             let wide = f32::from(window.viewport_size().width) >= SIDEBAR_MIN_WINDOW;
             self.sidebar_focus = match self.sidebar_focus {
                 Some(_) => None,
