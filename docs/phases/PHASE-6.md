@@ -94,7 +94,7 @@ Arrastar uma aba para fora vira janela; dividir em mais de dois painéis.
 "Fotos da praia de 2024", "contrato com a Ana", usando a IA local do Windows (APIs de IA dos PCs Copilot+), **sem enviar nada**; desligada por padrão e só onde o hardware permite.
 
 ### T6.16 — Ações rápidas por tipo
-- [ ] Concluída em: ____ · Resumo:
+- [ ] Parcial em 2026-11-22: imagens prontas — "Imagens: copiar como JPG / como PNG / cópia com metade do tamanho" na paleta, para as imagens selecionadas, pelo WIC do Windows (`fx-shell/src/windows/images.rs`), numa thread, com progresso real; o original nunca é tocado e a cópia nunca substitui nada (nome temporário, renomear sem substituir, "manter os dois") (2 testes novos). Faltam juntar PDFs (exige uma biblioteca de PDF: pedir aprovação) e renomear pela data EXIF (usa a T6.9).
 
 Converter/redimensionar imagens, juntar PDFs, renomear fotos pela data EXIF, direto da seleção, pela paleta.
 

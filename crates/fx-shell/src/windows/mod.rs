@@ -8,6 +8,7 @@ pub mod default_manager;
 mod dragdrop;
 mod elevation;
 mod icons;
+pub mod images;
 pub mod install;
 mod instance;
 mod keys;

@@ -27,6 +27,7 @@ mod duplicates;
 mod edit_ops;
 mod git;
 mod grid;
+mod image_actions;
 mod keys;
 mod navigation;
 mod path_bar;
@@ -37,6 +38,7 @@ mod terminal;
 mod timeline;
 mod view_menu;
 
+pub use image_actions::ImageAction;
 pub use view_menu::ViewEvent;
 
 use futures::StreamExt;

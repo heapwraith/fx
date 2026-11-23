@@ -1,0 +1,179 @@
+//! Image quick actions from the palette (T6.16, D-068): copies of the
+//! selected images as JPG or PNG, or at half size, next to them. Originals
+//! are never touched; a copy never replaces anything (a temporary name, then
+//! a rename that refuses to replace, "keep both" on a clash). Runs on a
+//! thread; the status says how far it really is.
+
+use std::path::{Path, PathBuf};
+
+use futures::StreamExt;
+use fx_core::{tr, trf};
+use fx_shell::images::{ImageKind, convert_image};
+use gpui::Context;
+
+use super::FolderView;
+
+/// What to make of each image.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImageAction {
+    To(ImageKind),
+    Half,
+}
+
+fn is_image(path: &Path) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default();
+    matches!(
+        ext.as_str(),
+        "jpg" | "jpeg" | "png" | "bmp" | "gif" | "tif" | "tiff" | "heic" | "webp" | "ico" | "jfif"
+    )
+}
+
+/// The free name of the copy of `src`.
+fn copy_name(src: &Path, action: ImageAction) -> (PathBuf, ImageKind) {
+    let dir = src.parent().unwrap_or(Path::new("."));
+    let stem = src
+        .file_stem()
+        .map_or_else(String::new, |s| s.to_string_lossy().into_owned());
+    let (kind, name) = match action {
+        ImageAction::To(kind) => (kind, format!("{stem}.{}", kind.extension())),
+        ImageAction::Half => {
+            let png = src
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("png"));
+            let kind = if png { ImageKind::Png } else { ImageKind::Jpeg };
+            (kind, format!("{stem} (50%).{}", kind.extension()))
+        }
+    };
+    let target = dir.join(&name);
+    let free = if target.exists() {
+        fx_core::naming::keep_both_name(dir, &name, |p| p.exists())
+    } else {
+        target
+    };
+    (free, kind)
+}
+
+/// Makes one copy: a temporary file, then a rename that never replaces.
+fn make_copy(src: &Path, action: ImageAction) -> std::io::Result<PathBuf> {
+    let (target, kind) = copy_name(src, action);
+    let dir = target.parent().unwrap_or(Path::new("."));
+    let temp = dir.join(fx_core::temp_name::temp_name(
+        target.file_name().unwrap_or_default(),
+        std::process::id(),
+        0,
+    ));
+    let scale = if action == ImageAction::Half {
+        0.5
+    } else {
+        1.0
+    };
+    convert_image(src, &temp, kind, scale)?;
+    let result = match fx_fs::rename_no_replace(&temp, &target) {
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            let name = target.file_name().unwrap_or_default().to_os_string();
+            let other = fx_core::naming::keep_both_name(dir, &name, |p| p.exists());
+            fx_fs::rename_no_replace(&temp, &other).map(|()| other)
+        }
+        r => r.map(|()| target),
+    };
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temp);
+    }
+    result
+}
+
+impl FolderView {
+    /// Runs `action` on the selected images (palette).
+    pub fn image_action(&mut self, action: ImageAction, cx: &mut Context<Self>) {
+        let images: Vec<PathBuf> = self
+            .selected_paths()
+            .into_iter()
+            .filter(|p| is_image(p))
+            .collect();
+        if images.is_empty() {
+            self.show_notice(
+                tr!("Selecione uma ou mais imagens", "Select one or more images").to_owned(),
+                cx,
+            );
+            return;
+        }
+        let total = images.len();
+        let (tx, mut rx) = futures::channel::mpsc::unbounded::<(usize, usize)>();
+        let _ = std::thread::Builder::new()
+            .name("fx-images".into())
+            .spawn(move || {
+                let mut failed = 0;
+                for (k, src) in images.iter().enumerate() {
+                    if make_copy(src, action).is_err() {
+                        failed += 1;
+                    }
+                    let _ = tx.unbounded_send((k + 1, failed));
+                }
+            });
+        cx.spawn(async move |this, cx| {
+            let mut last = (0, 0);
+            while let Some(step) = rx.next().await {
+                last = step;
+                let (done, _) = step;
+                let _ = this.update(cx, |view, cx| {
+                    if done < total {
+                        view.show_notice(
+                            trf!("Imagens: {} de {}…", "Images: {} of {}…", done, total),
+                            cx,
+                        );
+                    }
+                });
+            }
+            let (done, failed) = last;
+            let _ = this.update(cx, |view, cx| {
+                let made = done - failed;
+                let text = if failed == 0 {
+                    trf!(
+                        "{} cópias feitas ao lado das originais",
+                        "{} copies made next to the originals",
+                        made
+                    )
+                } else {
+                    trf!(
+                        "{} cópias feitas; {} imagens não puderam ser lidas",
+                        "{} copies made; {} images could not be read",
+                        made,
+                        failed
+                    )
+                };
+                view.show_notice(text, cx);
+            });
+        })
+        .detach();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn names_never_clash_and_only_images_count() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("praia.jpeg");
+        std::fs::write(&src, b"x").unwrap();
+        let (png, kind) = copy_name(&src, ImageAction::To(ImageKind::Png));
+        assert_eq!(png, dir.path().join("praia.png"));
+        assert_eq!(kind, ImageKind::Png);
+        std::fs::write(&png, b"x").unwrap();
+        assert_eq!(
+            copy_name(&src, ImageAction::To(ImageKind::Png)).0,
+            dir.path().join("praia (2).png")
+        );
+        assert_eq!(
+            copy_name(&src, ImageAction::Half).0,
+            dir.path().join("praia (50%).jpg")
+        );
+        assert!(is_image(Path::new("A.HEIC")));
+        assert!(!is_image(Path::new("notas.txt")));
+    }
+}

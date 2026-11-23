@@ -87,6 +87,9 @@ features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_Globalization",
     "Win32_Graphics_Gdi",
+    # Image quick actions (WIC, T6.16).
+    "Win32_Graphics_Imaging",
+    "Win32_System_Com_StructuredStorage",
     "Win32_Networking_WinHttp",
 ]
 

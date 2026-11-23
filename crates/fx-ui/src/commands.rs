@@ -3,8 +3,10 @@
 //! active tab, so the palette and the keyboard can never disagree. A few have
 //! no key and act directly.
 
+use crate::folder_view::ImageAction;
 use fx_core::SortKey;
 use fx_core::tr;
+use fx_shell::images::ImageKind;
 
 /// Who handles a command's keystroke.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +45,8 @@ pub enum Action {
     /// T6.13: asks a name and saves this window's tabs as a workspace.
     /// T6.11: compares the two panes of the dual view.
     Compare,
+    /// T6.16: copies of the selected images.
+    Image(crate::folder_view::ImageAction),
     SaveWorkspace,
 }
 
@@ -115,6 +119,7 @@ impl Command {
             Action::ConfirmRecycle => "\u{E74D}",
             Action::SaveWorkspace => "\u{E74E}", // Save
             Action::Compare => "\u{E8F9}",       // Switch
+            Action::Image(_) => "\u{EB9F}",      // Photo
         }
     }
 
@@ -189,6 +194,21 @@ pub const COMMANDS: &[Command] = &[
         "ctrl-shift-d",
     ),
     tab(("Painel de detalhes", "Details panel"), "alt-shift-p"),
+    direct(
+        ("Imagens: copiar como JPG", "Images: copy as JPG"),
+        Action::Image(ImageAction::To(ImageKind::Jpeg)),
+    ),
+    direct(
+        ("Imagens: copiar como PNG", "Images: copy as PNG"),
+        Action::Image(ImageAction::To(ImageKind::Png)),
+    ),
+    direct(
+        (
+            "Imagens: cópia com metade do tamanho",
+            "Images: copy at half size",
+        ),
+        Action::Image(ImageAction::Half),
+    ),
     direct(
         (
             "Comparar com o outro painel (painel duplo)",
