@@ -7,6 +7,7 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualizador.
 
 ### Adicionado
+- **Avisos de terceiros:** o instalador traz `THIRD-PARTY-NOTICES.txt`, com a licença de cada biblioteca usada.
 - **Terminal completo:** acompanha a pasta da aba, Prompt de Comando além do PowerShell, histórico com a roda do mouse, selecionar com o mouse, copiar e colar.
 - **Sessão com painéis:** os painéis lado a lado e a vista em colunas voltam como estavam ao reabrir o fx.
 - **Etiquetas com nome próprio**, visíveis também na grade e nas colunas, e "Etiqueta: …" na paleta para achar tudo o que tem uma etiqueta.

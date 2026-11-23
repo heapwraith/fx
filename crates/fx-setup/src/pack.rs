@@ -12,7 +12,13 @@ pub const SETUP_EXE: &str = "fx-setup.exe";
 /// Programs taken from the build folder.
 pub const PROGRAMS: [&str; 3] = ["fx.exe", "fx-indexd.exe", "fx-preview.exe"];
 /// Documents taken from the repository root.
-pub const DOCUMENTS: [&str; 4] = ["LICENSE-MIT", "LICENSE-APACHE", "README.md", "CHANGELOG.md"];
+pub const DOCUMENTS: [&str; 5] = [
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "THIRD-PARTY-NOTICES.txt",
+    "README.md",
+    "CHANGELOG.md",
+];
 
 /// A package read back: its list and the files.
 #[derive(Debug)]

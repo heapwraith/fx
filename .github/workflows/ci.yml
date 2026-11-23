@@ -40,8 +40,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Toolchain (rust-toolchain.toml)
-        run: rustup show
+        run: |
+          rustup toolchain install
+          rustup show
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Third-party notices up to date (tools/third-party-notices.py)
+        shell: pwsh
+        run: |
+          python tools/third-party-notices.py
+          git diff --exit-code -- THIRD-PARTY-NOTICES.txt
       - name: Format
         run: cargo fmt --all -- --check
       - name: Clippy
@@ -86,7 +93,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Toolchain (rust-toolchain.toml)
-        run: rustup show
+        run: |
+          rustup toolchain install
+          rustup show
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: arm64
