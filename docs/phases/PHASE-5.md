@@ -15,7 +15,7 @@ Toda a lista de `docs/TESTES-FINAIS.md` (Narrador, Explorador, totais pelo servi
 - Assinatura pela SignPath Foundation (inscrição é do usuário; passos em `docs/SIGNING.md`).
 - Publicar a beta e depois a 1.0 no GitHub (o atualizador só enxerga releases publicados, não rascunhos).
 - **Licenças de terceiros:** feito em 2026-11-23 — `THIRD-PARTY-NOTICES.txt` gerado por `tools/third-party-notices.py` (453 crates dos programas entregues, licença, autores, arquivos de licença e NOTICE, textos repetidos uma vez só, textos padrão MIT e Apache-2.0 para os 32 crates sem arquivo), levado pelo instalador e conferido pelo CI. Ações do CI: nenhuma usa mais Node 20; o aviso de instalação automática do `rustup` foi resolvido com `rustup toolchain install`. Antes: gerar um `THIRD-PARTY-NOTICES` com a licença de cada dependência (GPUI, Apache 2.0, e as demais) e incluí-lo no instalador e no zip; a Apache 2.0 pede que a licença acompanhe o programa e que arquivos modificados sejam indicados.
-- Pacote MSIX para a Microsoft Store e manifesto do winget.
+- Pacote MSIX para a Microsoft Store e manifesto do winget. Winget preparado em 2026-11-23: `tools/winget-manifest.py <versão> <instaladores>` gera os três arquivos do manifesto 1.9 (`heapwraith.fx`, por usuário, `--silent`, x64 e ARM64, com os SHA-256) para enviar ao `microsoft/winget-pkgs` depois do release publicado. MSIX: depende da conta da Store e do `makeappx` do Windows SDK.
 - Ações do CI que ainda usam Node 20.
 - Instalador menor (hoje 15,2 MB, porque o programa do instalador leva o GPUI sem compressão).
 
