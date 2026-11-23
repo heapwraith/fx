@@ -4,7 +4,9 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 
 ## [Não lançado]
 
-Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualizador.
+## [0.3.0-beta] — 2026-11-23
+
+Fases 5 e 6 (em andamento): o que nenhum outro gerenciador tem junto (mapa do disco, linha do tempo, buscas vivas, duplicados, desfazer entre sessões), compactados, busca no conteúdo, comparar pastas e arquivos, dependências que rodam no Windows e no Linux, instalador menor e menos memória.
 
 ### Adicionado
 - **Avisos de terceiros:** o instalador traz `THIRD-PARTY-NOTICES.txt`, com a licença de cada biblioteca usada.
