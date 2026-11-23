@@ -1,6 +1,5 @@
 //! Windows implementation of folder enumeration (three strategies, task T0.3).
 
-pub mod archive;
 mod find;
 mod handle_info;
 pub mod ops;

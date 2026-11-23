@@ -13,9 +13,17 @@ workspace = true
 
 [dependencies]
 fx-core.workspace = true
+zip.workspace = true
+flate2.workspace = true
+tar.workspace = true
+sevenz-rust2.workspace = true
+bzip2.workspace = true
+lzma-rust2.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# Only the tests make a 7z.
+sevenz-rust2 = { workspace = true, features = ["compress", "util"] }

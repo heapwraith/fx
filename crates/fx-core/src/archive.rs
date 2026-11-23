@@ -11,9 +11,8 @@ use crate::zip_list::ZipEntry;
 /// Whether `name` is an archive the fx opens as a folder.
 pub fn is_archive(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    const ENDINGS: [&str; 12] = [
-        ".zip", ".7z", ".rar", ".tar", ".tgz", ".tbz2", ".txz", ".tar.gz", ".tar.bz2", ".tar.xz",
-        ".tar.zst", ".cab",
+    const ENDINGS: [&str; 9] = [
+        ".zip", ".7z", ".tar", ".tgz", ".tbz2", ".txz", ".tar.gz", ".tar.bz2", ".tar.xz",
     ];
     ENDINGS
         .iter()
@@ -133,6 +132,22 @@ pub fn dos_to_local_secs(dos: u32) -> i64 {
         + i64::from(time & 0x1F) * 2
 }
 
+/// The MS-DOS date and time of local Unix seconds (1980-01-01 for earlier
+/// instants, 2107-12-31 for later ones; seconds rounded down to even).
+pub fn local_secs_to_dos(local: i64) -> u32 {
+    let (y, m, d) = crate::format::civil_from_days(local.div_euclid(86_400));
+    if y < 1980 {
+        return ((1 << 5) | 1) << 16;
+    }
+    if y > 2107 {
+        return (((127 << 9) | (12 << 5) | 31) << 16) | ((23 << 11) | (59 << 5) | 29);
+    }
+    let t = local.rem_euclid(86_400) as u32;
+    let date = (((y - 1980) as u32) << 9) | (m << 5) | d;
+    let time = ((t / 3600) << 11) | ((t / 60 % 60) << 5) | ((t % 60) / 2);
+    (date << 16) | time
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,6 +195,9 @@ mod tests {
         );
         // 2025-07-15 14:29:22 → 0x5AEF (date) 0x73AB (time).
         assert_eq!(dos_to_local_secs(0x5AEF_73AB), 1_752_589_762);
+        assert_eq!(local_secs_to_dos(1_752_589_762), 0x5AEF_73AB);
+        assert_eq!(local_secs_to_dos(1_752_589_763), 0x5AEF_73AB, "odd second");
+        assert_eq!(dos_to_local_secs(local_secs_to_dos(0)), 315_532_800, "1980");
     }
 
     #[test]
@@ -189,6 +207,7 @@ mod tests {
         assert!(is_archive("x.7z"));
         assert!(!is_archive(".zip"));
         assert!(!is_archive("notas.gz"));
+        assert!(!is_archive("x.rar"), "no free Rust reader");
         assert!(!is_archive("relatorio.pdf"));
         assert!(is_safe_name("ação 日本.txt"));
         for bad in [

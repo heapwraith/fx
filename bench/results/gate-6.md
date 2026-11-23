@@ -29,7 +29,7 @@ Os limites são os de `PERFORMANCE.md` (D-064), mais apertados que os do portão
 | P5 busca por tecla | índice sintético de 2 milhões: p95 7,50 ms, máx. 10,3 | ≤ 16 ms p95 | 7,22 | ✅ (sintético) |
 | P8 memória parado | mediana 88,3 MB (87,3–88,5, 5 processos) | ≤ 85 MB | 87,8 | ❌ |
 | P9 índice por milhão | 71,4 MB (sintético) | ≤ 100 MB | 71,4 | ✅ |
-| S1 `fx.exe` | 15,2 MB | ≤ 12 MB | 14,3 (Fase 5) | ❌ (cresceu 6%) |
+| S1 `fx.exe` | 16,5 MB (no commit 351016a; a primeira versão deste relatório leu um executável antigo, de 15,2 MB) | ≤ 12 MB | 14,3 (Fase 5) | ❌ (cresceu 15%) |
 | P2 (b) aba nova | Ctrl+T: mediana 9,9 ms, p95 12,2 | ≤ 16 ms | 11,7 | ✅ |
 | P4 tecla → quadro | digitar filtro p95 4,19; setas p95 3,21 (máx. 10,2); caminho p95 4,24 (Enter/Alt+setas 5,36); abas 4,13; paleta 3,29; setas durante reordenação 3,39; busca no disco 3,84 ms | ≤ 8 ms p95, máx. 16 | ≤ 4,38 | ✅ |
 | P7 rolagem | 4 perdidos em 3.996 quadros (0,10%), a 239 Hz | ≤ 0,1% | 0,02% | ⚠ no limite |
@@ -61,7 +61,7 @@ Não medida nesta fase. Nenhuma tarefa mexeu nos caminhos já comparados.
    É preciso conferir se alguma dessas partes entra antes da primeira pintura. Vale perfilar com o `FX_TRACE`.
 2. **P7 em 0,10%, exatamente no limite.** 4 quadros perdidos numa das duas sessões, contra 1 no portão 4. Pode ser ruído; vale repetir antes de mexer.
 3. **P8 em 88,3 MB contra o limite de 85.** A Fase 6 manteve o fx parado no mesmo patamar, mas o limite novo (D-064) já reprovava antes. É trabalho da T5.7.
-4. **S1 em 15,2 MB.** O executável cresceu 0,9 MB com as telas novas:
+4. **S1 em 16,5 MB.** O executável cresceu 2,2 MB com as telas novas:
    - mapa do disco;
    - linha do tempo;
    - duplicados;

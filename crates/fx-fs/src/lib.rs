@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 pub use fx_core::{Attributes, Change, Entry};
 
+pub mod archive;
 pub mod content;
 pub mod duplicates;
 pub mod tree;
@@ -16,8 +17,6 @@ pub mod tree;
 #[cfg(windows)]
 mod windows;
 
-#[cfg(windows)]
-pub use windows::archive;
 #[cfg(windows)]
 pub use windows::ops::{com_init, copy_file, is_aborted, is_cross_device, rename_no_replace};
 #[cfg(windows)]

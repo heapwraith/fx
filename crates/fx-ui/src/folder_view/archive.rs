@@ -306,10 +306,16 @@ impl FolderView {
                 let name = zip_name(&items, &folder);
                 let target = fx_core::naming::keep_both_name(&folder, &name, |p| p.exists());
                 let progress_tx = tx.clone();
-                let result = fx_fs::archive::make_zip(&items, &target, &mut |done, total| {
-                    let _ = progress_tx.unbounded_send(Step::Progress(done, total));
-                })
-                .map(|()| vec![target]);
+                let offset = |utc: i64| {
+                    fx_shell::utc_offset_at(
+                        std::time::UNIX_EPOCH + std::time::Duration::from_secs(utc.max(0) as u64),
+                    )
+                };
+                let result =
+                    fx_fs::archive::make_zip(&items, &target, &offset, &mut |done, total| {
+                        let _ = progress_tx.unbounded_send(Step::Progress(done, total));
+                    })
+                    .map(|()| vec![target]);
                 let _ = tx.unbounded_send(Step::Done(result));
             });
         if spawned.is_err() {
@@ -392,7 +398,7 @@ fn extract_whole(
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
         let lower = name.to_ascii_lowercase();
-        let stem = [".tar.gz", ".tar.bz2", ".tar.xz", ".tar.zst"]
+        let stem = [".tar.gz", ".tar.bz2", ".tar.xz"]
             .iter()
             .find(|e| lower.ends_with(*e))
             .map_or_else(

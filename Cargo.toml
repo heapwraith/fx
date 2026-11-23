@@ -51,6 +51,14 @@ log = "=0.4.35"
 # Tipos de erro nas bibliotecas (CLAUDE.md).
 thiserror = "=2.0.21"
 
+# Compactados (D-069): crates Rust puros, os mesmos no Windows e no Linux.
+zip = { version = "=9.8.2", default-features = false, features = ["deflate-flate2-zlib-rs", "deflate64"] }
+flate2 = { version = "=1.1.11", default-features = false, features = ["zlib-rs"] }
+tar = { version = "=0.4.46", default-features = false }
+sevenz-rust2 = { version = "=0.25.0", default-features = false }
+bzip2 = "=0.6.1"
+lzma-rust2 = { version = "=0.25.0", default-features = false, features = ["std", "xz"] }
+
 [workspace.dependencies.windows]
 version = "=0.62.2"
 features = [
