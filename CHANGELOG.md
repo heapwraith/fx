@@ -25,6 +25,7 @@ Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualiz
 ### Mudado
 - **Compactados sem programas do Windows** (D-069): ZIP, 7z e tar são lidos e escritos por bibliotecas Rust, as mesmas no Windows e no Linux, dentro do próprio fx; acabou o PowerShell oculto e o `tar.exe`. RAR deixou de ser aberto (não há leitor livre em Rust).
 - **Imagens sem o WIC** (D-069): converter e reduzir por bibliotecas Rust, várias fotos ao mesmo tempo (em lote, 44 ms por foto de 12 MP, metade do tempo de antes), já de pé conforme a orientação da câmera; a data da foto vem direto do EXIF. HEIC deixou de ser convertido.
+- **Fuso horário pelas regras IANA** (D-069): as datas da lista seguem as mesmas regras no Windows e no Linux, iguais às do Windows nos anos recentes.
 - **Busca no conteúdo sem o Windows Search** (D-069): no disco inteiro, o índice do fx acha os arquivos pelo nome ou extensão e o fx lê o conteúdo deles; só `conteúdo:` sem nome nem extensão pede um dos dois em vez de ler o disco todo.
 - Delete pergunta antes de enviar para a Lixeira (dá para desligar na paleta); as confirmações usam um diálogo do fx, traduzido, em vez da caixa do Windows.
 - Barra de progresso mais visível, com porcentagem, velocidade e tempo restante; a operação concluída fica um instante na tela.

@@ -63,6 +63,8 @@ image = "=0.25.10"
 kamadak-exif = "=0.6.2"
 # JPEG com SIMD (2× o codificador da `image`).
 jpeg-encoder = { version = "=0.7.1", features = ["simd"] }
+# Fuso horário (D-069): regras IANA; no Windows vêm embutidas, no Linux são as do sistema.
+jiff = "=1.0.2"
 
 [workspace.dependencies.windows]
 version = "=0.62.2"

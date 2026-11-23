@@ -18,6 +18,7 @@ raw-window-handle.workspace = true
 image.workspace = true
 kamadak-exif.workspace = true
 jpeg-encoder.workspace = true
+jiff.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows.workspace = true
