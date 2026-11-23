@@ -89,8 +89,13 @@ impl TabsView {
             let index = op.index;
             let offset = fx_shell::utc_offset_at(op.at);
             let stamp = date_time(op.at, offset);
-            // "DD/MM/YYYY HH:MM": the session is today, the time is enough.
-            let time = stamp.get(11..).unwrap_or(&stamp).to_owned();
+            // "DD/MM/YYYY HH:MM": today only the time; an operation from an
+            // earlier session (T6.6) shows its date too.
+            let time = if same_day(op.at, std::time::SystemTime::now(), offset) {
+                stamp.get(11..).unwrap_or(&stamp).to_owned()
+            } else {
+                stamp.clone()
+            };
             list = list.child(
                 div()
                     .id(("history", index))
@@ -102,7 +107,7 @@ impl TabsView {
                     .border_color(rgba(t.divider))
                     .child(
                         div()
-                            .w(px(40.0))
+                            .min_w(px(40.0))
                             .flex_none()
                             .text_size(px(CAPTION_SIZE))
                             .text_color(rgba(t.text_secondary))
@@ -180,5 +185,34 @@ impl TabsView {
             ))
             .with_priority(1),
         )
+    }
+}
+
+/// Whether `a` and `b` fall on the same local day (`offset`: seconds from UTC).
+fn same_day(a: std::time::SystemTime, b: std::time::SystemTime, offset: i64) -> bool {
+    let day = |t: std::time::SystemTime| {
+        let secs = t
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs() as i64);
+        (secs + offset).div_euclid(86_400)
+    };
+    day(a) == day(b)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, UNIX_EPOCH};
+
+    #[test]
+    fn days_follow_the_local_offset() {
+        let t = |s| UNIX_EPOCH + Duration::from_secs(s);
+        assert!(super::same_day(t(86_400), t(86_400 + 3_600), 0));
+        assert!(!super::same_day(t(86_400 - 1), t(86_400), 0));
+        // 23:30 UTC is already the next day at UTC+1.
+        assert!(super::same_day(
+            t(86_400 + 84_600),
+            t(2 * 86_400 + 60),
+            3_600
+        ));
     }
 }

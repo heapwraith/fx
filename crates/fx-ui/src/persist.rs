@@ -156,6 +156,7 @@ impl Persist {
             settings,
             visits: crate::visits::saved(),
             workspaces: crate::workspaces::saved(),
+            undo: crate::undo_store::saved(),
         }
     }
 
@@ -178,6 +179,7 @@ impl Persist {
 /// is lost.
 pub fn load_lists(persist: bool) {
     if !persist {
+        crate::undo_store::set_none();
         return;
     }
     let _ = std::thread::Builder::new()
@@ -185,8 +187,16 @@ pub fn load_lists(persist: bool) {
         .spawn(|| {
             let Some(db) = store::state_path().and_then(|p| store::Db::open(&p).ok()) else {
                 log::warn!("state.db could not be opened to read visits and workspaces");
+                crate::undo_store::set_none();
                 return;
             };
+            match db.load_undo() {
+                Ok(rows) => crate::undo_store::set_loaded(rows),
+                Err(e) => {
+                    log::warn!("undo history could not be read: {e}");
+                    crate::undo_store::set_none();
+                }
+            }
             match db.load_visits() {
                 Ok(v) => crate::visits::set_loaded(v),
                 Err(e) => log::warn!("folder visits could not be read: {e}"),

@@ -38,6 +38,7 @@ mod theme;
 mod thumbs;
 mod tooltip;
 mod trace;
+mod undo_store;
 mod update;
 mod visits;
 mod workspaces;

@@ -38,6 +38,16 @@ impl<T> UndoStack<T> {
         }
     }
 
+    /// Older entries (saved by an earlier session, T6.6) go under the ones
+    /// of this session; past the limit, the oldest are dropped.
+    pub fn prepend_undo(&mut self, older: Vec<T>) {
+        let mut all = older;
+        all.append(&mut self.undo);
+        let extra = all.len().saturating_sub(self.limit);
+        all.drain(..extra);
+        self.undo = all;
+    }
+
     pub fn push_redo(&mut self, entry: T) {
         self.redo.push(entry);
     }
@@ -125,5 +135,13 @@ mod tests {
             (s.take_undo(), s.take_undo(), s.take_undo()),
             (Some(4), Some(3), None)
         );
+    }
+
+    #[test]
+    fn older_entries_go_under_and_respect_the_limit() {
+        let mut h = UndoStack::new(3);
+        h.record(10);
+        h.prepend_undo(vec![1, 2, 3]);
+        assert_eq!(h.undo_entries(), [2, 3, 10]);
     }
 }

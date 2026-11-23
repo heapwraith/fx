@@ -24,6 +24,10 @@ use gpui::Context;
 /// How long a status message stays.
 const NOTICE_FOR: Duration = Duration::from_secs(6);
 
+/// Saved jobs bigger than this (thousands of items) are undoable in this
+/// session only.
+const MAX_SAVED_ROW: usize = 512 << 10;
+
 #[derive(Clone)]
 struct Entry {
     forward: Job,
@@ -31,17 +35,56 @@ struct Entry {
     /// For the history panel: what was done, and when.
     label: String,
     at: std::time::SystemTime,
+    /// The entry as saved for the next session (T6.6), made once.
+    row: Option<std::sync::Arc<crate::store::UndoRow>>,
 }
 
 impl Entry {
     fn new(forward: Job, backward: Job, report: &Report) -> Self {
+        let label = history_label(&forward, report);
+        let at = std::time::SystemTime::now();
+        let row = saved_row(&forward, &backward, &label, at);
         Self {
-            label: history_label(&forward, report),
+            label,
             forward,
             backward,
-            at: std::time::SystemTime::now(),
+            at,
+            row,
         }
     }
+
+    /// An entry from an earlier session; `None` if its bytes are damaged.
+    fn from_row(row: crate::store::UndoRow) -> Option<Self> {
+        let forward = Job::decode(&row.forward)?;
+        let backward = Job::decode(&row.backward)?;
+        let at = std::time::UNIX_EPOCH + Duration::from_secs(u64::try_from(row.at).unwrap_or(0));
+        Some(Self {
+            label: row.label.clone(),
+            forward,
+            backward,
+            at,
+            row: Some(std::sync::Arc::new(row)),
+        })
+    }
+}
+
+fn saved_row(
+    forward: &Job,
+    backward: &Job,
+    label: &str,
+    at: std::time::SystemTime,
+) -> Option<std::sync::Arc<crate::store::UndoRow>> {
+    let (f, b) = (forward.encode(), backward.encode());
+    (f.len() + b.len() <= MAX_SAVED_ROW).then(|| {
+        std::sync::Arc::new(crate::store::UndoRow {
+            label: label.to_owned(),
+            at: at
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs() as i64),
+            forward: f,
+            backward: b,
+        })
+    })
 }
 
 /// One line of the history panel.
@@ -126,10 +169,14 @@ pub struct Ops {
     /// "Started" events that arrived before `submit` registered the job (the
     /// engine can start it right away): byte totals by job.
     early_starts: HashMap<JobId, u64>,
+    /// The history saved by an earlier session is in (T6.6): from then on,
+    /// changes are published to be saved.
+    restored: bool,
 }
 
 impl Ops {
     pub fn new(cx: &mut Context<Self>) -> Self {
+        Self::restore_history(cx);
         Self {
             engine: Self::start(cx),
             active: Vec::new(),
@@ -141,6 +188,48 @@ impl Ops {
             created: HashMap::new(),
             clear_after: std::collections::HashSet::new(),
             early_starts: HashMap::new(),
+            restored: false,
+        }
+    }
+
+    /// Waits (without blocking anything) for the saved undo history and takes
+    /// it in, under this session's entries.
+    fn restore_history(cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            loop {
+                let (rows, wait) = crate::undo_store::take_loaded();
+                if let Some(rows) = rows {
+                    let _ = this.update(cx, |ops, cx| {
+                        let older: Vec<Entry> =
+                            rows.into_iter().filter_map(Entry::from_row).collect();
+                        ops.history.prepend_undo(older);
+                        ops.restored = true;
+                        ops.publish_history();
+                        cx.notify();
+                    });
+                    return;
+                }
+                if !wait {
+                    return;
+                }
+                cx.background_executor()
+                    .timer(Duration::from_millis(100))
+                    .await;
+            }
+        })
+        .detach();
+    }
+
+    /// Hands the current history to be saved with the session.
+    fn publish_history(&self) {
+        if self.restored {
+            let rows = self
+                .history
+                .undo_entries()
+                .iter()
+                .filter_map(|e| e.row.as_deref().cloned())
+                .collect();
+            crate::undo_store::set_current(rows);
         }
     }
 
@@ -210,6 +299,7 @@ impl Ops {
             self.pending.insert(id, Pending::Undo(entry));
             self.show_if_started(id);
         }
+        self.publish_history();
         cx.notify();
     }
 
@@ -223,6 +313,7 @@ impl Ops {
             }
             None => self.say(tr!("nada para desfazer", "nothing to undo")),
         }
+        self.publish_history();
         cx.notify();
     }
 
@@ -236,6 +327,7 @@ impl Ops {
             }
             None => self.say(tr!("nada para refazer", "nothing to redo")),
         }
+        self.publish_history();
         cx.notify();
     }
 
@@ -457,6 +549,7 @@ impl Ops {
                 ));
             }
         }
+        self.publish_history();
         cx.notify();
     }
 }

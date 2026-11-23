@@ -82,6 +82,17 @@ pub struct TabState {
     pub widths: Option<[f32; 3]>,
 }
 
+/// An operation that can be undone, saved for the next session (T6.6):
+/// what the history panel says, when, and both jobs (`Job::encode`).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct UndoRow {
+    pub label: String,
+    /// Unix seconds.
+    pub at: i64,
+    pub forward: Vec<u8>,
+    pub backward: Vec<u8>,
+}
+
 /// A named set of tabs (T6.13): the folders and which one is active.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct WorkspaceState {
@@ -109,6 +120,9 @@ pub struct Session {
     pub visits: Option<Vec<fx_core::frecency::Visit>>,
     /// Workspaces (T6.13); `None` while they are still loading.
     pub workspaces: Option<Vec<WorkspaceState>>,
+    /// Undo history (T6.6), oldest first; `None` until this session's history
+    /// took in the saved one.
+    pub undo: Option<Vec<UndoRow>>,
 }
 
 /// `%APPDATA%\fx` or `%LOCALAPPDATA%\fx`; `FX_DATA_DIR` replaces both (tests).
@@ -177,6 +191,10 @@ const SCHEMA: &str = "
     -- T6.5: how often and how recently each folder was opened.
     CREATE TABLE IF NOT EXISTS visits (
         path TEXT PRIMARY KEY, rank REAL NOT NULL, last INTEGER NOT NULL);
+    -- T6.6: the undo history, oldest first.
+    CREATE TABLE IF NOT EXISTS undo (
+        seq INTEGER NOT NULL, at INTEGER NOT NULL, label TEXT NOT NULL,
+        forward BLOB NOT NULL, backward BLOB NOT NULL);
     -- T6.13: named sets of tabs, one row per tab.
     CREATE TABLE IF NOT EXISTS workspaces (
         name TEXT NOT NULL, pos INTEGER NOT NULL, path TEXT NOT NULL, active INTEGER NOT NULL);
@@ -270,6 +288,15 @@ impl Db {
                 [],
             )?;
         }
+        if let Some(rows) = &s.undo {
+            tx.execute("DELETE FROM undo", [])?;
+            for (k, r) in rows.iter().enumerate() {
+                tx.execute(
+                    "INSERT INTO undo (seq, at, label, forward, backward) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![k as i64, r.at, r.label, r.forward, r.backward],
+                )?;
+            }
+        }
         if let Some(spaces) = &s.workspaces {
             tx.execute("DELETE FROM workspaces", [])?;
             for ws in spaces {
@@ -297,6 +324,22 @@ impl Db {
             }
         }
         tx.commit()
+    }
+
+    /// The saved undo history (T6.6), oldest first.
+    pub fn load_undo(&self) -> rusqlite::Result<Vec<UndoRow>> {
+        let mut q = self
+            .conn
+            .prepare("SELECT label, at, forward, backward FROM undo ORDER BY seq")?;
+        let rows = q.query_map([], |r| {
+            Ok(UndoRow {
+                label: r.get(0)?,
+                at: r.get(1)?,
+                forward: r.get(2)?,
+                backward: r.get(3)?,
+            })
+        })?;
+        rows.collect()
     }
 
     /// The workspaces (T6.13), by name.
@@ -455,6 +498,7 @@ impl Db {
             settings: Settings::default(),
             visits: None,
             workspaces: None,
+            undo: None,
         })
     }
 
@@ -528,6 +572,25 @@ mod tests {
     }
 
     #[test]
+    fn undo_rows_round_trip_in_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut db = Db::open(&dir.path().join("state.db")).unwrap();
+        let row = |k: u8| UndoRow {
+            label: format!("op {k}"),
+            at: i64::from(k),
+            forward: vec![k, 1],
+            backward: vec![k, 2],
+        };
+        let mut s = session(1);
+        s.undo = Some(vec![row(2), row(1)]);
+        db.save(&s).unwrap();
+        assert_eq!(db.load_undo().unwrap(), vec![row(2), row(1)]);
+        s.undo = None;
+        db.save(&s).unwrap();
+        assert_eq!(db.load_undo().unwrap().len(), 2, "kept until merged");
+    }
+
+    #[test]
     fn workspaces_round_trip_in_tab_order() {
         let dir = tempfile::tempdir().unwrap();
         let mut db = Db::open(&dir.path().join("state.db")).unwrap();
@@ -581,6 +644,7 @@ mod tests {
             settings: Settings::default(),
             visits: None,
             workspaces: None,
+            undo: None,
         }
     }
 

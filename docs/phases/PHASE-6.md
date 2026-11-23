@@ -40,7 +40,7 @@ Acha arquivos repetidos no disco todo: candidatos pelo tamanho (índice), depois
 A paleta (Ctrl+K) ordena pastas pela frequência e recência reais de uso (como o zoxide): "proj fx" leva à pasta certa. **Base:** paleta e histórico existem. **Concorrentes:** o Explorador só tem "recentes".
 
 ### T6.6 — Desfazer entre sessões
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: o histórico de desfazer (até 100 operações) é gravado numa tabela `undo` do `state.db` com os trabalhos codificados sem perda (`fx-ops/src/codec.rs`) e volta na abertura seguinte por baixo do histórico novo; o desfazer continua pelo motor, que nunca sobrescreve; o painel mostra a data das operações de outros dias; operações gigantes (> 512 KiB codificadas) ficam só na sessão (8 testes novos).
 
 O histórico de operações sobrevive ao fechar o fx ("desfazer a limpeza de ontem"), com as mesmas garantias de nunca sobrescrever. **Base:** histórico e diário do `fx-ops`. **Concorrentes:** Explorador e Files perdem o desfazer ao fechar.
 
