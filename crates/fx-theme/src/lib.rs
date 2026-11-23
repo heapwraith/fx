@@ -90,7 +90,7 @@ pub const ICON_CHEVRON_LEFT: &str = "\u{E76B}";
 /// Disk map blocks (T6.1), 35% over the layer so the text stays readable in
 /// both themes: folders, images, video, audio, documents, archives, other.
 pub const MAP_COLORS: [Color; 7] = [
-    0x0B7A7559, 0x3B78FF59, 0xB4009E59, 0xC19C0059, 0x13A10E59, 0xE7485659, 0x76767659,
+    0x0A6C8A59, 0x3B78FF59, 0xB4009E59, 0xC19C0059, 0x13A10E59, 0xE7485659, 0x76767659,
 ];
 pub const ICON_ADD: &str = "\u{E710}";
 pub const ICON_CLOSE: &str = "\u{E711}";
@@ -175,11 +175,11 @@ impl Theme {
         layer: 0xFFFFFF80,
         text: 0x1A1A1AFF,
         text_secondary: 0x5C5C5CFF,
-        // fx's own accent (teal), not Windows' blue: selection, progress,
+        // fx's own accent (cyan, the icon's path), not Windows' blue: selection, progress,
         // primary buttons and drive bars carry the app's identity.
-        accent: 0x0B7A75FF,
+        accent: 0x0A6C8AFF,
         hover: 0x0000000A,
-        selected: 0x0B7A751F,
+        selected: 0x0A6C8A1F,
         divider: 0x00000014,
         focus: 0x1A1A1AFF,
         thumb: 0x0000005C,
@@ -197,9 +197,9 @@ impl Theme {
         layer: 0x3A3A3A4D,
         text: 0xFFFFFFFF,
         text_secondary: 0xC8C8C8FF,
-        accent: 0x3DD6C6FF,
+        accent: 0x4CD7F0FF,
         hover: 0xFFFFFF0F,
-        selected: 0x3DD6C626,
+        selected: 0x4CD7F026,
         divider: 0xFFFFFF14,
         focus: 0xFFFFFFFF,
         thumb: 0xFFFFFF5C,

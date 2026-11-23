@@ -470,9 +470,7 @@ impl TabsView {
 
     /// The system theme changed: every tab follows. Returns whether Mica shows.
     pub fn set_system_mode(&mut self, system: Mode, cx: &mut Context<Self>) -> bool {
-        if !self.look.forced_mode {
-            self.look.theme = Theme::current(system);
-        }
+        self.look.theme = Theme::current(crate::prefs::theme().mode(system));
         self.look.mica = self.look.mica_supported
             && self.look.theme.mode == system
             && !self.look.theme.high_contrast;
@@ -899,6 +897,21 @@ impl TabsView {
 
 impl Render for TabsView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // A theme picked in Settings (in any window) lands here, with Mica on
+        // only when the picked mode matches the Windows one.
+        let system = Mode::from_appearance(window.appearance());
+        if !self.look.theme.high_contrast
+            && self.look.theme.mode != crate::prefs::theme().mode(system)
+        {
+            let mica = self.set_system_mode(system, cx);
+            if self.look.mica_supported {
+                window.set_background_appearance(if mica {
+                    gpui::WindowBackgroundAppearance::MicaBackdrop
+                } else {
+                    gpui::WindowBackgroundAppearance::Opaque
+                });
+            }
+        }
         let t = self.look.theme;
         let wide = f32::from(window.viewport_size().width) >= SIDEBAR_MIN_WINDOW;
         // Read by the Quick Look of the tabs drawn next (T5.6).

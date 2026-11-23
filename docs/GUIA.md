@@ -61,6 +61,8 @@ Cópias e movimentos vão para uma fila com progresso real; conflitos de nome pe
 | Ctrl+Shift+3 | vista em colunas |
 | Alt+Shift+P | painel de detalhes (propriedades do arquivo) |
 
+O fx abre no tema escuro; em Configurações › Aparência dá para escolher o claro ou seguir o Windows.
+
 Pela paleta: alternar grade e lista, ordenar, agrupar por tipo, data ou tamanho, e as colunas de dimensões, duração e data da foto.
 
 ## Ferramentas

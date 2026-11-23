@@ -26,7 +26,8 @@ fn build(
     window: &mut Window,
     cx: &mut App,
 ) -> RenderablePromptHandle {
-    let theme = Theme::current(Mode::from_appearance(window.appearance()));
+    let theme =
+        Theme::current(crate::prefs::theme().mode(Mode::from_appearance(window.appearance())));
     let labels: Vec<String> = actions.iter().map(|a| a.label().to_string()).collect();
     let a11y = A11yHandle::of_window(window.window_handle().window_id());
     let view = cx.new(|cx| FxPrompt {

@@ -75,6 +75,7 @@ pub(super) enum Act {
     ConfirmRecycle,
     RestoreSession,
     Density(Density),
+    Theme(crate::prefs::ThemePick),
     Hidden,
     Sidebar,
     AutoUpdate,
@@ -147,6 +148,10 @@ impl TabsView {
                 crate::prefs::RESTORE_SESSION.switch();
             }
             Act::Density(d) => self.set_density(d, cx),
+            Act::Theme(pick) => {
+                crate::prefs::choose_theme(pick);
+                cx.refresh_windows();
+            }
             Act::Hidden => self.toggle_hidden(cx),
             Act::Sidebar => self.sidebar_open = !self.sidebar_open,
             Act::AutoUpdate => {
@@ -325,10 +330,30 @@ impl TabsView {
                 Row {
                     title: tr!("Tema", "Theme"),
                     detail: tr!(
-                        "Segue o tema claro ou escuro do Windows, e o alto contraste.",
-                        "Follows the Windows light or dark theme, and high contrast."
+                        "O alto contraste do Windows sempre tem prioridade.",
+                        "Windows high contrast always comes first."
                     ),
-                    control: Control::None,
+                    control: {
+                        use crate::prefs::ThemePick;
+                        let pick = crate::prefs::theme();
+                        Control::Segments(vec![
+                            (
+                                tr!("Escuro", "Dark"),
+                                pick == ThemePick::Dark,
+                                Act::Theme(ThemePick::Dark),
+                            ),
+                            (
+                                tr!("Claro", "Light"),
+                                pick == ThemePick::Light,
+                                Act::Theme(ThemePick::Light),
+                            ),
+                            (
+                                tr!("Seguir o Windows", "Follow Windows"),
+                                pick == ThemePick::System,
+                                Act::Theme(ThemePick::System),
+                            ),
+                        ])
+                    },
                 },
             ],
             Section::Updates => {

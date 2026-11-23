@@ -10,7 +10,7 @@ O fx tem que parecer **nativo do Windows 11** e ser **mais rápido e mais calmo 
 ## 1. Princípios (em ordem de prioridade)
 
 1. **Velocidade é a estética.** Nada aparece depois do quadro em que a tecla chegou (P4 ≤ 16 ms). Estado de carregamento só se a espera passa de ~150 ms; antes disso, mostrar o que já existe. Animação ≤ 150 ms e nunca bloqueia a próxima tecla.
-2. **O conteúdo manda (Apple: deference).** Arquivos são o protagonista; o cromo (barras, bordas, rótulos) é cinza, fino e some. Uma cor de destaque só: o teal do fx.
+2. **O conteúdo manda (Apple: deference).** Arquivos são o protagonista; o cromo (barras, bordas, rótulos) é cinza, fino e some. Uma cor de destaque só: o ciano do fx (o caminho do ícone).
 3. **Clareza antes de densidade (Apple: clarity).** Cada tela responde "onde estou, o que está selecionado, o que posso fazer" sem ler um parágrafo. Hierarquia por peso e cor, não por tamanho de fonte variado.
 4. **Teclado primeiro (Linear/Raycast).** Toda ação tem atalho, todo atalho aparece na paleta (`commands.rs`) e em dica. O mouse é um caminho igual, não o único.
 5. **Profundidade com propósito (Apple: depth).** Só três planos: base (Mica), camada (lista, painéis) e sobreposição (menus, Quick Look, paleta), cada um com sombra e borda próprias. Nada de sombra decorativa.
@@ -25,7 +25,7 @@ Nunca escrever cor, tamanho ou espaçamento solto no código: usar o token ou cr
 | `base` | `F3F3F3` | `202020` | fundo da janela, por trás do Mica |
 | `layer` | branco 50% | `3A3A3A` 30% | lista, painéis, barra de caminho |
 | `text` / `text_secondary` | — / `5C5C5C` | — / `C8C8C8` | primário / rótulos, status, detalhes |
-| `accent` | `0B7A75` | `3DD6C6` | foco, indicador do cursor, ícone ativo; nunca fundo grande |
+| `accent` | `0A6C8A` | `4CD7F0` | foco, indicador do cursor, ícone ativo; nunca fundo grande (ciano, D-074) |
 | `selected` | accent 12% | accent 15% | linha ou item selecionado |
 | `hover` | preto 4% | branco 6% | hover |
 | `divider` | preto 8% | branco 8% | bordas de 1 px |

@@ -104,8 +104,6 @@ const MAX_OPEN: usize = 32;
 #[derive(Debug, Clone, Copy)]
 pub struct Look {
     pub theme: Theme,
-    /// Set when `FX_THEME` forces a theme: system changes are then ignored.
-    pub forced_mode: bool,
     pub density: Density,
     pub font: &'static str,
     pub icon_font: &'static str,
@@ -778,9 +776,7 @@ impl FolderView {
     /// Returns whether Mica should show: the backdrop is tinted by the *system*
     /// theme, so it only matches when the fx theme is the same.
     pub fn set_system_mode(&mut self, system: Mode) -> bool {
-        if !self.look.forced_mode {
-            self.look.theme = Theme::current(system);
-        }
+        self.look.theme = Theme::current(crate::prefs::theme().mode(system));
         self.look.mica = self.look.mica_supported
             && self.look.theme.mode == system
             && !self.look.theme.high_contrast;

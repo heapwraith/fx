@@ -83,7 +83,6 @@ struct Startup {
     mica_supported: bool,
     font: &'static str,
     icon_font: &'static str,
-    forced: Option<Mode>,
     density: Density,
     sidebar: bool,
     show_hidden: bool,
@@ -169,6 +168,12 @@ fn main() {
     prefs::CRASH_REPORTS.set(settings.relatorio_falhas);
     prefs::CONFIRM_RECYCLE.set(settings.confirmar_lixeira);
     prefs::RESTORE_SESSION.set(settings.restaurar_sessao);
+    // Dark unless the user picked otherwise; FX_THEME (tests) wins.
+    prefs::set_theme(match Mode::from_env() {
+        Some(Mode::Light) => prefs::ThemePick::Light,
+        Some(Mode::Dark) => prefs::ThemePick::Dark,
+        None => prefs::ThemePick::from_setting(&settings.tema),
+    });
     // Benchmarks and test runs never ask the network.
     prefs::UPDATES.set(persist && settings.verificar_atualizacoes);
     // A report left by the last run (T3.10): offered in the status bar.
@@ -201,7 +206,6 @@ fn main() {
             mica_supported,
             font: theme::pick_font(&fonts),
             icon_font: theme::pick_icon_font(&fonts),
-            forced: Mode::from_env(),
             density: Density::from_env().unwrap_or(match settings.densidade.as_str() {
                 "compacta" => Density::Compact,
                 "confortável" => Density::Comfortable,
@@ -339,7 +343,6 @@ fn open_folder_window(
         mica_supported,
         font,
         icon_font,
-        forced,
         density,
         sidebar,
         show_hidden,
@@ -378,7 +381,7 @@ fn open_folder_window(
                 t.borrow_mut().mark("window_created");
             }
             let system = Mode::from_appearance(window.appearance());
-            let mode = forced.unwrap_or(system);
+            let mode = prefs::theme().mode(system);
             let theme = Theme::current(mode);
             let mica = mica_supported && mode == system && !theme.high_contrast;
             if mica_supported && !mica {
@@ -386,7 +389,6 @@ fn open_folder_window(
             }
             let look = Look {
                 theme,
-                forced_mode: forced.is_some(),
                 density,
                 font,
                 icon_font,

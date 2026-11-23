@@ -41,6 +41,8 @@ pub struct Settings {
     pub guia_visto: bool,
     /// Ask before sending items to the Recycle Bin.
     pub confirmar_lixeira: bool,
+    /// "escuro" (default), "claro" or "sistema" (follow Windows).
+    pub tema: String,
 }
 
 /// The part of the settings a window changes (density, sidebar, hidden files).
@@ -63,6 +65,7 @@ impl Default for Settings {
             verificar_atualizacoes: true,
             guia_visto: false,
             confirmar_lixeira: true,
+            tema: "escuro".into(),
         }
     }
 }
@@ -788,6 +791,7 @@ mod tests {
             verificar_atualizacoes: false,
             guia_visto: true,
             confirmar_lixeira: false,
+            tema: "claro".into(),
         };
         save_settings(&path, &s).unwrap();
         assert_eq!(load_settings(&path), s);

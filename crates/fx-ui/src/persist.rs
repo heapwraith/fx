@@ -143,6 +143,9 @@ impl Persist {
         if let Some(on) = crate::prefs::CRASH_REPORTS.chosen() {
             settings.relatorio_falhas = on;
         }
+        if let Some(pick) = crate::prefs::theme_chosen() {
+            settings.tema = pick.setting().to_owned();
+        }
         if let Some(lang) = crate::i18n::chosen() {
             settings.idioma = lang.to_owned();
         }
