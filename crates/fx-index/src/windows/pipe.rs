@@ -45,6 +45,9 @@ const BUFFER: u32 = 64 * 1024;
 
 /// Most clients served at once.
 const MAX_CLIENTS: u32 = 8;
+/// A client that has not finished its exchange by then is hung up on, so a
+/// stalled one never keeps a thread and a pipe instance (T5.6).
+const CLIENT_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// What the client may do: `FILE_GENERIC_READ | FILE_WRITE_DATA` (no
 /// `FILE_APPEND_DATA`, which on a pipe means "create a server instance").
@@ -109,10 +112,16 @@ impl Drop for Pipe {
 /// Serves requests until `stop` is set (then call [`wake`] to unblock the
 /// wait for the next client). `handler` answers each request.
 pub fn serve(sddl: &str, stop: &AtomicBool, handler: Handler) -> io::Result<()> {
-    serve_on(PIPE_NAME, sddl, stop, handler)
+    serve_on(PIPE_NAME, sddl, stop, handler, CLIENT_TIMEOUT)
 }
 
-fn serve_on(name: &str, sddl: &str, stop: &AtomicBool, handler: Handler) -> io::Result<()> {
+fn serve_on(
+    name: &str,
+    sddl: &str,
+    stop: &AtomicBool,
+    handler: Handler,
+    timeout: Duration,
+) -> io::Result<()> {
     let descriptor = Descriptor::from_sddl(sddl)?;
     let attributes = SECURITY_ATTRIBUTES {
         nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
@@ -147,7 +156,7 @@ fn serve_on(name: &str, sddl: &str, stop: &AtomicBool, handler: Handler) -> io::
         // that client sees the pipe close and can ask again.
         let _ = std::thread::Builder::new()
             .name("fx-indexd-client".into())
-            .spawn(move || serve_client(&pipe, &*handler));
+            .spawn(move || serve_client(&pipe, &*handler, timeout));
     }
     Ok(())
 }
@@ -177,16 +186,62 @@ fn create_instance(name: &str, attributes: &SECURITY_ATTRIBUTES, first: bool) ->
     Ok(Pipe(handle))
 }
 
-/// One client on its own thread: read the request, answer, hang up.
-fn serve_client(pipe: &Pipe, handler: &(dyn Fn(Request) -> Response + Send + Sync)) {
+/// One client on its own thread: read the request, answer, hang up. A
+/// watchdog cancels the thread's blocked read or write after `timeout`
+/// (`CancelSynchronousIo`; a disconnect from another thread would wait for
+/// that same blocked call), again every 100 ms until the exchange ends.
+fn serve_client(
+    pipe: &Pipe,
+    handler: &(dyn Fn(Request) -> Response + Send + Sync),
+    timeout: Duration,
+) {
+    use std::sync::atomic::AtomicBool;
+    use windows::Win32::System::IO::CancelSynchronousIo;
+    use windows::Win32::System::Threading::{GetCurrentThreadId, OpenThread, THREAD_TERMINATE};
+    /// This thread's handle, for the watchdog (closed after it is joined).
+    struct Thread(HANDLE);
+    // SAFETY: a thread handle may be used from any thread.
+    unsafe impl Send for Thread {}
+    // SAFETY: opens this very thread with the right CancelSynchronousIo needs.
+    let thread = unsafe { OpenThread(THREAD_TERMINATE, false, GetCurrentThreadId()) }.ok();
+    let timed_out = Arc::new(AtomicBool::new(false));
+    let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+    let watchdog = thread.map(|h| {
+        let (thread, timed_out) = (Thread(h), timed_out.clone());
+        std::thread::Builder::new()
+            .name("fx-indexd-watchdog".into())
+            .spawn(move || {
+                let thread = thread;
+                let mut wait = timeout;
+                while let Err(std::sync::mpsc::RecvTimeoutError::Timeout) =
+                    done_rx.recv_timeout(wait)
+                {
+                    timed_out.store(true, Ordering::SeqCst);
+                    // SAFETY: the handle stays open until this thread is
+                    // joined; cancelling when nothing is pending is harmless.
+                    let _ = unsafe { CancelSynchronousIo(thread.0) };
+                    wait = Duration::from_millis(100);
+                }
+                thread
+            })
+    });
     // Reads and writes through std, without closing the handle.
     // SAFETY: the handle stays valid while `stream` lives; ManuallyDrop keeps
     // File from closing it.
     let mut stream = ManuallyDrop::new(unsafe { File::from_raw_handle(pipe.0.0) });
     let _ = answer(&mut *stream, handler);
-    // SAFETY: valid handle; flush lets the client read everything before the
-    // disconnect.
-    let _ = unsafe { FlushFileBuffers(pipe.0) };
+    if !timed_out.load(Ordering::SeqCst) {
+        // SAFETY: valid handle; flush lets the client read everything before
+        // the disconnect (a stalled client would hold it: skipped then).
+        let _ = unsafe { FlushFileBuffers(pipe.0) };
+    }
+    let _ = done_tx.send(());
+    if let Some(Ok(w)) = watchdog
+        && let Ok(thread) = w.join()
+    {
+        // SAFETY: opened above, no longer used.
+        let _ = unsafe { CloseHandle(thread.0) };
+    }
     // SAFETY: valid handle; ends this client's connection.
     let _ = unsafe { DisconnectNamedPipe(pipe.0) };
 }
@@ -266,7 +321,13 @@ mod tests {
                         change: None,
                     }],
                 });
-                serve_on(&name, &pipe_sddl(&sid), &stop, handler)
+                serve_on(
+                    &name,
+                    &pipe_sddl(&sid),
+                    &stop,
+                    handler,
+                    Duration::from_millis(300),
+                )
             })
         };
         let ask = |q: &str| {
@@ -294,14 +355,23 @@ mod tests {
         }
         // A second server on the same name is refused (no squatting).
         // A client that connects and never writes does not block the others.
-        let _stalled = open(&name).unwrap();
+        let mut stalled = open(&name).unwrap();
         let r = ask("depois");
         assert_eq!(String::from_utf16_lossy(&r.hits[0].path), r"C:\depois");
+        // ...and is hung up on after the timeout (here 300 ms).
+        let started = std::time::Instant::now();
+        let mut byte = [0u8; 1];
+        assert!(!matches!(stalled.read(&mut byte), Ok(1)), "nothing to read");
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "hung up in time"
+        );
         let again = serve_on(
             &name,
             &pipe_sddl("S-1-5-18"),
             &AtomicBool::new(true),
             Arc::new(|_: Request| -> Response { unreachable!() }),
+            CLIENT_TIMEOUT,
         );
         assert!(again.is_err());
         stop.store(true, Ordering::SeqCst);

@@ -41,6 +41,7 @@ Seguir a pasta da aba (`cd`) quando ela muda, cmd além do PowerShell, rolar o h
 
 ## T5.6 — Robustez
 - [ ] Concluída em: ____ · Resumo:
+- Parcial em 2026-11-23: o `fx-indexd` desliga um cliente que não termina a conversa em 15 s (um vigia por conexão cancela a leitura ou escrita presa com `CancelSynchronousIo`; desconectar de outra thread esperaria a mesma chamada presa); o teste do pipe confere que um cliente parado é desligado e não atrapalha os outros.
 
 - `fx-indexd`: tempo limite para conexões paradas.
 - Janela de prévia do Windows: atraso de até 250 ms ao mover a janela e sobreposição a menus.
