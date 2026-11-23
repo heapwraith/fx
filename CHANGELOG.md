@@ -55,6 +55,7 @@ Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualiz
 - Esperas da interface não ocupam mais o pool de threads do Windows; a atualização roda numa thread própria.
 
 ### Corrigido
+- "Compactar em ZIP" criava `nome (2).zip` mesmo sem existir `nome.zip`.
 - **Revisão de código completa (D-066):**
   - Enter segurado não confirma mais um diálogo (a paleta podia confirmar "Excluir permanentemente" sem ser vista); diálogos e sobreposições bloqueiam o mouse; as Configurações não deixam mais Delete chegar à lista escondida; excluir pelo menu de contexto também pede confirmação; na vista em colunas, Delete age no item visível.
   - O atualizador reconfere o instalador (hash e editor da assinatura) na hora de aplicar e nunca roda elevado; a assinatura passa a exigir o mesmo editor e checar revogação.

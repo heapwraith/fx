@@ -304,7 +304,13 @@ impl FolderView {
             .name("fx-zip".into())
             .spawn(move || {
                 let name = zip_name(&items, &folder);
-                let target = fx_core::naming::keep_both_name(&folder, &name, |p| p.exists());
+                // The plain name when free, else "name (2).zip" and so on.
+                let plain = folder.join(&name);
+                let target = if plain.exists() {
+                    fx_core::naming::keep_both_name(&folder, &name, |p| p.exists())
+                } else {
+                    plain
+                };
                 let progress_tx = tx.clone();
                 let offset = |utc: i64| {
                     fx_shell::utc_offset_at(

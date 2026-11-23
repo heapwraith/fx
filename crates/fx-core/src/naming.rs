@@ -3,7 +3,8 @@
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
-/// Free name in `dir` for `name`: `a.txt`, `a (2).txt`, `a (3).txt`... Built
+/// Free numbered name in `dir` for `name`, which is taken: `a (2).txt`,
+/// `a (3).txt`... (callers try `name` itself first). Built
 /// without converting the name with loss: one that is not valid Unicode gets
 /// the number at the end (`name (2)`), keeping every unit it had.
 pub fn keep_both_name(
