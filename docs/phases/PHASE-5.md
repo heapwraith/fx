@@ -11,6 +11,7 @@ Toda a lista de `docs/TESTES-FINAIS.md` (Narrador, Explorador, totais pelo servi
 
 ## T5.2 — Distribuição
 - [ ] Concluída em: ____ · Resumo:
+- Primeira atualização real em 2026-11-23: release `v0.3.0-beta` gerado pelo CI e publicado (pré-lançamento); o fx 0.2.0-beta instalado no PC do usuário achou a versão na checagem da abertura, baixou e conferiu o instalador pelo `SHA256SUMS.txt` ("Version 0.3.0-beta ready · applies when you close") e, ao fechar, aplicou a atualização em 1,2 s com o instalador novo (inicializador `fx-setup-boot`, D-072): `fx.exe` 0.3.0-beta+c64ca8a, entrada em Aplicativos 0.3.0-beta, nada sobrando em `%TEMP%`, pasta de atualização limpa na abertura seguinte, "Sobre o fx" mostrando a versão nova.
 
 - Assinatura pela SignPath Foundation (inscrição é do usuário; passos em `docs/SIGNING.md`).
 - Publicar a beta e depois a 1.0 no GitHub (o atualizador só enxerga releases publicados, não rascunhos).
