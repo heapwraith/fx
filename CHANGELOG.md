@@ -36,6 +36,7 @@ Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualiz
 - **Linha do tempo** (Ctrl+Shift+L): o que foi criado, alterado, renomeado ou apagado nos discos nos últimos 10 minutos, na última hora ou no dia (com a busca no disco inteiro ativada).
 - **Buscas vivas:** Ctrl+S no painel de busca salva a busca; ela fica na barra lateral e na paleta e, no disco inteiro, se atualiza sozinha enquanto aberta.
 - **Arquivos repetidos** (Ctrl+Shift+D): acha cópias idênticas na pasta e subpastas, comparando o conteúdo de verdade, e manda as marcadas para a Lixeira com desfazer.
+- **Painel de detalhes** (Alt+Shift+P): dimensões, duração, data da foto, câmera, autor e outros dados do item, como o Windows os mostra.
 - **Barra lateral pelo teclado (F6)** e dicas com a ação e o atalho nos botões que são só um ícone.
 - Paleta centralizada e com um ícone por comando; guia "Como usar" com botão de fechar, rodapé sempre visível e teclas separadas; a busca mostra o que digitar antes da primeira letra.
 - Registro de avisos e erros em `%LOCALAPPDATA%\fx\logs\fx.log` (local, até 1 MB), para diagnosticar problemas.

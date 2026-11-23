@@ -16,6 +16,7 @@ mod menu;
 pub mod net;
 mod places;
 pub mod preview_host;
+mod properties;
 mod registry;
 mod sheets;
 mod thumbs;
@@ -32,6 +33,7 @@ pub use keys::shifted_digit;
 pub use launch::launch;
 pub use menu::show_context_menu;
 pub use places::{drives, known_folder, known_folders, watch_drives};
+pub use properties::item_properties;
 pub use thumbs::{preview_image, start_thumb_service};
 pub use time::utc_offset_at;
 

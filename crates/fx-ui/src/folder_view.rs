@@ -19,6 +19,7 @@
 mod actions;
 mod batch_rename;
 mod columns;
+mod details;
 mod dir_sizes;
 mod disk_map;
 mod dnd;
@@ -227,6 +228,8 @@ pub struct FolderView {
     timeline: Option<timeline::Timeline>,
     /// Repeated files here and below (Ctrl+Shift+D, T6.4).
     duplicates: Option<duplicates::Duplicates>,
+    /// The details panel (Alt+Shift+P, T6.9).
+    details: Option<details::Details>,
     /// The embedded terminal (Ctrl+J, T3.5).
     terminal: Option<terminal::Terminal>,
     /// Width of the breadcrumb area in the last frame (T2.3), and whether
@@ -417,6 +420,7 @@ impl FolderView {
             disk_map: None,
             timeline: None,
             duplicates: None,
+            details: None,
         };
         crate::visits::visit(&view.path);
         view.start_loading(cx);
@@ -1441,6 +1445,7 @@ impl Render for FolderView {
         if let Some(handle) = &self.a11y {
             handle.set_overlay(crate::a11y::Layer::Tab, self.tab_overlay());
         }
+        self.refresh_details(cx);
         self.trace_frame(window);
         self.sync_quick_look(window, cx);
         self.sync_terminal_size();
@@ -1513,82 +1518,106 @@ impl Render for FolderView {
             )
             .child(self.render_path_bar(window, cx))
             .child(
+                // The list, and the details panel beside it (T6.9), which
+                // narrows the list instead of covering it.
                 div()
                     .flex_1()
                     .min_h_0()
                     .flex()
-                    .flex_col()
-                    .bg(rgba(t.layer))
-                    .border_t_1()
-                    .border_color(rgba(t.divider))
                     .child(
                         div()
-                            .h(px(row_h))
+                            .flex_1()
+                            .min_w_0()
+                            .min_h_0()
                             .flex()
-                            .items_center()
-                            // Rows: 4 px outside, 1 px border, 12 px inside.
-                            .px(px(space(4) + 1.0))
-                            .gap(px(space(3)))
-                            .border_b_1()
+                            .flex_col()
+                            .bg(rgba(t.layer))
+                            .border_t_1()
                             .border_color(rgba(t.divider))
                             .child(
-                                self.header_cell(tr!("Nome", "Name"), SortKey::Name, None, cx)
-                                    .flex_1(),
+                                div()
+                                    .h(px(row_h))
+                                    .flex()
+                                    .items_center()
+                                    // Rows: 4 px outside, 1 px border, 12 px inside.
+                                    .px(px(space(4) + 1.0))
+                                    .gap(px(space(3)))
+                                    .border_b_1()
+                                    .border_color(rgba(t.divider))
+                                    .child(
+                                        self.header_cell(
+                                            tr!("Nome", "Name"),
+                                            SortKey::Name,
+                                            None,
+                                            cx,
+                                        )
+                                        .flex_1(),
+                                    )
+                                    .when(!grid_view && columns.kind, |d| {
+                                        d.child(self.header_cell(
+                                            tr!("Tipo", "Type"),
+                                            SortKey::Type,
+                                            Some(Col::Kind),
+                                            cx,
+                                        ))
+                                    })
+                                    .when(!grid_view && columns.size, |d| {
+                                        d.child(self.header_cell(
+                                            tr!("Tamanho", "Size"),
+                                            SortKey::Size,
+                                            Some(Col::Size),
+                                            cx,
+                                        ))
+                                    })
+                                    .when(!grid_view && columns.date, |d| {
+                                        d.child(self.header_cell(
+                                            tr!("Modificado em", "Date modified"),
+                                            SortKey::Modified,
+                                            Some(Col::Date),
+                                            cx,
+                                        ))
+                                    })
+                                    .children(self.resize_tracker(cx))
+                                    // Room for the scrollbar, so columns line up with the rows
+                                    // (the negative margin cancels the gap before it).
+                                    .child(
+                                        div().w(px(SCROLLBAR_WIDTH)).ml(px(-space(3))).flex_none(),
+                                    ),
                             )
-                            .when(!grid_view && columns.kind, |d| {
-                                d.child(self.header_cell(
-                                    tr!("Tipo", "Type"),
-                                    SortKey::Type,
-                                    Some(Col::Kind),
-                                    cx,
-                                ))
-                            })
-                            .when(!grid_view && columns.size, |d| {
-                                d.child(self.header_cell(
-                                    tr!("Tamanho", "Size"),
-                                    SortKey::Size,
-                                    Some(Col::Size),
-                                    cx,
-                                ))
-                            })
-                            .when(!grid_view && columns.date, |d| {
-                                d.child(self.header_cell(
-                                    tr!("Modificado em", "Date modified"),
-                                    SortKey::Modified,
-                                    Some(Col::Date),
-                                    cx,
-                                ))
-                            })
-                            .children(self.resize_tracker(cx))
-                            // Room for the scrollbar, so columns line up with the rows
-                            // (the negative margin cancels the gap before it).
-                            .child(div().w(px(SCROLLBAR_WIDTH)).ml(px(-space(3))).flex_none()),
-                    )
-                    .child(
-                        div()
-                            .id("list-area")
-                            .relative()
-                            .flex_1()
-                            .min_h_0()
-                            .on_mouse_move(cx.listener(|view, ev: &MouseMoveEvent, window, cx| {
-                                view.maybe_drag(ev, window, cx);
-                            }))
-                            // Right click on the empty part: the folder's own menu.
-                            .on_mouse_down(
-                                MouseButton::Right,
-                                cx.listener(|view, _: &MouseDownEvent, window, cx| {
-                                    view.open_menu(Vec::new(), window, cx);
-                                }),
-                            )
-                            .drag_over::<ExternalPaths>(move |s, _, _, _| {
-                                s.border_1().border_color(rgba(t.accent))
-                            })
-                            .on_drop(cx.listener(|view, paths: &ExternalPaths, window, cx| {
-                                let dest = view.path.clone();
-                                view.drop_into(paths.paths().to_vec(), dest, window, cx);
-                            }))
-                            .child(if grid_view {
-                                uniform_list(
+                            .child(
+                                div()
+                                    .id("list-area")
+                                    .relative()
+                                    .flex_1()
+                                    .min_h_0()
+                                    .on_mouse_move(cx.listener(
+                                        |view, ev: &MouseMoveEvent, window, cx| {
+                                            view.maybe_drag(ev, window, cx);
+                                        },
+                                    ))
+                                    // Right click on the empty part: the folder's own menu.
+                                    .on_mouse_down(
+                                        MouseButton::Right,
+                                        cx.listener(|view, _: &MouseDownEvent, window, cx| {
+                                            view.open_menu(Vec::new(), window, cx);
+                                        }),
+                                    )
+                                    .drag_over::<ExternalPaths>(move |s, _, _, _| {
+                                        s.border_1().border_color(rgba(t.accent))
+                                    })
+                                    .on_drop(cx.listener(
+                                        |view, paths: &ExternalPaths, window, cx| {
+                                            let dest = view.path.clone();
+                                            view.drop_into(
+                                                paths.paths().to_vec(),
+                                                dest,
+                                                window,
+                                                cx,
+                                            );
+                                        },
+                                    ))
+                                    .child(if grid_view {
+                                        uniform_list(
                                     "tiles",
                                     count,
                                     cx.processor(
@@ -1601,8 +1630,8 @@ impl Render for FolderView {
                                 .pr(px(SCROLLBAR_WIDTH))
                                 .track_scroll(self.scroll.clone())
                                 .into_any_element()
-                            } else {
-                                uniform_list(
+                                    } else {
+                                        uniform_list(
                                     "rows",
                                     count,
                                     cx.processor(
@@ -1615,23 +1644,25 @@ impl Render for FolderView {
                                 .pr(px(SCROLLBAR_WIDTH))
                                 .track_scroll(self.scroll.clone())
                                 .into_any_element()
-                            })
-                            .child(self.render_scrollbar(cx))
-                            .when_some(self.placeholder(), |d, text| {
-                                d.child(
-                                    div()
-                                        .absolute()
-                                        .top(px(space(10)))
-                                        .left_0()
-                                        .right_0()
-                                        .flex()
-                                        .justify_center()
-                                        .px(px(space(4)))
-                                        .text_color(rgba(t.text_secondary))
-                                        .child(text),
-                                )
-                            }),
-                    ),
+                                    })
+                                    .child(self.render_scrollbar(cx))
+                                    .when_some(self.placeholder(), |d, text| {
+                                        d.child(
+                                            div()
+                                                .absolute()
+                                                .top(px(space(10)))
+                                                .left_0()
+                                                .right_0()
+                                                .flex()
+                                                .justify_center()
+                                                .px(px(space(4)))
+                                                .text_color(rgba(t.text_secondary))
+                                                .child(text),
+                                        )
+                                    }),
+                            ),
+                    )
+                    .children(self.render_details(cx)),
             )
             .children(self.render_quick_look(cx))
             .children(self.render_search(cx))
@@ -1685,6 +1716,7 @@ impl FolderView {
             "map" => self.toggle_disk_map(cx),
             "timeline" => self.toggle_timeline(cx),
             "duplicates" => self.toggle_duplicates(cx),
+            "details" => self.toggle_details(cx),
             _ => {}
         }
     }

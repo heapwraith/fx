@@ -57,7 +57,7 @@ Entrar em ZIP, 7z e tar como numa pasta (mesma lista e busca); extrair arrastand
 Índice de conteúdo opcional e incremental pelo USN (texto e código primeiro), com a busca por tecla de sempre. O Windows Search é lento; o Everything só indexa nomes.
 
 ### T6.9 — Painel de detalhes
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: Alt+Shift+P abre, ao lado da lista (que encolhe em vez de ficar coberta), as propriedades do item do cursor pelo Property System do Windows (`fx-shell/src/windows/properties.rs`): tipo, datas, dimensões, data da foto, câmera, duração, artista, autor, páginas, versão…, nomeadas e formatadas pelo Windows; lidas numa thread só quando o item muda, nada guardado com o painel fechado (1 teste novo). As colunas de metadados e o "agrupar por" (T6.10) ficam para a próxima entrega.
 
 Lateral direita com metadados reais (dimensões, EXIF, duração, autor), lidos em segundo plano, sem custo de memória parado.
 

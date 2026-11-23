@@ -95,7 +95,8 @@ impl Command {
                 "ctrl-shift-h" => "\u{E81C}",
                 "ctrl-shift-m" => "\u{E9D9}", // Diagnostic (chart)
                 "ctrl-shift-l" => "\u{E823}", // Recent (clock)
-                "ctrl-shift-d" => "\u{E8C8}", // Copy (two pages)                 // History
+                "ctrl-shift-d" => "\u{E8C8}", // Copy (two pages)
+                "alt-shift-p" => "\u{E8A0}",  // OpenPane                 // History
                 "f1" => "\u{E897}",           // Help
                 "ctrl-j" => "\u{E756}",       // CommandPrompt
                 _ => "\u{E756}",
@@ -184,6 +185,7 @@ pub const COMMANDS: &[Command] = &[
         ),
         "ctrl-shift-d",
     ),
+    tab(("Painel de detalhes", "Details panel"), "alt-shift-p"),
     direct(
         (
             "Salvar abas como espaço de trabalho…",

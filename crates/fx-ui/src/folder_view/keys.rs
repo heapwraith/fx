@@ -47,6 +47,11 @@ impl FolderView {
         if self.timeline_key(ks, window, cx) {
             return;
         }
+        // Alt+Shift+P: the details panel (T6.9), as in Explorer.
+        if ks.key == "p" && m.alt && m.shift && !m.control {
+            self.toggle_details(cx);
+            return;
+        }
         // Ctrl+Shift+D: repeated files here and below (T6.4).
         if ks.key == "d" && m.control && m.shift && !m.alt {
             self.toggle_duplicates(cx);
