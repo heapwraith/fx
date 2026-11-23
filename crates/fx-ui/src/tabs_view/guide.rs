@@ -134,6 +134,7 @@ pub fn sections() -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
                 ),
                 ("Ctrl+1 2 3", tr!("densidade das linhas", "row density")),
                 ("Ctrl+Shift+3", tr!("vista em colunas", "column view")),
+                ("Ctrl+Shift+M", tr!("mapa do disco", "disk map")),
                 ("Ctrl+B", tr!("barra lateral", "sidebar")),
             ],
         ),

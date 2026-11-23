@@ -92,9 +92,10 @@ impl Command {
                 "ctrl-1" | "ctrl-2" | "ctrl-3" => "\u{E8FD}", // BulletedList
                 "ctrl-b" => "\u{E8A0}",                       // OpenPane
                 "ctrl-h" => "\u{E890}",                       // View
-                "ctrl-shift-h" => "\u{E81C}",                 // History
-                "f1" => "\u{E897}",                           // Help
-                "ctrl-j" => "\u{E756}",                       // CommandPrompt
+                "ctrl-shift-h" => "\u{E81C}",
+                "ctrl-shift-m" => "\u{E9D9}", // Diagnostic (chart)                 // History
+                "f1" => "\u{E897}",           // Help
+                "ctrl-j" => "\u{E756}",       // CommandPrompt
                 _ => "\u{E756}",
             },
             Action::ToggleGrid => "\u{E80A}", // ViewAll
@@ -160,6 +161,13 @@ pub const COMMANDS: &[Command] = &[
     tab(("Desfazer", "Undo"), "ctrl-z"),
     tab(("Refazer", "Redo"), "ctrl-y"),
     tab(("Selecionar tudo", "Select all"), "ctrl-a"),
+    tab(
+        (
+            "Mapa do disco (o que ocupa espaço)",
+            "Disk map (what takes space)",
+        ),
+        "ctrl-shift-m",
+    ),
     direct(
         (
             "Salvar abas como espaço de trabalho…",

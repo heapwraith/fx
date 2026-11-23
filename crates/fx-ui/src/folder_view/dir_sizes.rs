@@ -27,6 +27,16 @@ pub(super) struct DirSizes {
 }
 
 impl DirSizes {
+    /// The total of `entry` is final.
+    pub(super) fn is_known(&self, entry: u32) -> bool {
+        self.done.contains(&entry)
+    }
+
+    /// Totals are still being summed.
+    pub(super) fn running(&self) -> bool {
+        self.running
+    }
+
     pub(super) fn label(&self, entry: u32, bytes: u64) -> String {
         if self.done.contains(&entry) {
             fx_core::format::size_kb(bytes)

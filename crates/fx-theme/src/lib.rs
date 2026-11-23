@@ -86,6 +86,12 @@ pub const ICON_FORWARD: &str = "\u{E72A}";
 pub const ICON_UP: &str = "\u{E74A}";
 pub const ICON_CHEVRON: &str = "\u{E76C}";
 pub const ICON_CHEVRON_LEFT: &str = "\u{E76B}";
+
+/// Disk map blocks (T6.1), 35% over the layer so the text stays readable in
+/// both themes: folders, images, video, audio, documents, archives, other.
+pub const MAP_COLORS: [Color; 7] = [
+    0x0B7A7559, 0x3B78FF59, 0xB4009E59, 0xC19C0059, 0x13A10E59, 0xE7485659, 0x76767659,
+];
 pub const ICON_ADD: &str = "\u{E710}";
 pub const ICON_CLOSE: &str = "\u{E711}";
 pub const ICON_MENU: &str = "\u{E700}";

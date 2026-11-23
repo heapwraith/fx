@@ -15,7 +15,7 @@
 ## Grupo A — Diferenciais (ninguém tem; a base já existe no fx)
 
 ### T6.1 — Mapa do disco instantâneo
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: Ctrl+Shift+M (ou a paleta) mostra a pasta como treemap "squarified" (`fx-core/src/treemap.rs`), com os totais reais das subpastas (índice ou soma em segundo plano, com progresso real), cor por tipo; setas escolhem, Enter entra, Backspace sobe, Delete manda para a Lixeira com confirmação e desfazer; leitor de tela lê bloco, tamanho e porcentagem (4 testes novos). Sem mensagem nova no serviço: o `sizes_of` da T2.7 bastou.
 
 Treemap de qualquer pasta ou disco mostrando o que ocupa espaço, em milissegundos; clicar navega; Delete libera (com confirmação e desfazer). **Base:** o índice já sabe o tamanho de tudo (totais de pastas em 32 ms por milhão). **Concorrentes:** WizTree/TreeSize são apps separados; o Explorador não tem.
 

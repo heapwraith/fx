@@ -20,6 +20,7 @@ mod actions;
 mod batch_rename;
 mod columns;
 mod dir_sizes;
+mod disk_map;
 mod dnd;
 mod edit_ops;
 mod grid;
@@ -218,6 +219,8 @@ pub struct FolderView {
     batch_rename: Option<batch_rename::BatchRename>,
     /// The column view (Ctrl+Shift+3, T3.3).
     miller: Option<columns::Columns>,
+    /// The disk map (Ctrl+Shift+M, T6.1).
+    disk_map: Option<disk_map::DiskMap>,
     /// The embedded terminal (Ctrl+J, T3.5).
     terminal: Option<terminal::Terminal>,
     /// Width of the breadcrumb area in the last frame (T2.3), and whether
@@ -405,6 +408,7 @@ impl FolderView {
             quick_look_ticket: 0,
             stale_images: Vec::new(),
             search: None,
+            disk_map: None,
         };
         crate::visits::visit(&view.path);
         view.start_loading(cx);
@@ -1624,6 +1628,7 @@ impl Render for FolderView {
             .children(self.render_quick_look(cx))
             .children(self.render_search(cx))
             .children(self.render_columns(cx))
+            .children(self.render_disk_map(cx))
             .children(self.render_terminal(cx))
             .children(self.render_batch_rename(cx))
             .children(self.render_view_menu(cx))
@@ -1667,6 +1672,7 @@ impl FolderView {
         match what {
             "search" => self.open_search(cx),
             "columns" => self.toggle_columns(window, cx),
+            "map" => self.toggle_disk_map(cx),
             _ => {}
         }
     }
@@ -1674,6 +1680,7 @@ impl FolderView {
     /// The tab's panel with the keyboard, for the accessibility tree.
     fn tab_overlay(&self) -> Option<crate::a11y::Overlay> {
         self.batch_rename_overlay()
+            .or_else(|| self.disk_map_overlay())
             .or_else(|| self.quick_look_overlay())
             .or_else(|| self.view_menu_overlay())
             .or_else(|| self.search_overlay())

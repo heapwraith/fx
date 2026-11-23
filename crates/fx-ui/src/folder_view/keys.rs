@@ -31,6 +31,14 @@ impl FolderView {
         if self.batch_rename_key(ks, window, cx) {
             return;
         }
+        // Ctrl+Shift+M: the disk map (T6.1).
+        if ks.key == "m" && m.control && m.shift && !m.alt {
+            self.toggle_disk_map(cx);
+            return;
+        }
+        if self.disk_map_key(ks, window, cx) {
+            return;
+        }
         if self.search.is_none() && self.columns_key(ks, window, cx) {
             return;
         }

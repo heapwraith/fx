@@ -28,6 +28,7 @@ pub mod shell_arg;
 mod tabs;
 pub mod tags;
 pub mod temp_name;
+pub mod treemap;
 mod undo;
 pub mod update;
 pub mod vt;
