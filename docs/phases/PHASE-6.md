@@ -89,12 +89,12 @@ Arrastar uma aba para fora vira janela; dividir em mais de dois painéis.
 ## Grupo C — Tendências de 2026 (opcional e privado)
 
 ### T6.15 — Busca por significado
-- [ ] Concluída em: ____ · Resumo:
+- [x] Descartada em 2026-11-23 pelo usuário: exigiria o Windows App SDK (dependência nova) e só funcionaria em PCs Copilot+.
 
 "Fotos da praia de 2024", "contrato com a Ana", usando a IA local do Windows (APIs de IA dos PCs Copilot+), **sem enviar nada**; desligada por padrão e só onde o hardware permite.
 
 ### T6.16 — Ações rápidas por tipo
-- [ ] Parcial em 2026-11-22: imagens prontas — "Imagens: copiar como JPG / como PNG / cópia com metade do tamanho" na paleta, para as imagens selecionadas, pelo WIC do Windows (`fx-shell/src/windows/images.rs`), numa thread, com progresso real; o original nunca é tocado e a cópia nunca substitui nada (nome temporário, renomear sem substituir, "manter os dois") (2 testes novos). Em 2026-11-23: "Imagens: renomear pela data da foto" lê a data EXIF pelo Property System numa thread (com progresso real) e renomeia para `2024-07-15 14.30.22.jpg` pelo motor, como uma operação que o Ctrl+Z desfaz; fotos do mesmo segundo ganham " (2)", nome já existente nunca é tomado, fotos sem data ficam como estão (2 testes novos, um com JPEG e EXIF reais). Falta só juntar PDFs, que exige uma biblioteca de PDF (dependência nova: aguarda aprovação, SAFETY.md).
+- [x] Concluída em 2026-11-23 (sem juntar PDFs, descartado pelo usuário por exigir uma biblioteca de PDF nova). Parcial em 2026-11-22: imagens prontas — "Imagens: copiar como JPG / como PNG / cópia com metade do tamanho" na paleta, para as imagens selecionadas, pelo WIC do Windows (`fx-shell/src/windows/images.rs`), numa thread, com progresso real; o original nunca é tocado e a cópia nunca substitui nada (nome temporário, renomear sem substituir, "manter os dois") (2 testes novos). Em 2026-11-23: "Imagens: renomear pela data da foto" lê a data EXIF pelo Property System numa thread (com progresso real) e renomeia para `2024-07-15 14.30.22.jpg` pelo motor, como uma operação que o Ctrl+Z desfaz; fotos do mesmo segundo ganham " (2)", nome já existente nunca é tomado, fotos sem data ficam como estão (2 testes novos, um com JPEG e EXIF reais).
 
 Converter/redimensionar imagens, juntar PDFs, renomear fotos pela data EXIF, direto da seleção, pela paleta.
 
