@@ -58,6 +58,11 @@ tar = { version = "=0.4.46", default-features = false }
 sevenz-rust2 = { version = "=0.25.0", default-features = false }
 bzip2 = "=0.6.1"
 lzma-rust2 = { version = "=0.25.0", default-features = false, features = ["std", "xz"] }
+# Imagens (D-069): a mesma versão que o GPUI já compila (todos os formatos), e a data EXIF.
+image = "=0.25.10"
+kamadak-exif = "=0.6.2"
+# JPEG com SIMD (2× o codificador da `image`).
+jpeg-encoder = { version = "=0.7.1", features = ["simd"] }
 
 [workspace.dependencies.windows]
 version = "=0.62.2"

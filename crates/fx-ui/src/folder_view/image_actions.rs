@@ -31,7 +31,7 @@ fn is_image(path: &Path) -> bool {
         .unwrap_or_default();
     matches!(
         ext.as_str(),
-        "jpg" | "jpeg" | "png" | "bmp" | "gif" | "tif" | "tiff" | "heic" | "webp" | "ico" | "jfif"
+        "jpg" | "jpeg" | "png" | "bmp" | "gif" | "tif" | "tiff" | "webp" | "ico" | "jfif"
     )
 }
 
@@ -63,26 +63,28 @@ fn copy_name(src: &Path, action: ImageAction) -> (PathBuf, ImageKind) {
 /// Makes one copy: a temporary file, then a rename that never replaces.
 fn make_copy(src: &Path, action: ImageAction) -> std::io::Result<PathBuf> {
     let (target, kind) = copy_name(src, action);
-    let dir = target.parent().unwrap_or(Path::new("."));
+    let dir = target.parent().unwrap_or(Path::new(".")).to_path_buf();
+    let dir = dir.as_path();
     let temp = dir.join(fx_core::temp_name::temp_name(
         target.file_name().unwrap_or_default(),
         std::process::id(),
         0,
     ));
-    let scale = if action == ImageAction::Half {
-        0.5
-    } else {
-        1.0
-    };
-    convert_image(src, &temp, kind, scale)?;
-    let result = match fx_fs::rename_no_replace(&temp, &target) {
-        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-            let name = target.file_name().unwrap_or_default().to_os_string();
-            let other = fx_core::naming::keep_both_name(dir, &name, |p| p.exists());
-            fx_fs::rename_no_replace(&temp, &other).map(|()| other)
+    convert_image(src, &temp, kind, action == ImageAction::Half)?;
+    // Copies made in parallel may pick the same free name: try the next.
+    let name = target.file_name().unwrap_or_default().to_os_string();
+    let mut candidate = target;
+    let mut result = fx_fs::rename_no_replace(&temp, &candidate);
+    for _ in 0..8 {
+        match &result {
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                candidate = fx_core::naming::keep_both_name(dir, &name, |p| p.exists());
+                result = fx_fs::rename_no_replace(&temp, &candidate);
+            }
+            _ => break,
         }
-        r => r.map(|()| target),
-    };
+    }
+    let result = result.map(|()| candidate);
     if result.is_err() {
         let _ = std::fs::remove_file(&temp);
     }
@@ -118,19 +120,37 @@ impl FolderView {
         let _ = std::thread::Builder::new()
             .name("fx-images".into())
             .spawn(move || {
-                let mut failed = 0;
-                for (k, src) in images.iter().enumerate() {
-                    if make_copy(src, action).is_err() {
-                        failed += 1;
+                use std::sync::atomic::{AtomicUsize, Ordering};
+                // Up to 4 images at once (a 12 MP photo takes ~100 MB while
+                // it is converted).
+                let workers = std::thread::available_parallelism()
+                    .map_or(1, |n| n.get())
+                    .clamp(1, 4)
+                    .min(images.len());
+                let (next, done, failed) = (
+                    AtomicUsize::new(0),
+                    AtomicUsize::new(0),
+                    AtomicUsize::new(0),
+                );
+                std::thread::scope(|scope| {
+                    for _ in 0..workers {
+                        scope.spawn(|| {
+                            while let Some(src) = images.get(next.fetch_add(1, Ordering::Relaxed)) {
+                                let bad = usize::from(make_copy(src, action).is_err());
+                                let failed = failed.fetch_add(bad, Ordering::Relaxed) + bad;
+                                let done = done.fetch_add(1, Ordering::Relaxed) + 1;
+                                let _ = tx.unbounded_send((done, failed));
+                            }
+                        });
                     }
-                    let _ = tx.unbounded_send((k + 1, failed));
-                }
+                });
             });
         cx.spawn(async move |this, cx| {
             let mut last = (0, 0);
             while let Some(step) = rx.next().await {
-                last = step;
-                let (done, _) = step;
+                // Threads report in any order: keep the highest counts.
+                last = (last.0.max(step.0), last.1.max(step.1));
+                let (done, _) = last;
                 let _ = this.update(cx, |view, cx| {
                     if done < total {
                         view.show_notice(
@@ -206,12 +226,7 @@ impl FolderView {
             .spawn(move || {
                 let mut out = Vec::with_capacity(images.len());
                 for (k, path) in images.into_iter().enumerate() {
-                    let local = fx_shell::photo_taken(&path).ok().flatten().map(|t| {
-                        let secs = t
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .map_or(0, |d| d.as_secs() as i64);
-                        secs + fx_shell::utc_offset_at(t)
-                    });
+                    let local = fx_shell::images::photo_taken(&path).ok().flatten();
                     out.push((path, local));
                     if (k + 1) % 8 == 0 {
                         let _ = tx.unbounded_send(Step::Read(k + 1));
@@ -316,7 +331,8 @@ mod tests {
             copy_name(&src, ImageAction::Half).0,
             dir.path().join("praia (50%).jpg")
         );
-        assert!(is_image(Path::new("A.HEIC")));
+        assert!(is_image(Path::new("A.WEBP")));
+        assert!(!is_image(Path::new("A.HEIC")), "no free Rust HEIC decoder");
         assert!(!is_image(Path::new("notas.txt")));
     }
 }

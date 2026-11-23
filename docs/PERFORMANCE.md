@@ -31,11 +31,11 @@ Revisadas em 2026-11-22 (D-064). **Limite** reprova um portão; **alvo** é onde
 | P8b | Cada aba a mais | ≤ 3 MB | 1 MB |
 | P8c | Cada janela a mais | ≤ 20 MB | 12 MB |
 | P9 | Memória do índice por milhão de arquivos | ≤ 100 MB | 70 MB |
-| S1 | `fx.exe` | ≤ 12 MB | 9 MB |
+| S1 | `fx.exe` | ≤ 20 MB (D-069) | 15 MB |
 | S2 | Instalador completo | ≤ 10 MB | 7 MB |
 | S3 | `fx-indexd.exe` / `fx-preview.exe` | ≤ 1 MB / ≤ 0,5 MB | — |
 
-**Hoje reprovam** (trabalho da Fase 5, T5.7): P6 (~20 s estimados para 2 milhões), P8 (86–88 MB), S1 (14,3 MB), S2 (14,6 MB). P8b, P8c, P10, P13 e S1–S3 ainda não têm medição automática no `fx-bench`.
+**Hoje reprovam** (trabalho da Fase 5, T5.7): P6 (~20 s estimados para 2 milhões), P8 (86–88 MB), S2 (14,6 MB). P8b, P8c, P10, P13 e S1–S3 ainda não têm medição automática no `fx-bench`.
 
 ## Protocolo
 

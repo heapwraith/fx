@@ -8,7 +8,6 @@ pub mod default_manager;
 mod dragdrop;
 mod elevation;
 mod icons;
-pub mod images;
 pub mod install;
 mod instance;
 mod keys;
@@ -36,7 +35,7 @@ pub use launch::launch;
 pub use menu::show_context_menu;
 pub use places::{drives, known_folder, known_folders, watch_drives};
 pub use process::run_hidden;
-pub use properties::{item_properties, photo_taken, property_values};
+pub use properties::{item_properties, property_values};
 pub use thumbs::{preview_image, start_thumb_service};
 pub use time::utc_offset_at;
 

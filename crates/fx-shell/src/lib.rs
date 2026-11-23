@@ -6,6 +6,7 @@
 pub mod clipboard;
 pub mod contrast;
 pub mod icons;
+pub mod images;
 pub mod launch;
 pub mod menu;
 pub mod places;
@@ -19,12 +20,10 @@ mod windows;
 pub use windows::{
     A11y, DragResult, Instance, LatestTree, animations_enabled, claim_instance, clear_clipboard,
     clipboard_files, drag_files, drives, drop_keys, is_elevated, item_properties, known_folder,
-    known_folders, launch, photo_taken, preview_image, process_start_time, property_values,
-    run_hidden, set_clipboard_files, shifted_digit, show_context_menu, start_icon_service,
-    start_thumb_service, supports_mica, system_language_is_portuguese, utc_offset_at, watch_drives,
-    window_id, windows_build,
+    known_folders, launch, preview_image, process_start_time, property_values, run_hidden,
+    set_clipboard_files, shifted_digit, show_context_menu, start_icon_service, start_thumb_service,
+    supports_mica, system_language_is_portuguese, utc_offset_at, watch_drives, window_id,
+    windows_build,
 };
 #[cfg(windows)]
-pub use windows::{
-    conpty, contrast::high_contrast, default_manager, images, install, net, preview_host,
-};
+pub use windows::{conpty, contrast::high_contrast, default_manager, install, net, preview_host};
