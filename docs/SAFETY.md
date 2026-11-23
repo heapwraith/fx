@@ -9,9 +9,10 @@ Pergunte ao usuário e espere a resposta antes de:
 - **Alterar o registro do Windows** (`reg add`, `reg delete`, `Set-ItemProperty HKCU:/HKLM:`, ou código que faça isso fora de um teste com chave temporária). Isso inclui registrar o app como gerenciador padrão (só quando o usuário pedir) e instalar o fx no PC do usuário.
 - **Rodar qualquer coisa como Administrador** ou instalar serviços (`sc create`, `New-Service`).
 - **Apagar, mover ou renomear arquivos fora de**: pastas criadas por `tempfile`, `%TEMP%\fx-fixtures`, `target/` e o próprio repositório.
-- **`git push`**, criar releases, publicar crates, mexer em configurações globais do git.
-- **Adicionar uma dependência** que não esteja prevista no documento da fase.
+- Criar releases, publicar crates, `git push --force`, mexer em configurações globais do git.
 - **Mudar uma decisão** registrada em `docs/DECISIONS.md`.
+
+Liberado sem perguntar (pedido do usuário em 2026-11-23): `git push` comum para o `main` depois dos testes verdes, e adicionar ou atualizar dependências que sigam a D-069 (rodam no Windows e no Linux), com versão exata em `[workspace.dependencies]` e o motivo na `DECISIONS.md`.
 
 Nunca, nem com pedido: formatar unidades, desativar o Windows Defender, apagar pontos de restauração, tocar em `C:\Windows`, `C:\Program Files` ou nas pastas pessoais reais do usuário (Documentos, Desktop, Fotos etc.) em testes.
 

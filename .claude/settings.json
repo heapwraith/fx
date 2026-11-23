@@ -16,12 +16,12 @@
       "Bash(git diff:*)",
       "Bash(git log:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
-    ],
-    "ask": [
+      "Bash(git commit:*)",
       "Bash(cargo add:*)",
       "Bash(cargo update:*)",
-      "Bash(git push:*)",
+      "Bash(git push:*)"
+    ],
+    "ask": [
       "Bash(git reset:*)",
       "Bash(git checkout:*)",
       "Bash(rm:*)",
