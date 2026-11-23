@@ -372,7 +372,14 @@ fn progress_fraction(job: &crate::ops::JobView) -> f32 {
 /// Speed and time left use running time only (pauses excluded).
 fn progress_text(job: &crate::ops::JobView) -> String {
     if job.finished {
-        return trf!("Concluído · {}", "Done · {}", size_short(job.bytes));
+        return match (job.processed, job.skipped) {
+            (0, s) if s > 0 => trf!(
+                "Nada mudou · {s} pulado(s)",
+                "Nothing changed · {s} skipped"
+            ),
+            (_, 0) => trf!("Concluído · {}", "Done · {}", size_short(job.bytes)),
+            (_, s) => trf!("Concluído · {s} pulado(s)", "Done · {s} skipped"),
+        };
     }
     let paused = if job.paused {
         tr!("pausado · ", "paused · ")
@@ -424,6 +431,8 @@ mod progress_tests {
             ran: Duration::from_secs(ran_secs),
             running_since: None,
             finished: false,
+            skipped: 0,
+            processed: 0,
         }
     }
 
@@ -458,6 +467,14 @@ mod progress_tests {
             "an empty folder copied: full bar"
         );
         assert!(!progress_text(&empty).contains('%'));
+        // Every conflict skipped: it says so, not "Done · 27 B".
+        let mut skipped = job(27, 27, 1);
+        skipped.finished = true;
+        skipped.skipped = 1;
+        let text = progress_text(&skipped);
+        assert!(text.contains('1') && !text.contains("27"), "{text}");
+        skipped.processed = 2;
+        assert!(progress_text(&skipped).contains('1'), "done, one skipped");
     }
 
     #[test]

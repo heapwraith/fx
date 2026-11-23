@@ -234,6 +234,7 @@ impl FolderView {
         let t = self.look.theme;
         let mut list = div()
             .id("dup-list")
+            .track_scroll(&self.dup_scroll.handle)
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
@@ -317,12 +318,37 @@ impl FolderView {
                                     .text_size(px(CAPTION_SIZE))
                                     .child(if marked { "\u{E74D}" } else { "" }),
                             )
+                            // The name first, then its folder (relative to
+                            // where the search began), dimmer: the full path
+                            // repeated on every line hid what differed.
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .max_w(gpui::relative(0.6))
+                                    .truncate()
+                                    .child(SharedString::from(
+                                        f.file_name()
+                                            .map(|n| n.to_string_lossy().into_owned())
+                                            .unwrap_or_default(),
+                                    )),
+                            )
                             .child(
                                 div()
                                     .flex_1()
                                     .min_w_0()
                                     .truncate()
-                                    .child(SharedString::from(f.display().to_string())),
+                                    .text_size(px(CAPTION_SIZE))
+                                    .text_color(rgba(t.text_secondary))
+                                    .child(SharedString::from({
+                                        let folder = f.parent().unwrap_or(f);
+                                        match folder.strip_prefix(&d.root) {
+                                            Ok(rel) if rel.as_os_str().is_empty() => {
+                                                tr!("nesta pasta", "in this folder").to_owned()
+                                            }
+                                            Ok(rel) => rel.display().to_string(),
+                                            Err(_) => folder.display().to_string(),
+                                        }
+                                    })),
                             )
                             .on_click(cx.listener(move |view, _: &ClickEvent, _, cx| {
                                 if let Some(d) = view.duplicates.as_mut() {
@@ -362,7 +388,16 @@ impl FolderView {
                             x.child(div().text_size(px(CAPTION_SIZE)).child(trf!("{} marcados", "{} marked", d.marked.len())))
                         }),
                 )
-                .child(list)
+                .child(
+                    div()
+                        .relative()
+                        .flex_1()
+                        .min_h_0()
+                        .flex()
+                        .flex_col()
+                        .child(list)
+                        .child(crate::scrollbar::vertical(&self.dup_scroll, &t)),
+                )
                 .child(
                     div()
                         .flex_none()

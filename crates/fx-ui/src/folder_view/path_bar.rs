@@ -37,8 +37,10 @@ const MAX_SUGGESTIONS: usize = 8;
 const BAR_HEIGHT: f32 = 32.0;
 const BUTTON_SIZE: f32 = 32.0;
 /// The path bar never gets narrower than this (the status text gives way).
-const BAR_MIN_WIDTH: f32 = 140.0;
+const BAR_MIN_WIDTH: f32 = 88.0;
 const STATUS_MAX_WIDTH: f32 = 400.0;
+/// Below this pane width the status gives its room to the folder name.
+const NARROW_PANE: f32 = 420.0;
 
 /// The path bar while it is a text field.
 #[derive(Debug, Clone)]
@@ -308,6 +310,9 @@ impl FolderView {
             }
             + 1.0)
             .min(STATUS_MAX_WIDTH);
+        // The list's width (last frame), which the status itself does not
+        // change: deciding on it cannot flicker.
+        let narrow = self.last_list_width > 0.0 && self.last_list_width < NARROW_PANE;
         let can_back = self.history.can_go_back();
         let can_forward = self.history.can_go_forward();
         let can_up = self.path.parent().is_some();
@@ -416,30 +421,34 @@ impl FolderView {
             // with an ellipsis when room runs out; the bar takes the rest. An
             // explicit width, not one from the text, is what lets GPUI
             // truncate with an ellipsis.
-            .child(
-                div()
-                    .flex_shrink()
-                    .w(px(status_width))
-                    .min_w_0()
-                    .pl(px(space(2)))
-                    .pr(px(space(2)))
-                    .flex()
-                    .items_center()
-                    .justify_end()
-                    .gap(px(space(1)))
-                    .text_color(rgba(t.text_secondary))
-                    // While typing to filter, a magnifier says what the text is.
-                    .when(!self.filter_text.is_empty(), |d| {
-                        d.child(
-                            div()
-                                .flex_none()
-                                .font_family(icon_font)
-                                .text_size(px(CAPTION_SIZE))
-                                .child(ICON_SEARCH),
-                        )
-                    })
-                    .child(div().min_w_0().truncate().child(status)),
-            )
+            // A narrow pane (the dual view in a small window) has no room
+            // for it: "5 it…" said nothing and took the folder's place.
+            .when(!narrow, |row| {
+                row.child(
+                    div()
+                        .flex_shrink()
+                        .w(px(status_width))
+                        .min_w_0()
+                        .pl(px(space(2)))
+                        .pr(px(space(2)))
+                        .flex()
+                        .items_center()
+                        .justify_end()
+                        .gap(px(space(1)))
+                        .text_color(rgba(t.text_secondary))
+                        // While typing to filter, a magnifier says what the text is.
+                        .when(!self.filter_text.is_empty(), |d| {
+                            d.child(
+                                div()
+                                    .flex_none()
+                                    .font_family(icon_font)
+                                    .text_size(px(CAPTION_SIZE))
+                                    .child(ICON_SEARCH),
+                            )
+                        })
+                        .child(div().min_w_0().truncate().child(status)),
+                )
+            })
     }
 
     /// Breadcrumbs: one button per folder from the root, then an empty area
@@ -487,9 +496,17 @@ impl FolderView {
             + CHEVRON_WIDTH;
         let room = self.crumb_room.get() - 2.0 * space(1) - space(6);
         let first = first_shown(&widths, CHEVRON_WIDTH, more_width, room);
+        // Not even "…" and the current folder fit (a narrow pane): only the
+        // current folder, cut at its end, never at its start.
+        let tight = first == last && room > 0.0 && widths[last] + more_width > room;
 
-        let mut row = div().flex_none().flex().items_center().px(px(space(1)));
-        if first > 0 {
+        let mut row = div()
+            .when(tight, |d| d.flex_shrink().min_w_0())
+            .when(!tight, |d| d.flex_none())
+            .flex()
+            .items_center()
+            .px(px(space(1)));
+        if first > 0 && !tight {
             row = row
                 .child(
                     div()
@@ -518,7 +535,8 @@ impl FolderView {
             row = row.child(
                 div()
                     .id(("crumb", k))
-                    .flex_none()
+                    .when(tight, |d| d.flex_shrink().min_w_0().truncate())
+                    .when(!tight, |d| d.flex_none())
                     .px(px(space(2)))
                     .py(px(space(1)))
                     .rounded(px(RADIUS))
@@ -545,7 +563,7 @@ impl FolderView {
             .h_full()
             .flex()
             .items_center()
-            .justify_end()
+            .when(!tight, |d| d.justify_end())
             .overflow_hidden()
             .child(row);
         let room_cell = self.crumb_room.clone();

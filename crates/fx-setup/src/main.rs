@@ -816,8 +816,8 @@ impl Render for Setup {
             if self.service {
                 content = content.child(
                     div().text_size(px(CAPTION_SIZE)).text_color(rgba(t.text_secondary)).child(tr!(
-                        "O serviço de busca no disco inteiro continua instalado. Para removê-lo, use \"Desativar a busca no disco inteiro\" na paleta do Pathdash antes.",
-                        "The whole-disk search service stays installed. To remove it, use \"Turn off whole-disk search\" in Pathdash's palette first."
+                        "O serviço de busca no disco inteiro continua instalado. Para removê-lo, abra o Pathdash antes e use Configurações › Sistema › Desativar.",
+                        "The whole-disk search service stays installed. To remove it, first open Pathdash and use Settings › System › Turn off."
                     )),
                 );
             }

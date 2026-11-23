@@ -169,6 +169,7 @@ impl TabsView {
         let t = self.look.theme;
         let mut list = div()
             .id("compare-list")
+            .track_scroll(&self.compare_scroll.handle)
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
@@ -195,6 +196,19 @@ impl TabsView {
                 }
             }
         };
+        // Nothing to list (same folder, equal, still comparing): the
+        // sentence goes in the middle, as an empty state, not on top of an
+        // empty box.
+        let empty = c.left == c.right || c.found.as_ref().is_none_or(|(d, _)| d.is_empty());
+        if empty {
+            list = list.flex().items_center().justify_center().child(
+                div()
+                    .max_w(px(420.0))
+                    .text_center()
+                    .text_color(rgba(t.text_secondary))
+                    .child(summary.clone()),
+            );
+        }
         if let Some((diffs, _)) = &c.found {
             for (k, d) in diffs.iter().enumerate() {
                 let marked = c.marked.contains(&k);
@@ -249,15 +263,26 @@ impl TabsView {
                 div()
                     .flex_none()
                     .p(px(space(4)))
+                    .border_b_1()
+                    .border_color(rgba(t.divider))
                     .flex()
                     .flex_col()
                     .gap(px(space(1)))
                     .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(tr!("Comparar pastas", "Compare folders")))
                     .child(div().text_size(px(CAPTION_SIZE)).text_color(rgba(t.text_secondary)).truncate().child(format!("← {}", c.left.display())))
                     .child(div().text_size(px(CAPTION_SIZE)).text_color(rgba(t.text_secondary)).truncate().child(format!("→ {}", c.right.display())))
-                    .child(div().text_size(px(CAPTION_SIZE)).child(summary)),
+                    .when(!empty, |d| d.child(div().text_size(px(CAPTION_SIZE)).child(summary))),
             )
-            .child(list)
+            .child(
+                    div()
+                        .relative()
+                        .flex_1()
+                        .min_h_0()
+                        .flex()
+                        .flex_col()
+                        .child(list)
+                        .child(crate::scrollbar::vertical(&self.compare_scroll, &t)),
+                )
             .child(
                 div()
                     .flex_none()

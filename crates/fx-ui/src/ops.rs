@@ -117,6 +117,11 @@ pub struct JobView {
     pub running_since: Option<std::time::Instant>,
     /// Set when it ends: the panel keeps it a moment, as "Concluído".
     pub finished: bool,
+    /// Items left out by the user's choice (skipped conflicts): a job that
+    /// copied nothing must not read "Done · 27 B".
+    pub skipped: usize,
+    /// Items it did copy or move.
+    pub processed: usize,
 }
 
 impl JobView {
@@ -354,6 +359,8 @@ impl Ops {
             ran: std::time::Duration::ZERO,
             running_since: Some(std::time::Instant::now()),
             finished: false,
+            skipped: 0,
+            processed: 0,
         });
     }
 
@@ -472,6 +479,8 @@ impl Ops {
             if outcome == Outcome::Done {
                 done.done = done.bytes;
                 done.finished = true;
+                done.skipped = report.skipped.len();
+                done.processed = report.copied.len() + report.moved.len();
                 self.recent.push(done);
                 cx.spawn(async move |this, cx| {
                     cx.background_executor()
@@ -632,10 +641,41 @@ fn history_label(job: &Job, report: &Report) -> String {
 
 /// Status message for a finished job.
 fn describe(job: &Job, outcome: &Outcome, report: &Report, prefix: &str) -> String {
+    let skipped = report.skipped.len();
     let what = match job.kind() {
-        OpKind::Copy => trf!("copiado: {}", "copied: {}", count(report.copied.len())),
-        OpKind::Move | OpKind::MoveBack => {
-            trf!("movido: {}", "moved: {}", count(report.moved.len()))
+        OpKind::Copy | OpKind::Move | OpKind::MoveBack => {
+            let copy = job.kind() == OpKind::Copy;
+            let n = if copy {
+                report.copied.len()
+            } else {
+                report.moved.len()
+            };
+            match (n, skipped, copy) {
+                (0, s, true) if s > 0 => trf!(
+                    "nada copiado: {} pulado(s)",
+                    "nothing copied: {} skipped",
+                    count(s)
+                ),
+                (0, s, false) if s > 0 => trf!(
+                    "nada movido: {} pulado(s)",
+                    "nothing moved: {} skipped",
+                    count(s)
+                ),
+                (n, 0, true) => trf!("copiado: {}", "copied: {}", count(n)),
+                (n, 0, false) => trf!("movido: {}", "moved: {}", count(n)),
+                (n, s, true) => trf!(
+                    "copiado: {} · {} pulado(s)",
+                    "copied: {} · {} skipped",
+                    count(n),
+                    count(s)
+                ),
+                (n, s, false) => trf!(
+                    "movido: {} · {} pulado(s)",
+                    "moved: {} · {} skipped",
+                    count(n),
+                    count(s)
+                ),
+            }
         }
         OpKind::Recycle => {
             let sent = report.recycled.len() + report.untracked.len();

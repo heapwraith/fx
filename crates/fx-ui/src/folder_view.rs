@@ -209,6 +209,10 @@ pub struct FolderView {
     /// Columns shown for the current list width.
     columns: Columns,
     last_list_width: f32,
+    /// The "Exibir" menu's scroll and scrollbar.
+    view_menu_scroll: crate::scrollbar::Scroll,
+    dup_scroll: crate::scrollbar::Scroll,
+    timeline_scroll: crate::scrollbar::Scroll,
     /// When the current read started, and how long it took to have the
     /// whole list sorted (shown in the status bar: speed made visible).
     load_started: Option<Instant>,
@@ -438,6 +442,9 @@ impl FolderView {
             press: None,
             columns: Columns::ALL,
             last_list_width: 0.0,
+            view_menu_scroll: crate::scrollbar::Scroll::new(),
+            dup_scroll: crate::scrollbar::Scroll::new(),
+            timeline_scroll: crate::scrollbar::Scroll::new(),
             load_started: None,
             loaded_in: None,
             sort: (SortKey::Name, Direction::Ascending),

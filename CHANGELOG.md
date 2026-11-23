@@ -11,13 +11,18 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 - **Tamanhos em MB, GB e TB.** Arquivos grandes não aparecem mais como milhares de KB: `17,6 MB`, `2,5 GB` (abaixo de 1 MB continua em KB, como no Explorador). Vale para a lista, a busca, os totais de pasta, o Quick Look e o Narrador.
 
 - **Configurações › Sistema e Atualizações mostram o estado real:** se o Pathdash é o gerenciador padrão (ou outra cópia dele), se a busca no disco inteiro está ativa, instalada mas parada ou desligada, quando foi a última verificação de atualização e se há versão pronta (com "Reiniciar agora"). Cada linha tem um botão só, com a ação que faz sentido, mostra o que está fazendo enquanto espera ("Aguardando a permissão de administrador…") e o erro na própria linha, incluindo quando a permissão do Windows é recusada.
-- Barra de rolagem na Ajuda (F1) e nas Configurações.
+- **Chaves de ligar e desligar como as da Apple:** a bolinha branca desliza e a trilha passa do cinza ao ciano em 0,2 s (sem animação quando os efeitos do Windows estão desligados; cores do sistema no alto contraste).
+- Barra de rolagem na Ajuda (F1), nas Configurações, no menu Exibir, no histórico, em Comparar pastas, nos arquivos repetidos e na linha do tempo.
+- **Arquivos repetidos** mostram o nome e a pasta (relativa à busca), em vez do caminho inteiro repetido em cada linha.
+- **Painel duplo em janela pequena:** cada lado mostra a pasta atual inteira (cortada no fim, se preciso) e o status cede o espaço, em vez de cortar o nome no começo e um ícone na borda.
 - **Tabelas no Quick Look de Markdown** (antes apareciam as barras `|`).
 - **Ctrl+F busca nesta pasta**, como diz o guia; Tab passa para o disco inteiro.
 
 ### Corrigido
 - **Linha do tempo:** os caminhos apareciam como `\\.\C:\…`, e por isso os arquivos de outros usuários do Windows não eram escondidos. O serviço precisa ser reinstalado (Desativar e Ativar em Configurações › Sistema) para levar a correção.
 - **Quick Look de imagens:** uma imagem quadrada passava da borda de baixo e era cortada; agora encaixa e fica centralizada, sem ampliar imagens pequenas.
+- Uma cópia em que todos os conflitos foram pulados dizia "Concluído · 27 B" com a barra cheia; agora diz "Nada mudou · 1 pulado(s)" (e o status, "nada copiado: 1 item pulado").
+- Comparar pastas sem diferenças mostra a frase no meio, como estado vazio; a paleta chama o Ctrl+F de "Buscar nesta pasta e subpastas"; o desinstalador aponta Configurações › Sistema para remover o serviço.
 - Configurações: o primeiro Tab numa seção nova pulava o primeiro controle; o espaço vazio em "Sobre" e o texto de ajuda confuso no rodapé.
 - Com o Pathdash como gerenciador padrão, abrir uma unidade (`D:\`) pelo Windows mostrava um caminho quebrado (`D:"`): a barra final engolia a aspa da linha de comando.
 

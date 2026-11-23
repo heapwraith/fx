@@ -88,8 +88,12 @@ pub struct TabsView {
     settings_focus: usize,
     /// What System and Updates show, read from Windows.
     live: settings::Live,
+    /// The Settings switch flipped last: it slides, the rest do not.
+    flipped: Option<settings::Act>,
     settings_scroll: crate::scrollbar::Scroll,
     guide_scroll: crate::scrollbar::Scroll,
+    history_scroll: crate::scrollbar::Scroll,
+    compare_scroll: crate::scrollbar::Scroll,
     /// Comparing the two panes (T6.11).
     compare: Option<compare::Compare>,
     /// The sidebar place with the keyboard (F6), in `sidebar_targets` order.
@@ -194,8 +198,11 @@ impl TabsView {
             settings: None,
             settings_focus: 0,
             live: settings::Live::default(),
+            flipped: None,
             settings_scroll: crate::scrollbar::Scroll::new(),
             guide_scroll: crate::scrollbar::Scroll::new(),
+            history_scroll: crate::scrollbar::Scroll::new(),
+            compare_scroll: crate::scrollbar::Scroll::new(),
             compare: None,
             settings_keyboard: false,
             sidebar_focus: None,

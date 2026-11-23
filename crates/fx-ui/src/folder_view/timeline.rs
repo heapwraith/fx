@@ -250,6 +250,7 @@ impl FolderView {
         let now = now();
         let mut list = div()
             .id("timeline-list")
+            .track_scroll(&self.timeline_scroll.handle)
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
@@ -383,7 +384,16 @@ impl FolderView {
                             _ => String::new(),
                         })),
                 )
-                .child(list)
+                .child(
+                    div()
+                        .relative()
+                        .flex_1()
+                        .min_h_0()
+                        .flex()
+                        .flex_col()
+                        .child(list)
+                        .child(crate::scrollbar::vertical(&self.timeline_scroll, &t)),
+                )
                 .child(
                     div()
                         .flex_none()

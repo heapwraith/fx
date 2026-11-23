@@ -315,6 +315,7 @@ impl TabsView {
         if self.settings != Some(section) {
             self.settings_focus = 0;
             self.settings_keyboard = false;
+            self.flipped = None;
         }
         if self.settings.is_none() {
             self.refresh_live(cx);
@@ -358,6 +359,17 @@ impl TabsView {
 
     pub(super) fn act(&mut self, act: Act, cx: &mut Context<Self>) {
         let tab = self.current();
+        // The switch just used slides to its new place (the others stay).
+        self.flipped = matches!(
+            act,
+            Act::ConfirmRecycle
+                | Act::RestoreSession
+                | Act::Hidden
+                | Act::Sidebar
+                | Act::AutoUpdate
+                | Act::CrashReports
+        )
+        .then_some(act);
         match act {
             Act::Language(english) => {
                 if fx_core::locale::english() != english {
@@ -1011,23 +1023,29 @@ impl TabsView {
                 .into_any_element()
         };
         // The whole row takes the click (a bigger target, WCAG 2.5.8).
-        let switch = |id: SharedString, on: bool| {
+        // Apple's switch: a white knob that slides over a track whose color
+        // eases from gray to the accent; high contrast keeps system colors.
+        let flipped = self.flipped;
+        let switch = move |id: SharedString, on: bool, act: Act| {
+            let colors = if t.high_contrast {
+                crate::motion::SwitchColors {
+                    on: t.accent,
+                    off: 0x0000_0000,
+                    knob: if on { t.base } else { t.text },
+                    outline: Some(t.text),
+                }
+            } else {
+                crate::motion::SwitchColors {
+                    on: t.accent,
+                    off: t.thumb,
+                    knob: 0xFFFF_FFFF,
+                    outline: None,
+                }
+            };
             div()
-                .id(id)
-                .w(px(40.0))
-                .h(px(20.0))
-                .rounded_full()
+                .id(id.clone())
                 .cursor_pointer()
-                .flex()
-                .items_center()
-                .px(px(3.0))
-                .when(on, |d| d.bg(rgba(t.accent)).justify_end())
-                .when(!on, |d| d.border_1().border_color(rgba(t.text_secondary)))
-                .child(div().size(px(12.0)).rounded_full().bg(rgba(if on {
-                    t.base
-                } else {
-                    t.text_secondary
-                })))
+                .child(crate::motion::switch(id, on, flipped == Some(act), colors))
                 .into_any_element()
         };
         let button = |id: SharedString, label: &'static str, act: Act, cx: &mut Context<Self>| {
@@ -1066,9 +1084,9 @@ impl TabsView {
                     .text_color(rgba(t.text_secondary))
                     .child(v)
                     .into_any_element(),
-                Control::Switch(on, _) => {
+                Control::Switch(on, act) => {
                     let id = SharedString::from(format!("set-{r}-switch"));
-                    let el = ring(next == focus, switch(id, on));
+                    let el = ring(next == focus, switch(id, on, act));
                     next += 1;
                     el
                 }

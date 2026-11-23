@@ -70,6 +70,7 @@ impl TabsView {
         let done = self.media.ops.read(cx).done();
         let mut list = div()
             .id("history-list")
+            .track_scroll(&self.history_scroll.handle)
             .flex()
             .flex_col()
             .overflow_y_scroll()
@@ -162,7 +163,12 @@ impl TabsView {
                         "Undo reverts only that operation, without overwriting anything."
                     )),
             )
-            .child(list);
+            .child(
+                div()
+                    .relative()
+                    .child(list)
+                    .child(crate::scrollbar::vertical(&self.history_scroll, &t)),
+            );
         Some(
             deferred(crate::motion::enter(
                 "history-in",

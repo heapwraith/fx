@@ -171,7 +171,13 @@ const fn direct(labels: Labels, action: Action) -> Command {
 }
 
 pub const COMMANDS: &[Command] = &[
-    tab(("Buscar no disco", "Search the disk"), "ctrl-f"),
+    tab(
+        (
+            "Buscar nesta pasta e subpastas",
+            "Search this folder and subfolders",
+        ),
+        "ctrl-f",
+    ),
     tab(
         ("Pré-visualizar (Quick Look)", "Preview (Quick Look)"),
         "space",

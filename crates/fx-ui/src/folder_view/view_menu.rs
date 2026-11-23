@@ -245,23 +245,17 @@ impl FolderView {
         }
         let t = self.look.theme;
         let icon_font = self.look.icon_font;
+        // The items scroll inside a frame that keeps the border, the
+        // shadow and a scrollbar showing there is more below.
         let mut card = div()
-            .id("view-menu")
-            .absolute()
-            .top(px(space(11)))
-            .right(px(space(2)))
-            .w(px(MENU_WIDTH))
-            .max_h(gpui::relative(0.85))
+            .id("view-menu-items")
+            .flex_1()
+            .min_h_0()
             .overflow_y_scroll()
+            .track_scroll(&self.view_menu_scroll.handle)
             .py(px(space(1)))
             .flex()
-            .flex_col()
-            .rounded(px(RADIUS * 2.0))
-            .border_1()
-            .border_color(rgba(t.divider))
-            .bg(rgba(t.base))
-            .shadow_lg()
-            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation());
+            .flex_col();
         for item in self.menu_items() {
             card = match item {
                 Item::Caption(text) => card.child(
@@ -332,7 +326,26 @@ impl FolderView {
                             cx.notify();
                         }),
                     )
-                    .child(card),
+                    .child(
+                        div()
+                            .id("view-menu")
+                            .absolute()
+                            .top(px(space(11)))
+                            .right(px(space(2)))
+                            .w(px(MENU_WIDTH))
+                            .max_h(gpui::relative(0.85))
+                            .flex()
+                            .flex_col()
+                            .rounded(px(RADIUS * 2.0))
+                            .border_1()
+                            .border_color(rgba(t.divider))
+                            .bg(rgba(t.base))
+                            .shadow_lg()
+                            .overflow_hidden()
+                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                            .child(card)
+                            .child(crate::scrollbar::vertical(&self.view_menu_scroll, &t)),
+                    ),
             ))
             .with_priority(1),
         )
