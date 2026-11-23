@@ -59,6 +59,39 @@ pub fn run_hidden(
     }
 }
 
+/// The file names of the modules (DLLs) loaded in this process, lower case
+/// (T5.7: what idle memory is made of).
+pub fn loaded_modules() -> Vec<String> {
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, MODULEENTRY32W, Module32FirstW, Module32NextW, TH32CS_SNAPMODULE,
+    };
+    let mut out = Vec::new();
+    // SAFETY: a snapshot of this process (id 0); the handle is closed below.
+    let Ok(snap) = (unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, 0) }) else {
+        return out;
+    };
+    let mut entry = MODULEENTRY32W {
+        dwSize: std::mem::size_of::<MODULEENTRY32W>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: `entry` is a valid MODULEENTRY32W with its size set; the
+    // snapshot handle is valid until closed.
+    let mut more = unsafe { Module32FirstW(snap, &mut entry) }.is_ok();
+    while more {
+        let len = entry
+            .szModule
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(entry.szModule.len());
+        out.push(String::from_utf16_lossy(&entry.szModule[..len]).to_lowercase());
+        // SAFETY: as above.
+        more = unsafe { Module32NextW(snap, &mut entry) }.is_ok();
+    }
+    // SAFETY: we own the snapshot handle.
+    let _ = unsafe { windows::Win32::Foundation::CloseHandle(snap) };
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -25,6 +25,7 @@ mod folder_view;
 mod i18n;
 mod icons;
 mod logging;
+mod modtrace;
 mod motion;
 mod ops;
 mod persist;
@@ -106,6 +107,7 @@ impl std::fmt::Debug for WindowOpener {
 static UPDATE_CHECKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn main() {
+    modtrace::checkpoint("main");
     crash::install();
     logging::init();
     tags::init();
@@ -208,6 +210,7 @@ fn main() {
             sidebar: settings.barra_lateral,
             show_hidden: settings.mostrar_ocultos,
         };
+        modtrace::checkpoint("app running, fonts listed");
         let trace = trace.map(|t| Rc::new(RefCell::new(t)));
         let pinned = session.as_ref().and_then(|s| s.pinned.clone());
         let places = cx.new(|cx| Places::new(trace.clone(), pinned, cx));
@@ -216,6 +219,7 @@ fn main() {
             thumbs: cx.new(Thumbs::new),
             ops: cx.new(Ops::new),
         };
+        modtrace::checkpoint("places, icons, thumbs, ops");
         let persist = cx.new(|cx| Persist::new(persist, settings, places.clone(), cx));
         cx.set_global(persist::PersistGlobal(persist.clone()));
         // Confirmations with fx's look and language, not the native box.
@@ -340,8 +344,18 @@ fn open_folder_window(
         sidebar,
         show_hidden,
     } = startup;
+    modtrace::checkpoint("before the window");
     let persist = shared.persist.clone();
     let close_persist = persist.clone();
+    cx.spawn(async move |cx| {
+        for (ms, label) in [(500, "0.5 s"), (1500, "2 s"), (4000, "6 s")] {
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(ms))
+                .await;
+            modtrace::checkpoint(label);
+        }
+    })
+    .detach();
     let opened = cx.open_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),

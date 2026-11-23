@@ -33,7 +33,7 @@ pub use keys::shifted_digit;
 pub use launch::launch;
 pub use menu::show_context_menu;
 pub use places::{drives, known_folder, known_folders, watch_drives};
-pub use process::run_hidden;
+pub use process::{loaded_modules, run_hidden};
 pub use properties::{item_properties, property_values};
 pub use thumbs::{preview_image, start_thumb_service};
 
