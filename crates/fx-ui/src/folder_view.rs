@@ -22,6 +22,7 @@ mod columns;
 mod dir_sizes;
 mod disk_map;
 mod dnd;
+mod duplicates;
 mod edit_ops;
 mod grid;
 mod keys;
@@ -224,6 +225,8 @@ pub struct FolderView {
     disk_map: Option<disk_map::DiskMap>,
     /// The timeline of the disks (Ctrl+Shift+L, T6.2).
     timeline: Option<timeline::Timeline>,
+    /// Repeated files here and below (Ctrl+Shift+D, T6.4).
+    duplicates: Option<duplicates::Duplicates>,
     /// The embedded terminal (Ctrl+J, T3.5).
     terminal: Option<terminal::Terminal>,
     /// Width of the breadcrumb area in the last frame (T2.3), and whether
@@ -413,6 +416,7 @@ impl FolderView {
             search: None,
             disk_map: None,
             timeline: None,
+            duplicates: None,
         };
         crate::visits::visit(&view.path);
         view.start_loading(cx);
@@ -1634,6 +1638,7 @@ impl Render for FolderView {
             .children(self.render_columns(cx))
             .children(self.render_disk_map(cx))
             .children(self.render_timeline(cx))
+            .children(self.render_duplicates(cx))
             .children(self.render_terminal(cx))
             .children(self.render_batch_rename(cx))
             .children(self.render_view_menu(cx))
@@ -1679,6 +1684,7 @@ impl FolderView {
             "columns" => self.toggle_columns(window, cx),
             "map" => self.toggle_disk_map(cx),
             "timeline" => self.toggle_timeline(cx),
+            "duplicates" => self.toggle_duplicates(cx),
             _ => {}
         }
     }
@@ -1688,6 +1694,7 @@ impl FolderView {
         self.batch_rename_overlay()
             .or_else(|| self.disk_map_overlay())
             .or_else(|| self.timeline_overlay())
+            .or_else(|| self.duplicates_overlay())
             .or_else(|| self.quick_look_overlay())
             .or_else(|| self.view_menu_overlay())
             .or_else(|| self.search_overlay())

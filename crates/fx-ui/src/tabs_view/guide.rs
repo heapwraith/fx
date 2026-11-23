@@ -146,6 +146,7 @@ pub fn sections() -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
                     "Ctrl+Shift+L",
                     tr!("o que mudou nos discos", "what changed on the disks"),
                 ),
+                ("Ctrl+Shift+D", tr!("arquivos repetidos", "repeated files")),
                 ("Ctrl+B", tr!("barra lateral", "sidebar")),
             ],
         ),

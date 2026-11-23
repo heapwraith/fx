@@ -94,7 +94,8 @@ impl Command {
                 "ctrl-h" => "\u{E890}",                       // View
                 "ctrl-shift-h" => "\u{E81C}",
                 "ctrl-shift-m" => "\u{E9D9}", // Diagnostic (chart)
-                "ctrl-shift-l" => "\u{E823}", // Recent (clock)                 // History
+                "ctrl-shift-l" => "\u{E823}", // Recent (clock)
+                "ctrl-shift-d" => "\u{E8C8}", // Copy (two pages)                 // History
                 "f1" => "\u{E897}",           // Help
                 "ctrl-j" => "\u{E756}",       // CommandPrompt
                 _ => "\u{E756}",
@@ -175,6 +176,13 @@ pub const COMMANDS: &[Command] = &[
             "Timeline (what changed on the disks)",
         ),
         "ctrl-shift-l",
+    ),
+    tab(
+        (
+            "Arquivos repetidos (nesta pasta e subpastas)",
+            "Repeated files (here and below)",
+        ),
+        "ctrl-shift-d",
     ),
     direct(
         (

@@ -30,7 +30,7 @@ Treemap de qualquer pasta ou disco mostrando o que ocupa espaço, em milissegund
 Uma busca vira aba ou pasta virtual que se atualiza sozinha (ex.: `tipo:pdf data:semana`, `tamanho:>1gb`), fixável na barra lateral. **Base:** filtros e serviço prontos; o USN atualiza. **Concorrentes:** o Finder tem pastas inteligentes, mais lentas; Explorador e Files não têm.
 
 ### T6.4 — Duplicados em segundos
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: Ctrl+Shift+D procura arquivos repetidos (4 KB ou mais) na pasta e subpastas (`fx-fs/src/duplicates.rs`): candidatos por tamanho, depois pelas pontas (64 KiB), confirmados comparando o conteúdo inteiro em blocos (nada estimado, nenhum arquivo inteiro na memória), com progresso real e cancelamento; Espaço marca, A marca as cópias, Delete manda para a Lixeira com confirmação e desfazer, e a lista reconfere a cada 3 s o que ainda existe (2 testes novos). Escopo por pasta (o disco inteiro: abrir na raiz da unidade), em vez de candidatos pelo índice, para funcionar sem o serviço.
 
 Acha arquivos repetidos no disco todo: candidatos pelo tamanho (índice), depois SHA-256 só deles; remove com desfazer. **Base:** índice com tamanhos e SHA-256 (BCrypt). **Concorrentes:** ferramentas separadas, lentas porque leem o disco inteiro.
 

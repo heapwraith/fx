@@ -47,6 +47,14 @@ impl FolderView {
         if self.timeline_key(ks, window, cx) {
             return;
         }
+        // Ctrl+Shift+D: repeated files here and below (T6.4).
+        if ks.key == "d" && m.control && m.shift && !m.alt {
+            self.toggle_duplicates(cx);
+            return;
+        }
+        if self.duplicates_key(ks, window, cx) {
+            return;
+        }
         if self.search.is_none() && self.columns_key(ks, window, cx) {
             return;
         }
