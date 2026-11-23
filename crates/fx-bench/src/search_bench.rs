@@ -14,7 +14,7 @@ use fx_index::{Hit, Index, search};
 use crate::index_bench::synthetic_records;
 use crate::report::{commit, json_string, machine, median_p95, results_dir, utc_date};
 
-const TARGET_P5_MS: f64 = 50.0;
+const TARGET_P5_MS: f64 = 16.0;
 
 /// Typed one character at a time; each prefix is one keystroke (1 to 12 chars).
 pub const QUERIES: &[&str] = &[

@@ -12,7 +12,7 @@ use crate::names::flat_name;
 use crate::report::{commit, json_string, machine, results_dir, utc_date};
 
 const TARGET_P6_S: f64 = 10.0;
-const TARGET_P9_MB_PER_MILLION: f64 = 150.0;
+const TARGET_P9_MB_PER_MILLION: f64 = 100.0;
 const ROOT: FileId = 5;
 
 /// A file tree of `n` entries: ~8% folders, each file under a random earlier

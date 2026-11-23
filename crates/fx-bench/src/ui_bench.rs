@@ -12,13 +12,16 @@ use crate::fixtures;
 use crate::report::{commit, json_string, machine, median_p95, results_dir, utc_date};
 
 const OPENINGS: usize = 10;
-const TARGET_P2_MS: f64 = 100.0;
-/// P1 (D-013): first open of the day, new process.
-const TARGET_P1_MS: f64 = 500.0;
+/// Limits of docs/PERFORMANCE.md (D-064): P2 p95 from the folder request.
+const TARGET_P2_MS: f64 = 80.0;
+/// P2 (b): a new tab, p95.
+const TARGET_P2_TAB_MS: f64 = 16.0;
+/// P1: first open of the day, new process, p95.
+const TARGET_P1_MS: f64 = 450.0;
 /// One frame at the 239 Hz display of the reference machine.
 const TARGET_P7_MS: f64 = 4.2;
-/// P7 (D-014): at most this fraction of frames may be dropped.
-const MAX_DROPPED_FRACTION: f64 = 0.005;
+/// P7 (D-064): at most this fraction of frames may be dropped.
+const MAX_DROPPED_FRACTION: f64 = 0.001;
 
 /// A trace written by fx (`key value` lines; see fx-ui/src/trace.rs).
 #[derive(Debug, Default)]
@@ -199,8 +202,8 @@ pub fn open() -> std::io::Result<()> {
     }
     let (proc_med, proc_p95) = median_p95(&ms_samples(&from_process));
     let (req_med, req_p95) = median_p95(&ms_samples(&from_request));
-    let pass_process = proc_med <= TARGET_P1_MS;
-    let pass_request = req_med <= TARGET_P2_MS;
+    let pass_process = proc_p95 <= TARGET_P1_MS;
+    let pass_request = req_p95 <= TARGET_P2_MS;
 
     println!("First frame with rows, flat-100k, {OPENINGS} openings (new process each), release");
     println!(
@@ -470,7 +473,9 @@ pub fn responsive(folder: &Path, seconds: u32) -> std::io::Result<()> {
     Ok(())
 }
 
-const TARGET_P4_MS: f64 = 16.0;
+/// P4 (D-064): key -> frame p95, and no key above `MAX_P4_MS`.
+const TARGET_P4_MS: f64 = 8.0;
+const MAX_P4_MS: f64 = 16.0;
 const TYPE_ROUNDS: usize = 3;
 
 /// P4: types "report-123" (10 keys, 50 ms apart) into fx on `flat-100k`, 3 rounds.
@@ -505,10 +510,10 @@ pub fn type_keys() -> std::io::Result<()> {
     }
     let (median, p95) = median_p95(&ms_samples(&samples));
     let max = samples.iter().copied().fold(0.0, f64::max);
-    let pass = p95 <= TARGET_P4_MS;
+    let pass = p95 <= TARGET_P4_MS && max <= MAX_P4_MS;
     println!("P4: key -> frame presented while typing to filter flat-100k (release)");
     println!(
-        "  {} keys ({TYPE_ROUNDS} x \"report-123\" + Escape): median {median:.2} ms  p95 {p95:.2} ms  max {max:.2} ms   target ≤ {TARGET_P4_MS} ms  {}",
+        "  {} keys ({TYPE_ROUNDS} x \"report-123\" + Escape): median {median:.2} ms  p95 {p95:.2} ms  max {max:.2} ms   target p95 ≤ {TARGET_P4_MS}, max ≤ {MAX_P4_MS} ms  {}",
         samples.len(),
         if pass { "pass" } else { "FAIL" }
     );
@@ -605,10 +610,10 @@ fn report_keys_against(
         }
         let (median, p95) = median_p95(&ms_samples(&samples));
         let max = samples.iter().copied().fold(0.0, f64::max);
-        let ok = p95 <= target;
+        let ok = p95 <= target && max <= MAX_P4_MS;
         pass &= ok;
         println!(
-            "  {label}: {} keys  median {median:.2} ms  p95 {p95:.2} ms  max {max:.2} ms   target ≤ {target} ms  {}",
+            "  {label}: {} keys  median {median:.2} ms  p95 {p95:.2} ms  max {max:.2} ms   target p95 ≤ {target}, max ≤ {MAX_P4_MS} ms  {}",
             samples.len(),
             if ok { "pass" } else { "FAIL" }
         );
@@ -693,10 +698,10 @@ pub fn tab_keys() -> std::io::Result<()> {
     }
     let (median, p95) = median_p95(&ms_samples(&samples));
     let max = samples.iter().copied().fold(0.0, f64::max);
-    let pass = p95 <= TARGET_P2_MS;
+    let pass = p95 <= TARGET_P2_TAB_MS;
     println!("P2 (b): Ctrl+T -> first frame with rows of the new tab, flat-100k (release)");
     println!(
-        "  {} tabs: median {median:.1} ms  p95 {p95:.1} ms  max {max:.1} ms   target ≤ {TARGET_P2_MS} ms  {}",
+        "  {} tabs: median {median:.1} ms  p95 {p95:.1} ms  max {max:.1} ms   target ≤ {TARGET_P2_TAB_MS} ms  {}",
         samples.len(),
         if pass { "pass" } else { "FAIL" }
     );
@@ -850,9 +855,13 @@ pub fn grid() -> std::io::Result<()> {
     let (median, p95) = median_p95(&ms_samples(&samples));
     println!("P2 (b): Ctrl+T -> first frame of the grid, flat-10k-media (release)");
     println!(
-        "  {} tabs: median {median:.1} ms  p95 {p95:.1} ms   target ≤ {TARGET_P2_MS} ms  {}",
+        "  {} tabs: median {median:.1} ms  p95 {p95:.1} ms   target ≤ {TARGET_P2_TAB_MS} ms  {}",
         samples.len(),
-        if p95 <= TARGET_P2_MS { "pass" } else { "FAIL" }
+        if p95 <= TARGET_P2_TAB_MS {
+            "pass"
+        } else {
+            "FAIL"
+        }
     );
     scroll_in(&folder, "flat-10k-media (grid)", &env, "T1.7")
 }
@@ -980,7 +989,7 @@ fn run_steps(folder: &Path, steps: &str) -> std::io::Result<TraceFile> {
 }
 
 /// Quick Look must show an image of up to 10 MB within this (T1.22).
-const TARGET_PREVIEW_MS: f64 = 100.0;
+const TARGET_PREVIEW_MS: f64 = 60.0;
 
 /// Tasks T1.20-T1.24 with real input:
 /// - re-sorting 100,000 items from the command palette, then arrows right
@@ -1066,7 +1075,7 @@ pub fn features() -> std::io::Result<()> {
 /// median. `FX_BENCH_ENV="A=1 B=0"` adds variables, to price a part.
 pub fn memory() -> std::io::Result<()> {
     const RUNS: usize = 5;
-    const TARGET_P8_MB: f64 = 88.0; // D-038
+    const TARGET_P8_MB: f64 = 85.0; // D-064
     let root = fixtures_root()?;
     let extra = std::env::var("FX_BENCH_ENV").unwrap_or_default();
     let env: Vec<(&str, &str)> = extra
