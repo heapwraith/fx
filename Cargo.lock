@@ -2089,6 +2089,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fx-setup-boot"
+version = "0.2.0-beta"
+dependencies = [
+ "embed-resource",
+ "fx-core",
+ "fx-shell",
+]
+
+[[package]]
 name = "fx-shell"
 version = "0.2.0-beta"
 dependencies = [

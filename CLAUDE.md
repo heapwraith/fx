@@ -38,7 +38,7 @@ cargo fmt --all
 cargo xwin run -p fx-ui --release                                  # abre o app no Windows
 cargo xwin run -p fx-bench --release -- fixtures                   # gera as pastas de teste em %TEMP%\fx-fixtures
 cargo xwin run -p fx-bench --release -- all                        # roda todos os benchmarks e grava bench/results/*.json
-cargo xwin build --release -p fx-setup                             # instalador; empacotar: fx-setup --pack <stub> <bins> <raiz> <saída>
+cargo xwin build --release -p fx-setup -p fx-setup-boot             # instalador; empacotar: fx-setup --pack <fx-setup-boot.exe> <bins> <raiz> <saída>
 ```
 
 O `clippy` precisa de `--target` explícito: sem ele, o `cargo xwin` repete o `--target` nos argumentos do rustc e falha.

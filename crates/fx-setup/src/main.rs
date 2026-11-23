@@ -7,7 +7,10 @@
 //!                               install without a window (exit code); the
 //!                               update helper waits for fx to close first
 //! fx-setup --uninstall [--quiet]
-//! fx-setup --pack <stub> <bin dir> <doc dir> <out>   (CI)
+//! fx-setup --pack <fx-setup-boot.exe> <bin dir> <doc dir> <out>   (CI)
+//!
+//! The downloaded installer is `fx-setup-boot` with the package (T5.7): it
+//! runs this program out of the package with `--package <installer>`.
 //! ```
 //!
 //! The installed copy (`%LOCALAPPDATA%\Programs\fx\fx-setup.exe`, no
@@ -115,7 +118,12 @@ fn main() -> ExitCode {
         }
         return code;
     }
-    let package = match pack::read_self() {
+    // Started by the launcher (T5.7): the package is in the downloaded file.
+    let carried = match value_of("--package") {
+        Some(file) => std::fs::read(file).and_then(|bytes| pack::read(&bytes)),
+        None => pack::read_self(),
+    };
+    let package = match carried {
         Ok(Some(p)) => Arc::new(p),
         // The installed copy, opened without arguments: offer to uninstall.
         Ok(None) => {

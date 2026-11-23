@@ -125,6 +125,21 @@ pub fn create_shortcut(lnk: &Path, target: &Path, description: &str) -> io::Resu
     Ok(())
 }
 
+/// A plain error box (the setup launcher has no window of its own; T5.7).
+pub fn error_box(title: &str, text: &str) {
+    use windows::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW};
+    // SAFETY: both strings are NUL-terminated and live through the call; no
+    // owner window.
+    unsafe {
+        MessageBoxW(
+            None,
+            &HSTRING::from(text),
+            &HSTRING::from(title),
+            MB_OK | MB_ICONERROR,
+        );
+    }
+}
+
 /// Deletes `file` a moment after this process ends (T5.6): the copy of the
 /// uninstaller in %TEMP% cannot delete itself while it runs, so a hidden
 /// `cmd` waits about 2 s and removes it. Nothing is shown.

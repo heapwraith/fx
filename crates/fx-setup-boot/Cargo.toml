@@ -1,0 +1,23 @@
+[package]
+name = "fx-setup-boot"
+description = "Small launcher of the fx installer: runs the setup program carried in its own package (T5.7)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "fx-setup-boot"
+path = "src/main.rs"
+
+[dependencies]
+fx-core.workspace = true
+fx-shell.workspace = true
+
+[build-dependencies]
+embed-resource.workspace = true

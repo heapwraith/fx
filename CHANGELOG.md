@@ -27,6 +27,7 @@ Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualiz
 - Transições curtas nas sobreposições (respeitam "Efeitos de animação" do Windows) e mensagens claras para busca e paleta sem resultado.
 
 ### Mudado
+- **Instalador com menos da metade do tamanho:** 9,8 MB em vez de 16,5 MB (um inicializador pequeno abre o instalador de dentro do pacote).
 - **Compactados sem programas do Windows** (D-069): ZIP, 7z e tar são lidos e escritos por bibliotecas Rust, as mesmas no Windows e no Linux, dentro do próprio fx; acabou o PowerShell oculto e o `tar.exe`. RAR deixou de ser aberto (não há leitor livre em Rust).
 - **Imagens sem o WIC** (D-069): converter e reduzir por bibliotecas Rust, várias fotos ao mesmo tempo (em lote, 44 ms por foto de 12 MP, metade do tempo de antes), já de pé conforme a orientação da câmera; a data da foto vem direto do EXIF. HEIC deixou de ser convertido.
 - **Fuso horário pelas regras IANA** (D-069): as datas da lista seguem as mesmas regras no Windows e no Linux, iguais às do Windows nos anos recentes.

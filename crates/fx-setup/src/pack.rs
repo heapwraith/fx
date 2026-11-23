@@ -33,10 +33,16 @@ fn hash(bytes: &[u8]) -> [u8; 32] {
     fx_shell::net::sha256(bytes).unwrap_or([0; 32])
 }
 
-/// Writes `out`: the `stub` setup program with a package of `files`
-/// (`(name, bytes)`, the stub itself is added as `fx-setup.exe`).
-pub fn build(stub: &[u8], version: &str, files: &[(String, Vec<u8>)]) -> io::Result<Vec<u8>> {
-    let mut all: Vec<(&str, &[u8])> = vec![(SETUP_EXE, stub)];
+/// Writes the setup file: `launcher` (the program part, `fx-setup-boot`,
+/// T5.7) with a package of the setup program (as `fx-setup.exe`) and
+/// `files` (`(name, bytes)`).
+pub fn build(
+    launcher: &[u8],
+    setup_program: &[u8],
+    version: &str,
+    files: &[(String, Vec<u8>)],
+) -> io::Result<Vec<u8>> {
+    let mut all: Vec<(&str, &[u8])> = vec![(SETUP_EXE, setup_program)];
     all.extend(files.iter().map(|(n, b)| (n.as_str(), b.as_slice())));
     let mut data = Vec::new();
     let mut entries = Vec::new();
@@ -56,24 +62,29 @@ pub fn build(stub: &[u8], version: &str, files: &[(String, Vec<u8>)]) -> io::Res
         version: version.to_owned(),
         files: entries,
     };
-    Ok(package::attach(stub, &package::encode(&manifest, &blob)))
+    Ok(package::attach(
+        launcher,
+        &package::encode(&manifest, &blob),
+    ))
 }
 
-/// `fx-setup --pack`: the programs of `bin_dir`, the documents of `doc_dir`
-/// and `stub` (this program, or the ARM64 one) into `out`.
+/// `fx-setup --pack`: `launcher` (`fx-setup-boot.exe`, x64 or ARM64) with
+/// the setup program and the other programs of `bin_dir` and the documents
+/// of `doc_dir`, into `out`.
 pub fn pack_dirs(
-    stub: &Path,
+    launcher: &Path,
     bin_dir: &Path,
     doc_dir: &Path,
     version: &str,
     out: &Path,
 ) -> io::Result<u64> {
-    let stub_bytes = std::fs::read(stub)?;
-    // A setup that already carries a package gives only its program.
-    let stub_bytes = match package::detach(&stub_bytes) {
+    // A file that already carries a package gives only its program.
+    let program_only = |bytes: Vec<u8>| match package::detach(&bytes) {
         Some((program, _)) => program.to_vec(),
-        None => stub_bytes,
+        None => bytes,
     };
+    let launcher_bytes = program_only(std::fs::read(launcher)?);
+    let setup_bytes = program_only(std::fs::read(bin_dir.join(SETUP_EXE))?);
     let mut files = Vec::new();
     for name in PROGRAMS {
         files.push((name.to_owned(), std::fs::read(bin_dir.join(name))?));
@@ -81,7 +92,7 @@ pub fn pack_dirs(
     for name in DOCUMENTS {
         files.push((name.to_owned(), std::fs::read(doc_dir.join(name))?));
     }
-    let setup = build(&stub_bytes, version, &files)?;
+    let setup = build(&launcher_bytes, &setup_bytes, version, &files)?;
     std::fs::write(out, &setup)?;
     Ok(setup.len() as u64)
 }
@@ -123,7 +134,7 @@ mod tests {
             ("fx.exe".to_owned(), b"MZ fx program".repeat(1000)),
             ("README.md".to_owned(), "# fx\nação".as_bytes().to_vec()),
         ];
-        let setup = build(b"MZ setup", "0.3.0", &files).unwrap();
+        let setup = build(b"MZ boot", b"MZ setup", "0.3.0", &files).unwrap();
         assert!(
             setup.len() < 13_000 + 8 + 400,
             "compressed: {}",
@@ -134,19 +145,19 @@ mod tests {
         assert_eq!(pkg.files[0], (SETUP_EXE.to_owned(), b"MZ setup".to_vec()));
         assert_eq!(pkg.files[1], files[0]);
         assert_eq!(pkg.files[2], files[1]);
-        assert_eq!(program_of(&setup), b"MZ setup");
+        assert_eq!(program_of(&setup), b"MZ boot", "the launcher runs");
         assert!(read(b"MZ setup").unwrap().is_none());
     }
 
     #[test]
     fn a_damaged_setup_is_refused() {
         let files = vec![("fx.exe".to_owned(), vec![7u8; 5000])];
-        let mut setup = build(b"MZ", "1.0.0", &files).unwrap();
+        let mut setup = build(b"MZ", b"MZ", "1.0.0", &files).unwrap();
         // Flip a byte in the compressed blob (before the 24-byte footer).
         let n = setup.len();
         setup[n - 30] ^= 0x55;
         assert!(read(&setup).is_err());
-        assert!(build(b"MZ", "1", &[("..\\x".to_owned(), vec![])]).is_err());
+        assert!(build(b"MZ", b"MZ", "1", &[("..\\x".to_owned(), vec![])]).is_err());
     }
 
     #[test]
@@ -155,22 +166,25 @@ mod tests {
         let (bin, doc) = (dir.path().join("bin"), dir.path().join("doc"));
         std::fs::create_dir_all(&bin).unwrap();
         std::fs::create_dir_all(&doc).unwrap();
-        for n in PROGRAMS {
+        for n in PROGRAMS.iter().chain([&SETUP_EXE]) {
             std::fs::write(bin.join(n), n.as_bytes()).unwrap();
         }
         for n in DOCUMENTS {
             std::fs::write(doc.join(n), n.as_bytes()).unwrap();
         }
-        let stub = dir.path().join("stub.exe");
-        std::fs::write(&stub, b"STUB").unwrap();
+        let stub = dir.path().join("fx-setup-boot.exe");
+        std::fs::write(&stub, b"BOOT").unwrap();
         let out = dir.path().join("setup.exe");
         pack_dirs(&stub, &bin, &doc, "9.9.9", &out).unwrap();
         let pkg = read(&std::fs::read(&out).unwrap()).unwrap().unwrap();
         assert_eq!(pkg.files.len(), 1 + PROGRAMS.len() + DOCUMENTS.len());
-        // Packing from an already packed setup keeps only its program.
+        assert_eq!(
+            pkg.files[0],
+            (SETUP_EXE.to_owned(), SETUP_EXE.as_bytes().to_vec())
+        );
+        // Packing with an already packed setup as launcher keeps only its program.
         let again = dir.path().join("again.exe");
         pack_dirs(&out, &bin, &doc, "9.9.9", &again).unwrap();
-        let pkg = read(&std::fs::read(&again).unwrap()).unwrap().unwrap();
-        assert_eq!(pkg.files[0].1, b"STUB");
+        assert_eq!(program_of(&std::fs::read(&again).unwrap()), b"BOOT");
     }
 }

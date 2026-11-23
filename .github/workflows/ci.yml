@@ -49,7 +49,7 @@ jobs:
       - name: Tests
         run: cargo test --workspace
       - name: Build release
-        run: cargo build --release -p fx-ui -p fx-indexd -p fx-preview -p fx-setup
+        run: cargo build --release -p fx-ui -p fx-indexd -p fx-preview -p fx-setup -p fx-setup-boot
       - name: Version of the build
         shell: pwsh
         run: (Get-Item target/x86_64-pc-windows-msvc/release/fx.exe).VersionInfo | Format-List FileVersion, ProductVersion
@@ -59,7 +59,7 @@ jobs:
           $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
           $rel = "$PWD\target\x86_64-pc-windows-msvc\release"
           New-Item -ItemType Directory -Force dist | Out-Null
-          & "$rel\fx-setup.exe" --pack "$rel\fx-setup.exe" $rel $PWD "$PWD\dist\fx-$v-setup-x64.exe" | Out-Host
+          & "$rel\fx-setup.exe" --pack "$rel\fx-setup-boot.exe" $rel $PWD "$PWD\dist\fx-$v-setup-x64.exe" | Out-Host
           if (-not (Test-Path "dist\fx-$v-setup-x64.exe")) { throw "fx-setup --pack failed" }
           # The package must install and uninstall cleanly (test folder and key).
           $root = "$env:RUNNER_TEMP\fx-setup-ci"
@@ -91,7 +91,7 @@ jobs:
         with:
           key: arm64
       - name: Build release (aarch64)
-        run: cargo build --release --target aarch64-pc-windows-msvc -p fx-ui -p fx-indexd -p fx-preview -p fx-setup
+        run: cargo build --release --target aarch64-pc-windows-msvc -p fx-ui -p fx-indexd -p fx-preview -p fx-setup -p fx-setup-boot
       - name: Packer (x64 fx-setup, packs the ARM64 one)
         run: cargo build --release --target x86_64-pc-windows-msvc -p fx-setup
       - name: Installer (fx-setup, ARM64)
@@ -100,7 +100,7 @@ jobs:
           $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
           $arm = "$PWD\target\aarch64-pc-windows-msvc\release"
           New-Item -ItemType Directory -Force dist | Out-Null
-          & "$PWD\target\x86_64-pc-windows-msvc\release\fx-setup.exe" --pack "$arm\fx-setup.exe" $arm $PWD "$PWD\dist\fx-$v-setup-arm64.exe" | Out-Host
+          & "$PWD\target\x86_64-pc-windows-msvc\release\fx-setup.exe" --pack "$arm\fx-setup-boot.exe" $arm $PWD "$PWD\dist\fx-$v-setup-arm64.exe" | Out-Host
           if (-not (Test-Path "dist\fx-$v-setup-arm64.exe")) { throw "fx-setup --pack failed" }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
