@@ -26,6 +26,8 @@ pub struct ScreenRect {
 pub struct PreviewProcess {
     child: Child,
     stdin: ChildStdin,
+    /// The host's window, as it announced it (`ready <hwnd>`).
+    pub window: Option<isize>,
 }
 
 impl PreviewProcess {
@@ -61,9 +63,19 @@ impl PreviewProcess {
                 let _ = BufReader::new(stdout).read_line(&mut first);
                 let _ = tx.send(first);
             })?;
-        let mut process = Self { child, stdin };
+        let mut process = Self {
+            child,
+            stdin,
+            window: None,
+        };
         match rx.recv_timeout(timeout) {
-            Ok(line) if line.trim() == "ready" => Ok(process),
+            Ok(line) if line.trim() == "ready" || line.starts_with("ready ") => {
+                process.window = line
+                    .trim()
+                    .strip_prefix("ready ")
+                    .and_then(|h| h.parse().ok());
+                Ok(process)
+            }
             Ok(line) if line.starts_with("error") => {
                 process.kill();
                 Err(io::Error::other(
@@ -152,12 +164,20 @@ mod tests {
             Duration::from_secs(20),
         )
         .unwrap();
+        assert_eq!(p.window, None, "an old host without its window handle");
         p.move_to(ScreenRect {
             x: 1,
             y: 2,
             width: 3,
             height: 4,
         });
+        drop(p);
+        let p = PreviewProcess::start(
+            powershell("[Console]::Out.WriteLine('ready 4242'); [Console]::Out.Flush(); Start-Sleep -Seconds 30"),
+            Duration::from_secs(20),
+        )
+        .unwrap();
+        assert_eq!(p.window, Some(4242));
         drop(p);
         let e = PreviewProcess::start(
             powershell("Write-Output 'error sem visualizador'"),

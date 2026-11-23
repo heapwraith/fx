@@ -260,6 +260,8 @@ pub struct FolderView {
     stale_images: Vec<Arc<gpui::RenderImage>>,
     /// Disk search panel (Ctrl+F, T1.23).
     search: Option<search::Search>,
+    /// Follows window moves while a Windows viewer is shown (T5.6).
+    preview_follow: Option<gpui::Subscription>,
 }
 
 /// Which optional columns fit (T1.19): in a narrow list the type goes
@@ -464,6 +466,7 @@ impl FolderView {
             media: groups::Media::default(),
             archive: None,
             file_diff: None,
+            preview_follow: None,
         };
         crate::visits::visit(&view.path);
         view.start_loading(cx);

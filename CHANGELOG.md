@@ -62,6 +62,7 @@ Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualiz
 - Esperas da interface não ocupam mais o pool de threads do Windows; a atualização roda numa thread própria.
 
 ### Corrigido
+- A prévia de PDF e Office no Quick Look não cobre mais a paleta e os menus do fx, e acompanha a janela ao arrastar.
 - F6 no painel duplo volta a mover a seleção para o outro painel (antes ia para a barra lateral).
 - Desinstalar não deixa mais uma cópia do desinstalador na pasta temporária.
 - O serviço de busca no disco não fica mais com uma conexão presa para sempre quando um programa conecta e não fala nada.

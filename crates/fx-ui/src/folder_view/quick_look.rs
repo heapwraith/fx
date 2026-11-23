@@ -61,6 +61,9 @@ const ZIP_MAX: usize = 5000;
 /// How long a preview handler may take to show something.
 const HANDLER_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// fx's window and the panel body in its client pixels: x, y, width, height.
+type ClientPlace = (isize, i32, i32, i32, i32);
+
 /// The `fx-preview` process of the open preview and its state.
 #[derive(Default)]
 pub(super) struct Host {
@@ -73,6 +76,9 @@ pub(super) struct Host {
     /// (a click on fx brings fx above the preview), and whether it is hidden.
     raised: Mutex<Option<std::time::Instant>>,
     hidden: AtomicBool,
+    /// The panel body in fx's client pixels and fx's window, to follow a
+    /// window drag at once (`follow`, T5.6).
+    client: Mutex<Option<ClientPlace>>,
 }
 
 impl Host {
@@ -80,6 +86,29 @@ impl Host {
     fn close(&self) {
         self.closed.store(true, Ordering::SeqCst);
         drop(self.process.lock().ok().and_then(|mut p| p.take()));
+    }
+
+    /// fx's window moved: the preview window follows right away, moved
+    /// from here (during a drag no frame is drawn until it ends; T5.6).
+    fn follow(&self) {
+        let Some((owner, x, y, width, height)) = *lock(&self.client) else {
+            return;
+        };
+        let Some(hwnd) = lock(&self.process).as_ref().and_then(|p| p.window) else {
+            return;
+        };
+        let (sx, sy) = fx_shell::preview_host::client_to_screen(owner, x, y);
+        let rect = ScreenRect {
+            x: sx,
+            y: sy,
+            width,
+            height,
+        };
+        let mut last = lock(&self.last);
+        if *last != Some(rect) {
+            *last = Some(rect);
+            fx_shell::preview_host::move_window(hwnd, rect);
+        }
     }
 
     /// Called every frame with the panel body in screen pixels: starts the
@@ -273,7 +302,28 @@ impl FolderView {
 
     /// Called every frame while open: follows the cursor, and frees the GPU
     /// copies of images no longer shown.
+    /// While a Windows viewer is shown, fx's window moves take it along at
+    /// once (`Host::follow`); the subscription ends with the preview.
+    fn sync_preview_follow(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let handler = self
+            .quick_look
+            .as_ref()
+            .is_some_and(|q| matches!(q.content, Content::Handler(..)));
+        if !handler {
+            self.preview_follow = None;
+        } else if self.preview_follow.is_none() {
+            self.preview_follow = Some(cx.observe_window_bounds(window, |view, _, _| {
+                if let Some(q) = view.quick_look.as_ref()
+                    && let Content::Handler(_, host) = &q.content
+                {
+                    host.follow();
+                }
+            }));
+        }
+    }
+
     pub(super) fn sync_quick_look(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.sync_preview_follow(window, cx);
         for image in self.stale_images.drain(..) {
             let _ = window.drop_image(image);
         }
@@ -427,6 +477,8 @@ impl FolderView {
                     .into_any_element(),
                     None => {
                         let waiting = host.waiting();
+                        let covered =
+                            crate::tabs_view::overlay_open() || self.view_menu || self.crumb_menu;
                         div()
                             .size_full()
                             .relative()
@@ -446,10 +498,16 @@ impl FolderView {
                                         let scale = window.scale_factor();
                                         let px =
                                             |v: gpui::Pixels| (f32::from(v) * scale).round() as i32;
-                                        let (x, y) = fx_shell::preview_host::client_to_screen(
+                                        let (cx_, cy_) = (px(bounds.origin.x), px(bounds.origin.y));
+                                        *lock(&host.client) = Some((
                                             owner,
-                                            px(bounds.origin.x),
-                                            px(bounds.origin.y),
+                                            cx_,
+                                            cy_,
+                                            px(bounds.size.width),
+                                            px(bounds.size.height),
+                                        ));
+                                        let (x, y) = fx_shell::preview_host::client_to_screen(
+                                            owner, cx_, cy_,
                                         );
                                         let rect = ScreenRect {
                                             x,
@@ -457,7 +515,9 @@ impl FolderView {
                                             width: px(bounds.size.width),
                                             height: px(bounds.size.height),
                                         };
-                                        let active = window.is_window_active();
+                                        // Hidden under fx's own menus and panels (the
+                                        // preview is a window of its own, above them).
+                                        let active = window.is_window_active() && !covered;
                                         host.place(owner, rect, &path, active);
                                         // Until it shows (or fails), check every frame;
                                         // afterwards a 250 ms tick keeps it in place.

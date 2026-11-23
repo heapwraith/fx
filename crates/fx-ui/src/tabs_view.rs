@@ -108,6 +108,16 @@ struct DraggedTab {
     font: &'static str,
 }
 
+/// A panel of the window (palette, settings, guide, history) is open: a
+/// Windows viewer in Quick Look, a window of another process drawn above
+/// fx, hides so it does not cover it (T5.6). Set by the window's render
+/// before the tabs are drawn.
+static OVERLAY_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub(crate) fn overlay_open() -> bool {
+    OVERLAY_OPEN.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 impl Render for DraggedTab {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let t = self.theme;
@@ -891,6 +901,11 @@ impl Render for TabsView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = self.look.theme;
         let wide = f32::from(window.viewport_size().width) >= SIDEBAR_MIN_WINDOW;
+        // Read by the Quick Look of the tabs drawn next (T5.6).
+        OVERLAY_OPEN.store(
+            self.palette_open() || self.settings.is_some() || self.guide || self.history_open,
+            std::sync::atomic::Ordering::Relaxed,
+        );
         self.publish_window_overlay(cx);
         self.sync_pane_focus(window, cx);
         let active = self.tabs.active_index();

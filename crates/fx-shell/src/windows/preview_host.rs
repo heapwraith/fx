@@ -163,6 +163,26 @@ fn client_rect(hwnd: HWND) -> RECT {
     r
 }
 
+/// Moves the preview window `hwnd` (of the `fx-preview` process) to `rect`
+/// from fx itself, asynchronously (fx never waits for that process; T5.6).
+pub fn move_window(hwnd: isize, rect: ScreenRect) {
+    use windows::Win32::UI::WindowsAndMessaging::SWP_ASYNCWINDOWPOS;
+    // SAFETY: SetWindowPos on a handle of another process is allowed; a
+    // stale handle just fails. ASYNCWINDOWPOS posts the request to the
+    // window's own thread instead of waiting for it.
+    let _ = unsafe {
+        SetWindowPos(
+            HWND(hwnd as *mut _),
+            None,
+            rect.x,
+            rect.y,
+            rect.width,
+            rect.height,
+            SWP_NOACTIVATE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS,
+        )
+    };
+}
+
 /// Hosts the preview of `path` in a popup owned by `owner` at `rect`, until
 /// told to quit (or its input closes). Prints `ready` or `error …`.
 pub fn run_host(path: &Path, _owner: isize, rect: ScreenRect) -> io::Result<()> {
@@ -225,7 +245,9 @@ pub fn run_host(path: &Path, _owner: isize, rect: ScreenRect) -> io::Result<()> 
         return Ok(());
     }
     HANDLER.with(|h| *h.borrow_mut() = Some(handler));
-    say("ready");
+    // The window handle lets fx move it at once while its own window is
+    // dragged (T5.6), without waiting for a frame.
+    say(&format!("ready {}", hwnd.0 as isize));
 
     // Commands from fx arrive on standard input.
     let target = hwnd.0 as isize;
