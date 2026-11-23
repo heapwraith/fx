@@ -68,7 +68,11 @@ pub fn run() -> std::io::Result<()> {
     let rel = release_dir()?;
     let setup = pack_installer(&rel)?;
     let sizes = [
-        ("S1 fx.exe", size_mb(&rel.join("fx.exe"))?, S1_FX),
+        (
+            "S1 pathdash.exe",
+            size_mb(&rel.join("pathdash.exe"))?,
+            S1_FX,
+        ),
         ("S2 installer", size_mb(&setup)?, S2_SETUP),
         (
             "S3 fx-indexd.exe",

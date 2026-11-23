@@ -53,13 +53,13 @@ BEGIN
   BEGIN
     BLOCK "041604B0"
     BEGIN
-      VALUE "CompanyName", "fx"
-      VALUE "FileDescription", "fx — gerenciador de arquivos"
+      VALUE "CompanyName", "Pathdash"
+      VALUE "FileDescription", "Pathdash — gerenciador de arquivos"
       VALUE "FileVersion", "{version}"
-      VALUE "InternalName", "fx"
+      VALUE "InternalName", "pathdash"
       VALUE "LegalCopyright", "MIT OR Apache-2.0"
-      VALUE "OriginalFilename", "fx.exe"
-      VALUE "ProductName", "fx"
+      VALUE "OriginalFilename", "pathdash.exe"
+      VALUE "ProductName", "Pathdash"
       VALUE "ProductVersion", "{full}"
     END
   END

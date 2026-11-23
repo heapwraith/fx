@@ -1,10 +1,10 @@
-# Guia de uso do fx
+# Guia de uso do Pathdash
 
-O fx é um gerenciador de arquivos para Windows 10 e 11. Tudo se faz pelo teclado; na dúvida, **Ctrl+K** abre a paleta, que encontra qualquer comando ou pasta pelo nome. **F1** mostra o resumo dos atalhos dentro do próprio fx.
+O Pathdash é um gerenciador de arquivos para Windows 10 e 11. Tudo se faz pelo teclado; na dúvida, **Ctrl+K** abre a paleta, que encontra qualquer comando ou pasta pelo nome. **F1** mostra o resumo dos atalhos dentro do próprio fx.
 
 ## Instalar
 
-Baixe o instalador (`fx-<versão>-setup-x64.exe`, ou `-arm64` em PCs ARM) e abra. Ele instala só para o seu usuário, sem senha de administrador, em poucos segundos. As atualizações chegam sozinhas e são aplicadas quando o fx fecha (pode desligar em Configurações › Sistema). Para desinstalar: Configurações do Windows › Aplicativos › fx.
+Baixe o instalador (`Pathdash-<versão>-setup-x64.exe`, ou `-arm64` em PCs ARM) e abra. Ele instala só para o seu usuário, sem senha de administrador, em poucos segundos. As atualizações chegam sozinhas e são aplicadas quando o Pathdash fecha (pode desligar em Configurações › Sistema). Para desinstalar: Configurações do Windows › Aplicativos › fx.
 
 ## Navegar
 
@@ -18,7 +18,7 @@ Baixe o instalador (`fx-<versão>-setup-x64.exe`, ou `-arm64` em PCs ARM) e abra
 | letras | filtram a pasta na hora (Esc limpa) |
 | Ctrl+B | mostra ou esconde a barra lateral |
 
-A barra de caminho mostra as pastas acima; clicar numa delas vai até lá. Na paleta, digite parte do nome de uma pasta que você abre muito: o fx aprende quais você usa mais e as coloca primeiro ("proj fx" acha `C:\Projetos\fx`).
+A barra de caminho mostra as pastas acima; clicar numa delas vai até lá. Na paleta, digite parte do nome de uma pasta que você abre muito: o Pathdash aprende quais você usa mais e as coloca primeiro ("proj Pathdash" acha `C:\Projetos\fx`).
 
 ## Buscar
 
@@ -49,7 +49,7 @@ Nos resultados, Enter abre e Ctrl+Enter mostra o arquivo na pasta dele. **Ctrl+S
 | Alt+Enter | Propriedades do Windows |
 | Shift+F10 | menu de contexto do Windows |
 
-Cópias e movimentos vão para uma fila com progresso real; conflitos de nome perguntam o que fazer, e o padrão é manter os dois. Arrastar e soltar funciona entre o fx, o Explorador e outros programas.
+Cópias e movimentos vão para uma fila com progresso real; conflitos de nome perguntam o que fazer, e o padrão é manter os dois. Arrastar e soltar funciona entre o Pathdash, o Explorador e outros programas.
 
 ## Ver
 
@@ -61,7 +61,7 @@ Cópias e movimentos vão para uma fila com progresso real; conflitos de nome pe
 | Ctrl+Shift+3 | vista em colunas |
 | Alt+Shift+P | painel de detalhes (propriedades do arquivo) |
 
-O fx abre no tema escuro; em Configurações › Aparência dá para escolher o claro ou seguir o Windows.
+O Pathdash abre no tema escuro; em Configurações › Aparência dá para escolher o claro ou seguir o Windows.
 
 Pela paleta: alternar grade e lista, ordenar, agrupar por tipo, data ou tamanho, e as colunas de dimensões, duração e data da foto.
 
@@ -101,8 +101,8 @@ Arraste uma aba para a área dos painéis para levá-la a uma janela nova. "Salv
 
 ## Gerenciador padrão
 
-Em Configurações › Sistema, o fx pode abrir no lugar do Explorador (Win+E e pastas abertas por outros programas). Pastas que não existem no disco (Lixeira, Este Computador, Painel de Controle) continuam abrindo no Explorador. O mesmo lugar desfaz a troca.
+Em Configurações › Sistema, o Pathdash pode abrir no lugar do Explorador (Win+E e pastas abertas por outros programas). Pastas que não existem no disco (Lixeira, Este Computador, Painel de Controle) continuam abrindo no Explorador. O mesmo lugar desfaz a troca.
 
 ## Privacidade
 
-O fx não envia nada: não há telemetria. A única conexão é a verificação de atualizações no GitHub, que pode ser desligada. Relatórios de falha ficam no seu PC e só são enviados se você pedir.
+O Pathdash não envia nada: não há telemetria. A única conexão é a verificação de atualizações no GitHub, que pode ser desligada. Relatórios de falha ficam no seu PC e só são enviados se você pedir.

@@ -364,7 +364,7 @@ pub const COMMANDS: &[Command] = &[
         ("Ordenar por data de modificação", "Sort by date modified"),
         Action::Sort(SortKey::Modified),
     ),
-    direct(("Sobre o fx", "About fx"), Action::About),
+    direct(("Sobre o Pathdash", "About Pathdash"), Action::About),
     direct(
         (
             "Ativar a busca no disco inteiro",
@@ -381,8 +381,8 @@ pub const COMMANDS: &[Command] = &[
     ),
     direct(
         (
-            "Tornar o fx o gerenciador padrão",
-            "Make fx the default file manager",
+            "Tornar o Pathdash o gerenciador padrão",
+            "Make Pathdash the default file manager",
         ),
         Action::DefaultManager(true),
     ),
@@ -416,7 +416,7 @@ pub const COMMANDS: &[Command] = &[
         ),
         Action::CrashReports,
     ),
-    direct(("Atualizar o fx", "Update fx"), Action::Update),
+    direct(("Atualizar o Pathdash", "Update Pathdash"), Action::Update),
     direct(
         (
             "Atualizações automáticas: ligar ou desligar",
@@ -424,7 +424,7 @@ pub const COMMANDS: &[Command] = &[
         ),
         Action::UpdateChecks,
     ),
-    window(("Como usar o fx", "How to use fx"), "f1"),
+    window(("Como usar o Pathdash", "How to use Pathdash"), "f1"),
     direct(
         (
             "Confirmar antes de enviar para a Lixeira",

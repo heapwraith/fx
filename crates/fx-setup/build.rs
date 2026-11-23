@@ -46,13 +46,13 @@ BEGIN
   BEGIN
     BLOCK "041604B0"
     BEGIN
-      VALUE "CompanyName", "fx"
-      VALUE "FileDescription", "fx — instalador"
+      VALUE "CompanyName", "Pathdash"
+      VALUE "FileDescription", "Pathdash — instalador"
       VALUE "FileVersion", "{version}"
       VALUE "InternalName", "fx-setup"
       VALUE "LegalCopyright", "MIT OR Apache-2.0"
       VALUE "OriginalFilename", "fx-setup.exe"
-      VALUE "ProductName", "fx"
+      VALUE "ProductName", "Pathdash"
       VALUE "ProductVersion", "{full}"
     END
   END

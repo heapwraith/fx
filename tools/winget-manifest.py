@@ -3,18 +3,18 @@
 microsoft/winget-pkgs once the release is published on GitHub (the URLs must
 answer and the hashes match the files there).
 
-    python3 tools/winget-manifest.py 1.0.0 dist/fx-1.0.0-setup-x64.exe dist/fx-1.0.0-setup-arm64.exe
+    python3 tools/winget-manifest.py 1.0.0 dist/Pathdash-1.0.0-setup-x64.exe dist/Pathdash-1.0.0-setup-arm64.exe
 
-Writes packaging/winget/manifests/h/heapwraith/fx/<version>/ with the three
+Writes packaging/winget/manifests/h/heapwraith/Pathdash/<version>/ with the three
 files of manifest schema 1.9 (version, installer, defaultLocale). The
-installer is fx's own (`fx-setup`): per-user, no administrator, `--silent`.
+installer is Pathdash's own (`fx-setup`): per-user, no administrator, `--silent`.
 """
 
 import hashlib
 import pathlib
 import sys
 
-ID = "heapwraith.fx"
+ID = "heapwraith.Pathdash"
 REPO = "https://github.com/heapwraith/fx"
 SCHEMA = "1.9.0"
 
@@ -31,7 +31,7 @@ def main():
     if len(sys.argv) < 3:
         sys.exit(__doc__)
     version, installers = sys.argv[1], sys.argv[2:]
-    out = pathlib.Path("packaging/winget/manifests/h/heapwraith/fx") / version
+    out = pathlib.Path("packaging/winget/manifests/h/heapwraith/Pathdash") / version
     out.mkdir(parents=True, exist_ok=True)
     head = f"# yaml-language-server: $schema=https://aka.ms/winget-manifest.{{}}.{SCHEMA}.schema.json\n"
     (out / f"{ID}.yaml").write_text(
@@ -65,7 +65,7 @@ def main():
     (out / f"{ID}.locale.pt-BR.yaml").write_text(
         head.format("defaultLocale")
         + f"PackageIdentifier: {ID}\nPackageVersion: {version}\nPackageLocale: pt-BR\n"
-        + "Publisher: fx\nPublisherUrl: " + REPO + "\nPackageName: fx\n"
+        + "Publisher: Pathdash\nPublisherUrl: " + REPO + "\nPackageName: Pathdash\n"
         + "PackageUrl: " + REPO + "\nLicense: MIT OR Apache-2.0\n"
         + f"LicenseUrl: {REPO}/blob/main/LICENSE-MIT\n"
         + "ShortDescription: Gerenciador de arquivos rápido para Windows, com busca no disco inteiro enquanto você digita.\n"
@@ -73,7 +73,7 @@ def main():
         + "  Abre qualquer pasta na hora, acha qualquer arquivo do disco em milissegundos lendo a MFT do NTFS,\n"
         + "  tem abas, painéis, Quick Look, terminal embutido, etiquetas e desfazer de qualquer operação,\n"
         + "  e pode substituir o Explorador como gerenciador padrão. Sem telemetria.\n"
-        + "Tags:\n  - file-manager\n  - explorer\n  - search\n  - gerenciador-de-arquivos\n"
+        + "Tags:\n  - file-manager\n  - explorer\n  - search\n  - gerenciador-de-arquivos\n  - pathdash\n"
         + f"ReleaseNotesUrl: {REPO}/blob/main/CHANGELOG.md\n"
         + f"ManifestType: defaultLocale\nManifestVersion: {SCHEMA}\n",
         encoding="utf-8",

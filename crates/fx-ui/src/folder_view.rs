@@ -1574,7 +1574,7 @@ pub fn window_title(path: &Path) -> String {
         || path.display().to_string(),
         |n| n.to_string_lossy().into_owned(),
     );
-    format!("{name} — fx")
+    format!("{name} — Pathdash")
 }
 
 impl Render for FolderView {

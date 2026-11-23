@@ -9,8 +9,12 @@ use fx_core::package::{self, FileEntry, Manifest};
 /// The setup program itself, installed as the uninstaller and the update
 /// helper.
 pub const SETUP_EXE: &str = "fx-setup.exe";
+/// The app (identity Pathdash, D-074).
+pub const APP_EXE: &str = "pathdash.exe";
+/// The app's name up to 0.3.0: removed when installing over it.
+pub const LEGACY_EXE: &str = "fx.exe";
 /// Programs taken from the build folder.
-pub const PROGRAMS: [&str; 3] = ["fx.exe", "fx-indexd.exe", "fx-preview.exe"];
+pub const PROGRAMS: [&str; 3] = [APP_EXE, "fx-indexd.exe", "fx-preview.exe"];
 /// Documents taken from the repository root.
 pub const DOCUMENTS: [&str; 5] = [
     "LICENSE-MIT",

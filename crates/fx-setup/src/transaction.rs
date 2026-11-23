@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use fx_shell::install::{self as win, UninstallEntry};
 
-use crate::pack::{DOCUMENTS, PROGRAMS, Package, SETUP_EXE};
+use crate::pack::{APP_EXE, DOCUMENTS, LEGACY_EXE, PROGRAMS, Package, SETUP_EXE};
 
 /// Where things go. `default()` is the real per-user location; tests point
 /// everything at temporary folders and a test registry key.
@@ -32,6 +32,11 @@ pub struct Target {
     pub uninstall_key: String,
     /// The old Inno Setup entry to adopt (removed after installing).
     pub legacy_key: Option<String>,
+    /// The default-manager keys (classes root, backup) under `HKCU`: if
+    /// they point at the old `fx.exe`, installing moves them to the new
+    /// program, so Win+E keeps working (D-074). `None` in tests that must
+    /// not touch them.
+    pub default_manager: Option<(String, String)>,
 }
 
 impl Target {
@@ -43,27 +48,47 @@ impl Target {
         if let Some(root) = test_root {
             return Some(Target {
                 dir: root.join("Programs").join("fx"),
-                start_menu: Some(root.join("Start Menu").join("fx.lnk")),
-                desktop: Some(root.join("Desktop").join("fx.lnk")),
+                start_menu: Some(root.join("Start Menu").join(SHORTCUT)),
+                desktop: Some(root.join("Desktop").join(SHORTCUT)),
                 uninstall_key: r"Software\fx-test-setup\Uninstall\fx".to_owned(),
                 legacy_key: None,
+                default_manager: None,
             });
         }
         let local = std::env::var_os("LOCALAPPDATA").map(PathBuf::from)?;
         Some(Target {
             dir: local.join("Programs").join("fx"),
-            start_menu: win::start_menu_programs().map(|p| p.join("fx.lnk")),
+            start_menu: win::start_menu_programs().map(|p| p.join(SHORTCUT)),
             desktop: fx_shell::known_folder(fx_shell::places::KnownFolder::Desktop)
-                .map(|p| p.join("fx.lnk")),
+                .map(|p| p.join(SHORTCUT)),
             uninstall_key: win::UNINSTALL_KEY.to_owned(),
             legacy_key: Some(win::INNO_KEY.to_owned()),
+            default_manager: Some((
+                fx_shell::default_manager::CLASSES.to_owned(),
+                fx_shell::default_manager::BACKUP.to_owned(),
+            )),
         })
     }
 
     pub fn exe(&self) -> PathBuf {
-        self.dir.join("fx.exe")
+        self.dir.join(APP_EXE)
+    }
+
+    /// The program as it was named up to 0.3.0.
+    pub fn legacy_exe(&self) -> PathBuf {
+        self.dir.join(LEGACY_EXE)
+    }
+
+    /// The shortcut a 0.3.0 install left next to `lnk` (`fx.lnk`).
+    fn legacy_shortcut(lnk: &Path) -> PathBuf {
+        lnk.with_file_name(LEGACY_SHORTCUT)
     }
 }
+
+/// The app's name, as the shortcuts and Settings › Apps show it.
+const APP_NAME: &str = "Pathdash";
+const SHORTCUT: &str = "Pathdash.lnk";
+const LEGACY_SHORTCUT: &str = "fx.lnk";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Options {
@@ -82,7 +107,8 @@ pub enum Step {
 
 /// The version installed at `t`, if any (from the Settings › Apps entry).
 pub fn installed_version(t: &Target) -> Option<String> {
-    win::registered_version(&t.uninstall_key).filter(|_| t.dir.join("fx.exe").exists())
+    win::registered_version(&t.uninstall_key)
+        .filter(|_| t.exe().exists() || t.legacy_exe().exists())
 }
 
 fn old_name(name: &str) -> String {
@@ -188,14 +214,32 @@ pub fn install(
     // A failed swap put everything back.
     staged.map_err(InstallError::NothingChanged)?;
 
+    let exe = t.exe();
+    // Over a 0.3.0 install: the program was fx.exe. Set it aside (deleted
+    // below, or at the next install if it is somehow still running) and
+    // move the default-manager keys that point at it to the new program.
+    let legacy = t.legacy_exe();
+    if legacy.exists() {
+        if let Some((classes, backup)) = &t.default_manager
+            && fx_shell::default_manager::is_default(classes, &legacy.to_string_lossy())
+        {
+            let _ = fx_shell::default_manager::enable(classes, backup, &exe.to_string_lossy());
+        }
+        let _ = std::fs::rename(&legacy, t.dir.join(old_name(LEGACY_EXE)));
+    }
+
     let incomplete = |missing| move |error| InstallError::Incomplete { missing, error };
     progress(Step::Shortcuts);
-    let exe = t.exe();
     if let Some(lnk) = &t.start_menu {
-        win::create_shortcut(lnk, &exe, "fx").map_err(incomplete(Missing::Shortcut))?;
+        let _ = std::fs::remove_file(Target::legacy_shortcut(lnk));
+        win::create_shortcut(lnk, &exe, APP_NAME).map_err(incomplete(Missing::Shortcut))?;
     }
-    if let Some(lnk) = t.desktop.as_ref().filter(|_| opts.desktop_shortcut) {
-        win::create_shortcut(lnk, &exe, "fx").map_err(incomplete(Missing::Shortcut))?;
+    if let Some(lnk) = &t.desktop {
+        // Keep a desktop shortcut the user already had under the old name.
+        let had = std::fs::remove_file(Target::legacy_shortcut(lnk)).is_ok() || lnk.exists();
+        if opts.desktop_shortcut || had {
+            win::create_shortcut(lnk, &exe, APP_NAME).map_err(incomplete(Missing::Shortcut))?;
+        }
     }
 
     progress(Step::Registering);
@@ -204,9 +248,9 @@ pub fn install(
     win::register_uninstall(
         &t.uninstall_key,
         &UninstallEntry {
-            name: "fx".into(),
+            name: APP_NAME.into(),
             version: display_version(pkg.version()),
-            publisher: "fx".into(),
+            publisher: APP_NAME.into(),
             install_dir: t.dir.clone(),
             icon: exe.clone(),
             uninstall: format!("\"{}\" --uninstall", setup.display()),
@@ -239,6 +283,7 @@ pub fn display_version(v: &str) -> String {
 fn installed_names() -> Vec<&'static str> {
     let mut v = vec![SETUP_EXE];
     v.extend(PROGRAMS);
+    v.push(LEGACY_EXE);
     v.extend(DOCUMENTS);
     v.extend(["unins000.exe", "unins000.dat"]);
     v
@@ -249,13 +294,14 @@ fn installed_names() -> Vec<&'static str> {
 /// if a program is still running.
 pub fn uninstall(t: &Target, data: &[PathBuf], progress: &mut dyn FnMut(Step)) -> io::Result<()> {
     // Refuse anything that does not look like an fx install folder.
-    if t.dir.file_name().is_none_or(|n| n != "fx") || !t.dir.join("fx.exe").exists() {
-        return Err(io::Error::other("not an fx install folder"));
-    }
+    // The program, under its current name or the one up to 0.3.0.
+    let exe = [t.exe(), t.legacy_exe()].into_iter().find(|p| p.exists());
+    let Some(exe) = exe.filter(|_| t.dir.file_name().is_some_and(|n| n == "fx")) else {
+        return Err(io::Error::other("not a Pathdash install folder"));
+    };
     // A running fx.exe cannot be deleted: check first, before touching
     // anything (renaming it to itself fails the same way deletion would
     // not, so try opening it for deletion through a rename round trip).
-    let exe = t.exe();
     let probe = t.dir.join(old_name("probe"));
     std::fs::rename(&exe, &probe)?;
     let delete = std::fs::remove_file(&probe);
@@ -276,6 +322,7 @@ pub fn uninstall(t: &Target, data: &[PathBuf], progress: &mut dyn FnMut(Step)) -
     let _ = std::fs::remove_dir(&t.dir); // only if now empty
     for lnk in [&t.start_menu, &t.desktop].into_iter().flatten() {
         let _ = std::fs::remove_file(lnk);
+        let _ = std::fs::remove_file(Target::legacy_shortcut(lnk));
     }
     progress(Step::Registering);
     win::unregister_uninstall(&t.uninstall_key)?;
@@ -320,13 +367,14 @@ mod tests {
     fn target(root: &Path, tag: &str) -> Target {
         Target {
             dir: root.join("Programs").join("fx"),
-            start_menu: Some(root.join("menu").join("fx.lnk")),
-            desktop: Some(root.join("desk").join("fx.lnk")),
+            start_menu: Some(root.join("menu").join(SHORTCUT)),
+            desktop: Some(root.join("desk").join(SHORTCUT)),
             uninstall_key: format!(
                 r"Software\fx-test-{}-{tag}\Uninstall\fx",
                 std::process::id()
             ),
             legacy_key: None,
+            default_manager: None,
         }
     }
 
@@ -360,7 +408,7 @@ mod tests {
         // A shortcut inside a file cannot be created.
         let blocker = root.path().join("not-a-folder");
         std::fs::write(&blocker, b"x").unwrap();
-        t.start_menu = Some(blocker.join("fx.lnk"));
+        t.start_menu = Some(blocker.join(SHORTCUT));
         let opts = Options {
             desktop_shortcut: false,
         };
@@ -375,7 +423,10 @@ mod tests {
             ),
             "{e:?}"
         );
-        assert_eq!(std::fs::read_to_string(t.exe()).unwrap(), "fx.exe 1.0.0");
+        assert_eq!(
+            std::fs::read_to_string(t.exe()).unwrap(),
+            "pathdash.exe 1.0.0"
+        );
         assert!(
             !win::is_registered(&t.uninstall_key),
             "registering comes after"
@@ -398,7 +449,10 @@ mod tests {
         .unwrap();
         assert_eq!(steps.last(), Some(&Step::Done));
         assert!(steps.contains(&Step::Copying(4, 4)));
-        assert_eq!(std::fs::read_to_string(t.exe()).unwrap(), "fx.exe 1.0.0");
+        assert_eq!(
+            std::fs::read_to_string(t.exe()).unwrap(),
+            "pathdash.exe 1.0.0"
+        );
         assert!(t.start_menu.as_ref().unwrap().exists());
         assert!(t.desktop.as_ref().unwrap().exists());
         assert_eq!(installed_version(&t).as_deref(), Some("1.0.0"));
@@ -414,7 +468,10 @@ mod tests {
             &mut |_| {},
         )
         .unwrap();
-        assert_eq!(std::fs::read_to_string(t.exe()).unwrap(), "fx.exe 2.0.0");
+        assert_eq!(
+            std::fs::read_to_string(t.exe()).unwrap(),
+            "pathdash.exe 2.0.0"
+        );
         let aside = std::fs::read_dir(&t.dir)
             .unwrap()
             .flatten()
@@ -436,6 +493,48 @@ mod tests {
         assert!(!data.exists());
         assert_eq!(installed_version(&t), None);
         cleanup_key("a");
+    }
+
+    /// Installing over 0.3.0 (program `fx.exe`, shortcut `fx.lnk`, fx as
+    /// the default manager): the old program and shortcuts go, a desktop
+    /// shortcut the user had comes back under the new name, and the default
+    /// manager points at the new program (D-074).
+    #[test]
+    fn installing_over_0_3_0_moves_everything_to_the_new_name() {
+        use fx_shell::default_manager::{enable, is_default};
+        let root = tempfile::tempdir().unwrap();
+        let mut t = target(root.path(), "legacy");
+        let reg = format!(r"Software\fx-test-{}-legacy", std::process::id());
+        let (classes, backup) = (format!(r"{reg}\Classes"), format!(r"{reg}\Backup"));
+        t.default_manager = Some((classes.clone(), backup.clone()));
+        std::fs::create_dir_all(&t.dir).unwrap();
+        std::fs::write(t.legacy_exe(), b"fx.exe 0.3.0").unwrap();
+        let (menu, desk) = (t.start_menu.clone().unwrap(), t.desktop.clone().unwrap());
+        for lnk in [&menu, &desk] {
+            std::fs::create_dir_all(lnk.parent().unwrap()).unwrap();
+            std::fs::write(Target::legacy_shortcut(lnk), b"old").unwrap();
+        }
+        enable(&classes, &backup, &t.legacy_exe().to_string_lossy()).unwrap();
+
+        let opts = Options {
+            desktop_shortcut: false,
+        };
+        install(&package("1.0.0"), &t, opts, &mut |_| {}).unwrap();
+        assert!(!t.legacy_exe().exists(), "fx.exe is gone");
+        assert_eq!(
+            std::fs::read_to_string(t.exe()).unwrap(),
+            "pathdash.exe 1.0.0"
+        );
+        assert!(menu.exists() && desk.exists(), "both shortcuts, new name");
+        assert!(!Target::legacy_shortcut(&menu).exists());
+        assert!(!Target::legacy_shortcut(&desk).exists());
+        assert!(is_default(&classes, &t.exe().to_string_lossy()));
+        assert_eq!(installed_version(&t).as_deref(), Some("1.0.0"));
+
+        uninstall(&t, &[], &mut |_| {}).unwrap();
+        let _ = fx_shell::default_manager::revert(&classes, &backup);
+        let _ = win::unregister_uninstall(&reg);
+        cleanup_key("legacy");
     }
 
     #[test]

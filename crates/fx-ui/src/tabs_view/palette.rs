@@ -520,8 +520,8 @@ impl TabsView {
                 Action::ConfirmRecycle => tab.update(cx, |view, cx| {
                     let text = if crate::prefs::CONFIRM_RECYCLE.switch() {
                         tr!(
-                            "O fx vai perguntar antes de enviar para a Lixeira",
-                            "fx will ask before sending to the Recycle Bin"
+                            "O Pathdash vai perguntar antes de enviar para a Lixeira",
+                            "Pathdash will ask before sending to the Recycle Bin"
                         )
                     } else {
                         tr!(

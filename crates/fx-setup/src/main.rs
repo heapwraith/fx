@@ -242,9 +242,9 @@ fn run_ui(screen: Screen, package: Option<Arc<Package>>, target: Target) {
         let (font, icon_font) = (theme::pick_font(&fonts), theme::pick_icon_font(&fonts));
         let mica_supported = fx_shell::supports_mica();
         let title = if matches!(screen, Screen::Confirm { .. }) {
-            tr!("Desinstalar o fx", "Uninstall fx")
+            tr!("Desinstalar o Pathdash", "Uninstall Pathdash")
         } else {
-            tr!("Instalar o fx", "Install fx")
+            tr!("Instalar o Pathdash", "Install Pathdash")
         };
         let bounds = Bounds::centered(None, size(px(640.0), px(440.0)), cx);
         let opened = cx.open_window(
@@ -371,8 +371,8 @@ impl Setup {
                 }) {
                     Ok(()) => Ok(Step::Done),
                     Err(e) => Err(trf!(
-                        "{e}. Feche todas as janelas do fx e tente de novo.",
-                        "{e}. Close every fx window and try again."
+                        "{e}. Feche todas as janelas do Pathdash e tente de novo.",
+                        "{e}. Close every Pathdash window and try again."
                     )),
                 },
             );
@@ -391,7 +391,7 @@ impl Setup {
         self.shown = 0.0;
         self.goal = 0.0;
         self.step = if uninstall {
-            tr!("Removendo o fx…", "Removing fx…")
+            tr!("Removendo o Pathdash…", "Removing Pathdash…")
         } else {
             tr!("Preparando…", "Preparing…")
         }
@@ -525,15 +525,15 @@ fn install_failure_text(e: &transaction::InstallError) -> String {
             missing: Missing::Shortcut,
             error,
         } => trf!(
-            "{error}. Os arquivos novos do fx já estão instalados, mas faltaram o atalho e o registro em Configurações › Aplicativos. Tente de novo para completar.",
-            "{error}. fx's new files are installed, but the shortcut and the entry in Settings › Apps are missing. Try again to finish."
+            "{error}. Os arquivos novos do Pathdash já estão instalados, mas faltaram o atalho e o registro em Configurações › Aplicativos. Tente de novo para completar.",
+            "{error}. Pathdash's new files are installed, but the shortcut and the entry in Settings › Apps are missing. Try again to finish."
         ),
         InstallError::Incomplete {
             missing: Missing::AppsEntry,
             error,
         } => trf!(
-            "{error}. Os arquivos novos e o atalho do fx já estão instalados, mas faltou o registro em Configurações › Aplicativos. Tente de novo para completar.",
-            "{error}. fx's new files and shortcut are installed, but the entry in Settings › Apps is missing. Try again to finish."
+            "{error}. Os arquivos novos e o atalho do Pathdash já estão instalados, mas faltou o registro em Configurações › Aplicativos. Tente de novo para completar.",
+            "{error}. Pathdash's new files and shortcut are installed, but the entry in Settings › Apps is missing. Try again to finish."
         ),
     }
 }
@@ -545,8 +545,8 @@ impl Render for Setup {
         self.shown = self.goal;
         let new = transaction::display_version(VERSION);
         let slogan = tr!(
-            "Pastas abrem na hora. Arquivos aparecem enquanto você digita.",
-            "Folders open instantly. Files appear as you type."
+            "Qualquer pasta, numa arrancada.",
+            "Every path, one dash away."
         );
         let failed_title = if self.package.is_some() {
             tr!("A instalação não terminou", "Installation didn't finish")
@@ -556,7 +556,7 @@ impl Render for Setup {
         let (title, subtitle, body): (String, Option<&str>, String) = match &self.screen {
             Screen::Welcome { .. } => match &self.installed {
                 Some(old) if *old == new => (
-                    tr!("Reinstalar o fx", "Reinstall fx").into(),
+                    tr!("Reinstalar o Pathdash", "Reinstall Pathdash").into(),
                     Some(slogan),
                     trf!(
                         "A versão {new} já está instalada. Reinstalar troca só os arquivos do programa; suas configurações ficam.",
@@ -564,7 +564,7 @@ impl Render for Setup {
                     ),
                 ),
                 Some(old) => (
-                    tr!("Atualizar o fx", "Update fx").into(),
+                    tr!("Atualizar o Pathdash", "Update Pathdash").into(),
                     Some(slogan),
                     trf!(
                         "Da versão {old} para a {new}. Suas abas, pastas fixadas e configurações ficam como estão.",
@@ -572,7 +572,7 @@ impl Render for Setup {
                     ),
                 ),
                 None => (
-                    tr!("Bem-vindo ao fx", "Welcome to fx").into(),
+                    tr!("Bem-vindo ao Pathdash", "Welcome to Pathdash").into(),
                     Some(slogan),
                     tr!(
                         "Leva poucos segundos. Instala só para você, sem pedir senha de administrador.",
@@ -583,9 +583,9 @@ impl Render for Setup {
             },
             Screen::Working { uninstall } => (
                 if *uninstall {
-                    tr!("Removendo o fx", "Removing fx")
+                    tr!("Removendo o Pathdash", "Removing Pathdash")
                 } else {
-                    tr!("Instalando o fx", "Installing fx")
+                    tr!("Instalando o Pathdash", "Installing Pathdash")
                 }
                 .into(),
                 Some(slogan),
@@ -593,16 +593,16 @@ impl Render for Setup {
             ),
             Screen::Done => (
                 tr!("Tudo pronto", "You're all set").into(),
-                Some(tr!("O fx já está no Menu Iniciar.", "fx is now in the Start menu.")),
+                Some(tr!("O Pathdash já está no Menu Iniciar.", "Pathdash is now in the Start menu.")),
                 tr!(
-                    "Dica: Ctrl+K abre a paleta com todos os comandos, e F1 mostra como usar o fx.",
-                    "Tip: Ctrl+K opens the palette with every command, and F1 shows how to use fx."
+                    "Dica: Ctrl+K abre a paleta com todos os comandos, e F1 mostra como usar o Pathdash.",
+                    "Tip: Ctrl+K opens the palette with every command, and F1 shows how to use Pathdash."
                 )
                 .into(),
             ),
             Screen::Failed(e) => (failed_title.into(), None, e.clone()),
             Screen::Confirm { .. } => (
-                tr!("Desinstalar o fx?", "Uninstall fx?").into(),
+                tr!("Desinstalar o Pathdash?", "Uninstall Pathdash?").into(),
                 None,
                 tr!(
                     "O programa e os atalhos saem deste computador. Suas configurações e abas salvas ficam, a menos que você marque a opção abaixo.",
@@ -611,11 +611,11 @@ impl Render for Setup {
                 .into(),
             ),
             Screen::Removed => (
-                tr!("O fx foi removido", "fx was removed").into(),
+                tr!("O Pathdash foi removido", "Pathdash was removed").into(),
                 None,
                 tr!(
-                    "Obrigado por usar o fx. Se algo fez falta, conte para nós em github.com/heapwraith/fx.",
-                    "Thanks for using fx. If something was missing, tell us at github.com/heapwraith/fx."
+                    "Obrigado por usar o Pathdash. Se algo fez falta, conte para nós em github.com/heapwraith/fx.",
+                    "Thanks for using Pathdash. If something was missing, tell us at github.com/heapwraith/fx."
                 )
                 .into(),
             ),
@@ -631,7 +631,7 @@ impl Render for Setup {
             ),
             Screen::Working { .. } => (None, None),
             Screen::Done => (
-                Some(tr!("Abrir o fx", "Open fx")),
+                Some(tr!("Abrir o Pathdash", "Open Pathdash")),
                 Some(tr!("Fechar", "Close")),
             ),
             Screen::Failed(_) if self.package.is_some() => (
@@ -816,8 +816,8 @@ impl Render for Setup {
             if self.service {
                 content = content.child(
                     div().text_size(px(CAPTION_SIZE)).text_color(rgba(t.text_secondary)).child(tr!(
-                        "O serviço de busca no disco inteiro continua instalado. Para removê-lo, use \"Desativar a busca no disco inteiro\" na paleta do fx antes.",
-                        "The whole-disk search service stays installed. To remove it, use \"Turn off whole-disk search\" in fx's palette first."
+                        "O serviço de busca no disco inteiro continua instalado. Para removê-lo, use \"Desativar a busca no disco inteiro\" na paleta do Pathdash antes.",
+                        "The whole-disk search service stays installed. To remove it, use \"Turn off whole-disk search\" in Pathdash's palette first."
                     )),
                 );
             }

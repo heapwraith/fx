@@ -26,8 +26,8 @@ impl FolderView {
         let Some(exe) = exe else {
             self.show_notice(
                 tr!(
-                    "fx-indexd.exe não está ao lado do fx.exe",
-                    "fx-indexd.exe is not next to fx.exe"
+                    "fx-indexd.exe não está ao lado do pathdash.exe",
+                    "fx-indexd.exe is not next to pathdash.exe"
                 )
                 .to_owned(),
                 cx,
@@ -80,8 +80,8 @@ impl FolderView {
             let result = crate::chan::next(rx).await.unwrap_or(Ok(()));
             let text = match (result, enable) {
                 (Ok(()), true) => tr!(
-                    "O fx agora abre pastas, unidades e o Win+E. \"Voltar ao Explorador\" desfaz",
-                    "fx now opens folders, drives and Win+E. \"Back to Explorer\" undoes it"
+                    "O Pathdash agora abre pastas, unidades e o Win+E. \"Voltar ao Explorador\" desfaz",
+                    "Pathdash now opens folders, drives and Win+E. \"Back to Explorer\" undoes it"
                 )
                 .to_owned(),
                 (Ok(()), false) => tr!(
@@ -196,13 +196,13 @@ impl FolderView {
                     Ok(Some(v)) => {
                         let v = v.to_string();
                         trf!(
-                            "Versão {v} pronta · entra quando você fechar o fx (Ctrl+K: reiniciar agora)",
-                            "Version {v} ready · applies when you close fx (Ctrl+K: restart now)"
+                            "Versão {v} pronta · entra quando você fechar o Pathdash (Ctrl+K: reiniciar agora)",
+                            "Version {v} ready · applies when you close Pathdash (Ctrl+K: restart now)"
                         )
                     }
                     _ if quiet => return,
                     Ok(None) => {
-                        tr!("O fx já está na versão mais recente", "fx is up to date").to_owned()
+                        tr!("O Pathdash já está na versão mais recente", "Pathdash is up to date").to_owned()
                     }
                     Err(e) => trf!(
                         "Não foi possível atualizar: {e}",

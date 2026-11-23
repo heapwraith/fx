@@ -121,8 +121,8 @@ impl Host {
             let Some(exe) = exe.filter(|p| p.exists()) else {
                 *lock(&self.failed) = Some(
                     tr!(
-                        "fx-preview.exe não está ao lado do fx.exe",
-                        "fx-preview.exe is not next to fx.exe"
+                        "fx-preview.exe não está ao lado do pathdash.exe",
+                        "fx-preview.exe is not next to pathdash.exe"
                     )
                     .into(),
                 );

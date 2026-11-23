@@ -59,19 +59,19 @@ jobs:
         run: cargo build --release -p fx-ui -p fx-indexd -p fx-preview -p fx-setup -p fx-setup-boot
       - name: Version of the build
         shell: pwsh
-        run: (Get-Item target/x86_64-pc-windows-msvc/release/fx.exe).VersionInfo | Format-List FileVersion, ProductVersion
+        run: (Get-Item target/x86_64-pc-windows-msvc/release/pathdash.exe).VersionInfo | Format-List FileVersion, ProductVersion
       - name: Installer (fx-setup, T4.3)
         shell: pwsh
         run: |
           $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
           $rel = "$PWD\target\x86_64-pc-windows-msvc\release"
           New-Item -ItemType Directory -Force dist | Out-Null
-          & "$rel\fx-setup.exe" --pack "$rel\fx-setup-boot.exe" $rel $PWD "$PWD\dist\fx-$v-setup-x64.exe" | Out-Host
-          if (-not (Test-Path "dist\fx-$v-setup-x64.exe")) { throw "fx-setup --pack failed" }
+          & "$rel\fx-setup.exe" --pack "$rel\fx-setup-boot.exe" $rel $PWD "$PWD\dist\Pathdash-$v-setup-x64.exe" | Out-Host
+          if (-not (Test-Path "dist\Pathdash-$v-setup-x64.exe")) { throw "fx-setup --pack failed" }
           # The package must install and uninstall cleanly (test folder and key).
           $root = "$env:RUNNER_TEMP\fx-setup-ci"
-          Start-Process -Wait -FilePath "dist\fx-$v-setup-x64.exe" -ArgumentList "--silent","--test-root",$root
-          if (-not (Test-Path "$root\Programs\fx\fx.exe")) { throw "silent install failed" }
+          Start-Process -Wait -FilePath "dist\Pathdash-$v-setup-x64.exe" -ArgumentList "--silent","--test-root",$root
+          if (-not (Test-Path "$root\Programs\fx\pathdash.exe")) { throw "silent install failed" }
           Get-ChildItem dist
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -82,7 +82,7 @@ jobs:
         with:
           name: fx-exe
           path: |
-            target/x86_64-pc-windows-msvc/release/fx.exe
+            target/x86_64-pc-windows-msvc/release/pathdash.exe
             target/x86_64-pc-windows-msvc/release/fx-indexd.exe
             target/x86_64-pc-windows-msvc/release/fx-preview.exe
           retention-days: 14
@@ -109,13 +109,13 @@ jobs:
           $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
           $arm = "$PWD\target\aarch64-pc-windows-msvc\release"
           New-Item -ItemType Directory -Force dist | Out-Null
-          & "$PWD\target\x86_64-pc-windows-msvc\release\fx-setup.exe" --pack "$arm\fx-setup-boot.exe" $arm $PWD "$PWD\dist\fx-$v-setup-arm64.exe" | Out-Host
-          if (-not (Test-Path "dist\fx-$v-setup-arm64.exe")) { throw "fx-setup --pack failed" }
+          & "$PWD\target\x86_64-pc-windows-msvc\release\fx-setup.exe" --pack "$arm\fx-setup-boot.exe" $arm $PWD "$PWD\dist\Pathdash-$v-setup-arm64.exe" | Out-Host
+          if (-not (Test-Path "dist\Pathdash-$v-setup-arm64.exe")) { throw "fx-setup --pack failed" }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fx-arm64
           path: |
-            target/aarch64-pc-windows-msvc/release/fx.exe
+            target/aarch64-pc-windows-msvc/release/pathdash.exe
             target/aarch64-pc-windows-msvc/release/fx-indexd.exe
             target/aarch64-pc-windows-msvc/release/fx-preview.exe
             dist/*-setup-arm64.exe
@@ -154,10 +154,10 @@ jobs:
         run: |
           $v = "${{ steps.version.outputs.version }}"
           Copy-Item LICENSE-MIT, LICENSE-APACHE, THIRD-PARTY-NOTICES.txt, README.md, CHANGELOG.md dist/
-          Compress-Archive -Path dist/* -DestinationPath "fx-$v-windows-x64.zip"
+          Compress-Archive -Path dist/* -DestinationPath "Pathdash-$v-windows-x64.zip"
           New-Item -ItemType Directory arm64zip | Out-Null
           Copy-Item arm64/target/aarch64-pc-windows-msvc/release/*.exe, LICENSE-MIT, LICENSE-APACHE, THIRD-PARTY-NOTICES.txt, README.md, CHANGELOG.md arm64zip/
-          Compress-Archive -Path arm64zip/* -DestinationPath "fx-$v-windows-arm64.zip"
+          Compress-Archive -Path arm64zip/* -DestinationPath "Pathdash-$v-windows-arm64.zip"
           $lines = Get-Content CHANGELOG.md
           $start = ($lines | Select-String -Pattern "^## \[$([regex]::Escape($v))\]").LineNumber
           if (-not $start) { throw "CHANGELOG.md has no section for $v" }
@@ -174,10 +174,10 @@ jobs:
           $setup = (Get-ChildItem setup/*-setup-x64.exe | Select-Object -First 1).FullName
           $setupArm = (Get-ChildItem -Recurse arm64 -Filter *-setup-arm64.exe | Select-Object -First 1).FullName
           # Checksums the updater checks the installers against (T4.1).
-          $sums = foreach ($f in @("fx-$v-windows-x64.zip", "fx-$v-windows-arm64.zip", $setup, $setupArm)) {
+          $sums = foreach ($f in @("Pathdash-$v-windows-x64.zip", "Pathdash-$v-windows-arm64.zip", $setup, $setupArm)) {
             "{0}  {1}" -f (Get-FileHash -Algorithm SHA256 $f).Hash.ToLower(), (Split-Path $f -Leaf)
           }
           $sums | Set-Content -Encoding ascii SHA256SUMS.txt
-          $ghArgs = @("${{ github.ref_name }}", "fx-$v-windows-x64.zip", "fx-$v-windows-arm64.zip", $setup, $setupArm, "SHA256SUMS.txt", "--draft", "--title", "fx $v", "--notes-file", "notes.md")
+          $ghArgs = @("${{ github.ref_name }}", "Pathdash-$v-windows-x64.zip", "Pathdash-$v-windows-arm64.zip", $setup, $setupArm, "SHA256SUMS.txt", "--draft", "--title", "Pathdash $v", "--notes-file", "notes.md")
           if ($v.StartsWith('0.')) { $ghArgs += "--prerelease" }  # pre-1.0
           gh release create @ghArgs

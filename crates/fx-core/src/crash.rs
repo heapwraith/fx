@@ -129,7 +129,7 @@ pub fn report(p: &Panic<'_>) -> String {
     let location = short_location(p.file);
     let module = location.split('/').next().unwrap_or("?").replace('-', "_");
     let mut out = format!(
-        "fx {}\nmodule: {module}\nlocation: {location}:{}\nmessage: {}\nstack:\n",
+        "Pathdash {}\nmodule: {module}\nlocation: {location}:{}\nmessage: {}\nstack:\n",
         p.version,
         p.line,
         scrub(p.message, p.user)
@@ -175,7 +175,7 @@ mod tests {
         );
         assert!(!r.contains("salário"), "file names removed: {r}");
         assert!(!r.contains("projetos"), "{r}");
-        assert!(r.contains("fx 0.2.0-beta+abc123"));
+        assert!(r.contains("Pathdash 0.2.0-beta+abc123"));
         assert!(r.contains("location: fx-ui/src/folder_view.rs:1200"), "{r}");
         assert!(r.contains("module: fx_ui"));
         assert!(r.contains("fx::folder_view::FolderView::open_selected"));

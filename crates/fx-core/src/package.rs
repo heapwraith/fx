@@ -73,7 +73,7 @@ fn put_str(out: &mut Vec<u8>, s: &str) {
 /// Why a package was refused (CLAUDE.md: typed errors in libraries).
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum PackageError {
-    #[error("{}", crate::tr!("não é um pacote do fx", "not an fx package"))]
+    #[error("{}", crate::tr!("não é um pacote do Pathdash", "not a Pathdash package"))]
     NotAPackage,
     #[error("{}", crate::tr!("pacote cortado", "package cut short"))]
     CutShort,

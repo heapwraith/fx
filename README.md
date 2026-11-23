@@ -1,14 +1,14 @@
-# fx
+# Pathdash
 
-**Pastas abrem na hora. Arquivos aparecem enquanto você digita.**
+**Qualquer pasta, numa arrancada.** Pastas abrem na hora e arquivos aparecem enquanto você digita.
 
-O fx é um gerenciador de arquivos para Windows 10 e 11, nativo, open source e escrito em Rust. Ele abre uma pasta com 100 mil arquivos em cerca de 10 ms, busca no disco inteiro enquanto você digita e pode substituir o Explorador como padrão do sistema, com volta garantida.
+O Pathdash é um gerenciador de arquivos para Windows 10 e 11, nativo, open source e escrito em Rust. Ele abre uma pasta com 100 mil arquivos em cerca de 10 ms, busca no disco inteiro enquanto você digita e pode substituir o Explorador como padrão do sistema, com volta garantida.
 
 > **Status:** versão **0.2.0-beta**. As fases 0 a 4 estão concluídas: navegação, busca, prévias, recursos avançados, instalador próprio e atualizador. A Fase 5 reúne o que falta para a 1.0, como testes manuais, assinatura digital e publicação; a Fase 6 traz os diferenciais depois dela (mapa do disco, linha do tempo, buscas vivas e mais). Veja o [roteiro](docs/ROADMAP.md).
 
-## Por que o fx
+## Por que o Pathdash
 
-| | fx | Explorador |
+| | Pathdash | Explorador |
 |---|---|---|
 | Abrir uma pasta de 100 mil arquivos (programa aberto) | **~10 ms** | ~254 ms |
 | Primeira abertura (processo novo) até a lista | **~430 ms** | ~1.050 ms |
@@ -27,26 +27,26 @@ Medições em release num Ryzen 7 5700X com NVMe e monitor de 239 Hz. O método 
 - **Organização:** etiquetas coloridas (Alt+1…7), coluna Tamanho com o total de cada pasta, estado das pastas de nuvem (OneDrive e outras).
 - **Para quem usa o teclado:** paleta de comandos (Ctrl+K), terminal embutido (Ctrl+J), todos os atalhos do Explorador.
 - **Integração com o Windows:** menu de contexto e arrastar e soltar do sistema, Propriedades, tema claro e escuro com Mica, alto contraste, leitor de tela, português e inglês.
-- **Pode virar o padrão:** pastas, unidades e Win+E abrem no fx; "Voltar ao Explorador" desfaz tudo.
+- **Pode virar o padrão:** pastas, unidades e Win+E abrem no Pathdash; "Voltar ao Explorador" desfaz tudo.
 
 ## Instalar
 
 Baixe a última versão em [Releases](../../releases):
 
-- **Instalador** (`fx-X.Y.Z-setup-x64.exe`, ou `-arm64.exe`): instala só para o seu usuário, sem pedir administrador, e coloca o fx no Menu Iniciar. Desinstala por Configurações › Aplicativos.
-- **Portátil** (`fx-X.Y.Z-windows-x64.zip`): descompacte e rode `fx.exe`.
+- **Instalador** (`Pathdash-X.Y.Z-setup-x64.exe`, ou `-arm64.exe`): instala só para o seu usuário, sem pedir administrador, e coloca o Pathdash no Menu Iniciar. Desinstala por Configurações › Aplicativos.
+- **Portátil** (`Pathdash-X.Y.Z-windows-x64.zip`): descompacte e rode `pathdash.exe`.
 
-**Atualizações:** o fx procura uma versão nova uma vez por dia, baixa e confere em segundo plano, e aplica quando você fecha o programa. "Atualizar o fx" na paleta reinicia na hora; Configurações › Atualizações desliga.
+**Atualizações:** o Pathdash procura uma versão nova uma vez por dia, baixa e confere em segundo plano, e aplica quando você fecha o programa. "Atualizar o Pathdash" na paleta reinicia na hora; Configurações › Atualizações desliga.
 
 Enquanto a assinatura digital não está ativa, o Windows pode avisar "editor desconhecido": clique em "Mais informações" e depois em "Executar assim mesmo".
 
 ## Primeiros passos
 
-**F1** (ou "Ajuda", no rodapé da barra lateral) mostra como usar o fx, **Ctrl+K** encontra qualquer comando pelo nome e **Ctrl+,** abre as Configurações. Os atalhos principais:
+**F1** (ou "Ajuda", no rodapé da barra lateral) mostra como usar o Pathdash, **Ctrl+K** encontra qualquer comando pelo nome e **Ctrl+,** abre as Configurações. Os atalhos principais:
 
 | Atalho | Ação | Atalho | Ação |
 |---|---|---|---|
-| Ctrl+K | Paleta de comandos | F1 | Como usar o fx |
+| Ctrl+K | Paleta de comandos | F1 | Como usar o Pathdash |
 | Ctrl+F | Buscar (Tab: disco inteiro) | Espaço | Pré-visualizar (Quick Look) |
 | Enter | Abrir | Alt+↑ / ← / → | Subir, voltar, avançar |
 | F2 | Renomear (vários: em lote) | Ctrl+Shift+N | Nova pasta |
@@ -62,20 +62,20 @@ Enquanto a assinatura digital não está ativa, o Windows pode avisar "editor de
 
 ## Privacidade
 
-O fx não envia nada sobre você. A verificação de atualizações só consulta a lista de versões no GitHub. Se o fx fechar com uma falha, ele grava um relatório local, sem caminhos nem nomes, e oferece abrir uma issue que você revisa antes de enviar. As duas coisas podem ser desligadas em Configurações.
+O Pathdash não envia nada sobre você. A verificação de atualizações só consulta a lista de versões no GitHub. Se o Pathdash fechar com uma falha, ele grava um relatório local, sem caminhos nem nomes, e oferece abrir uma issue que você revisa antes de enviar. As duas coisas podem ser desligadas em Configurações.
 
 ## Relatar problemas
 
-Abra uma [issue](../../issues/new/choose) com o que você fez, o que esperava, o que aconteceu e a versão (paleta › "Sobre o fx"). Problemas de perda de dados têm prioridade máxima: descreva os passos exatos.
+Abra uma [issue](../../issues/new/choose) com o que você fez, o que esperava, o que aconteceu e a versão (paleta › "Sobre o Pathdash"). Problemas de perda de dados têm prioridade máxima: descreva os passos exatos.
 
 ## Desenvolver
 
-O fx é desenvolvido no WSL e compilado de forma cruzada para Windows com [`cargo-xwin`](https://github.com/rust-cross/cargo-xwin); os executáveis rodam no Windows pela interoperabilidade do WSL. Requisitos no WSL: [rustup](https://rustup.rs) (o toolchain vem de `rust-toolchain.toml`), `cargo-xwin`, `clang`, `lld` e `llvm-rc`.
+O Pathdash é desenvolvido no WSL e compilado de forma cruzada para Windows com [`cargo-xwin`](https://github.com/rust-cross/cargo-xwin); os executáveis rodam no Windows pela interoperabilidade do WSL. Requisitos no WSL: [rustup](https://rustup.rs) (o toolchain vem de `rust-toolchain.toml`), `cargo-xwin`, `clang`, `lld` e `llvm-rc`.
 
 ```bash
 cargo xwin build                       # compila tudo
 cargo xwin test --workspace            # testes (rodam no Windows)
-cargo xwin run -p fx-ui --release      # abre o fx
+cargo xwin run -p fx-ui --release      # abre o Pathdash
 cargo xwin run -p fx-bench --release -- all   # benchmarks
 ```
 

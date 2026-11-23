@@ -331,7 +331,7 @@ pub fn build(s: &Snapshot, overlay: Option<&Overlay>) -> TreeUpdate {
         focus = overlay_nodes(o, &mut nodes);
     }
     let mut info = TreeInfo::new(WINDOW);
-    info.toolkit_name = Some("fx".into());
+    info.toolkit_name = Some("Pathdash".into());
     info.toolkit_version = Some(env!("CARGO_PKG_VERSION").into());
     TreeUpdate {
         nodes,

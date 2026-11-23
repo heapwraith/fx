@@ -28,9 +28,9 @@ use windows::core::{HSTRING, PCWSTR, PWSTR};
 
 /// The service's name in the Service Control Manager.
 pub const SERVICE_NAME: &str = "fx-indexd";
-const DISPLAY_NAME: &str = "fx — índice de arquivos";
+const DISPLAY_NAME: &str = "Pathdash — índice de arquivos";
 const DESCRIPTION: &str = "Mantém o índice dos nomes de arquivo dos discos NTFS para a busca \
-     instantânea do fx. Opcional: o fx funciona sem ele.";
+     instantânea do Pathdash. Opcional: o Pathdash funciona sem ele.";
 /// Waiting for the service to stop (when removing it).
 const STOP_TIMEOUT: Duration = Duration::from_secs(15);
 

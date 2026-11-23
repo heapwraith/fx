@@ -1,6 +1,6 @@
-# CLAUDE.md — fx (gerenciador de arquivos para Windows)
+# CLAUDE.md — Pathdash (gerenciador de arquivos para Windows)
 
-> Nome provisório: **fx**. Os crates usam o prefixo `fx-`. Trocar o nome depois é só buscar e substituir.
+> O produto se chama **Pathdash** (D-074): é o nome em tudo que o usuário vê, e o programa é `pathdash.exe`. Por dentro continua **fx**: crates `fx-*`, pastas de dados `%APPDATA%\fx`, registro, serviço `fx-indexd` e o repositório `heapwraith/fx`. Não renomeie essas partes sem plano de migração.
 
 ## O que é este projeto
 

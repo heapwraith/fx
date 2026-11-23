@@ -98,8 +98,8 @@ pub fn prepare(update: &Update) -> io::Result<()> {
     {
         let _ = std::fs::remove_file(&path);
         return Err(io::Error::other(fx_core::tr!(
-            "o instalador baixado não foi assinado pelo editor do fx",
-            "the downloaded installer was not signed by fx's publisher"
+            "o instalador baixado não foi assinado pelo editor do Pathdash",
+            "the downloaded installer was not signed by Pathdash's publisher"
         )));
     }
     std::fs::write(

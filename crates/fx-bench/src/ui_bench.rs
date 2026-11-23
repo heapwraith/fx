@@ -83,7 +83,7 @@ impl TraceFile {
 }
 
 fn fx_exe() -> std::io::Result<PathBuf> {
-    let exe = std::env::current_exe()?.with_file_name("fx.exe");
+    let exe = std::env::current_exe()?.with_file_name("pathdash.exe");
     if exe.is_file() {
         Ok(exe)
     } else {

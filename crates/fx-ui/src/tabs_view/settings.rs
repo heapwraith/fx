@@ -51,7 +51,7 @@ impl Section {
             Section::Updates => tr!("Atualizações", "Updates"),
             Section::Privacy => tr!("Privacidade", "Privacy"),
             Section::System => tr!("Sistema", "System"),
-            Section::About => tr!("Sobre o fx", "About fx"),
+            Section::About => tr!("Sobre o Pathdash", "About Pathdash"),
         }
     }
 
@@ -277,8 +277,8 @@ impl TabsView {
                         "Reopen tabs and windows at start"
                     ),
                     detail: tr!(
-                        "Vale na próxima abertura do fx.",
-                        "Applies the next time fx opens."
+                        "Vale na próxima abertura do Pathdash.",
+                        "Applies the next time Pathdash opens."
                     ),
                     control: Control::Switch(
                         crate::prefs::RESTORE_SESSION.get(),
@@ -362,14 +362,17 @@ impl TabsView {
                     Row {
                         title: tr!("Atualizações automáticas", "Automatic updates"),
                         detail: tr!(
-                            "Baixa a versão nova em segundo plano, confere e instala quando você fecha o fx.",
-                            "Downloads the new version in the background, checks it and installs it when you close fx."
+                            "Baixa a versão nova em segundo plano, confere e instala quando você fecha o Pathdash.",
+                            "Downloads the new version in the background, checks it and installs it when you close Pathdash."
                         ),
                         control: Control::Switch(crate::prefs::UPDATES.get(), Act::AutoUpdate),
                     },
                     Row {
                         title: tr!("Versão instalada", "Installed version"),
-                        detail: tr!("A versão deste fx.", "This fx's version."),
+                        detail: tr!(
+                            "A versão instalada deste Pathdash.",
+                            "The version of this Pathdash."
+                        ),
                         control: Control::Buttons(
                             Some(version.to_owned()),
                             vec![(tr!("Procurar agora", "Check now"), Act::CheckNow)],
@@ -381,13 +384,13 @@ impl TabsView {
                 Row {
                     title: tr!("Relatórios de falha", "Crash reports"),
                     detail: tr!(
-                        "Se o fx fechar com uma falha, guarda um relatório sem caminhos nem nomes neste computador. Nada é enviado sem você.",
-                        "If fx closes with a crash, it keeps a report with no paths or names on this computer. Nothing is sent without you."
+                        "Se o Pathdash fechar com uma falha, guarda um relatório sem caminhos nem nomes neste computador. Nada é enviado sem você.",
+                        "If Pathdash closes with a crash, it keeps a report with no paths or names on this computer. Nothing is sent without you."
                     ),
                     control: Control::Switch(crate::prefs::CRASH_REPORTS.get(), Act::CrashReports),
                 },
                 Row {
-                    title: tr!("Dados que o fx envia", "Data fx sends"),
+                    title: tr!("Dados que o Pathdash envia", "Data Pathdash sends"),
                     detail: tr!(
                         "Nenhum. A verificação de atualizações só consulta a lista de versões no GitHub.",
                         "None. The update check only reads the list of versions on GitHub."
@@ -399,13 +402,16 @@ impl TabsView {
                 Row {
                     title: tr!("Gerenciador de arquivos padrão", "Default file manager"),
                     detail: tr!(
-                        "Pastas, unidades e Win+E abrem no fx. Voltar ao Explorador restaura tudo.",
-                        "Folders, drives and Win+E open in fx. Back to Explorer restores everything."
+                        "Pastas, unidades e Win+E abrem no Pathdash. Voltar ao Explorador restaura tudo.",
+                        "Folders, drives and Win+E open in Pathdash. Back to Explorer restores everything."
                     ),
                     control: Control::Buttons(
                         None,
                         vec![
-                            (tr!("Usar o fx", "Use fx"), Act::DefaultManager(true)),
+                            (
+                                tr!("Usar o Pathdash", "Use Pathdash"),
+                                Act::DefaultManager(true),
+                            ),
                             (
                                 tr!("Usar o Explorador", "Use Explorer"),
                                 Act::DefaultManager(false),
@@ -844,7 +850,7 @@ fn about_header(t: crate::theme::Theme) -> gpui::AnyElement {
                     div()
                         .text_size(px(22.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .child("fx"),
+                        .child("Pathdash"),
                 )
                 .child(
                     div()
@@ -875,5 +881,5 @@ fn version_text() -> String {
 
 /// The header of "Sobre o fx" as one line, for screen readers.
 fn about_line() -> String {
-    format!("fx. {}. {}.", super::guide::slogan(), version_text())
+    format!("Pathdash. {}. {}.", super::guide::slogan(), version_text())
 }

@@ -9,7 +9,7 @@ repository.workspace = true
 publish.workspace = true
 
 [[bin]]
-name = "fx"
+name = "pathdash"
 path = "src/main.rs"
 
 [lints]

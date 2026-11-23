@@ -103,8 +103,8 @@ pub fn issue_url(report: &str) -> String {
     let place = first.trim_start_matches("location: ");
     let title = fx_core::trf!("Falha: {place}", "Crash: {place}");
     let mut body = fx_core::trf!(
-        "O fx fechou com uma falha. Relatório gerado pelo próprio fx (sem caminhos nem nomes):\n\n```\n{report}```\n\nO que eu estava fazendo:\n",
-        "fx closed with a crash. Report made by fx itself (no paths or names):\n\n```\n{report}```\n\nWhat I was doing:\n"
+        "O Pathdash fechou com uma falha. Relatório gerado pelo próprio Pathdash (sem caminhos nem nomes):\n\n```\n{report}```\n\nO que eu estava fazendo:\n",
+        "Pathdash closed with a crash. Report made by Pathdash itself (no paths or names):\n\n```\n{report}```\n\nWhat I was doing:\n"
     );
     if body.len() > MAX_BODY {
         let mut cut = MAX_BODY;

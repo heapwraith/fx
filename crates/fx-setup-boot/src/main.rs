@@ -23,7 +23,7 @@ fn main() -> ExitCode {
         Ok(code) => code,
         Err(e) => {
             fx_shell::install::error_box(
-                "fx",
+                "Pathdash",
                 &fx_core::trf!(
                     "O instalador não pôde começar ({e}). Baixe-o de novo.",
                     "The installer could not start ({e}). Download it again."

@@ -33,8 +33,8 @@ pub fn seen() -> bool {
 /// The slogan, shared with the installer and the README.
 pub fn slogan() -> &'static str {
     tr!(
-        "Pastas abrem na hora. Arquivos aparecem enquanto você digita.",
-        "Folders open instantly. Files appear as you type."
+        "Qualquer pasta, numa arrancada.",
+        "Every path, one dash away."
     )
 }
 
@@ -221,7 +221,7 @@ impl TabsView {
             }
         }
         Some(crate::a11y::Overlay {
-            title: tr!("Como usar o fx", "How to use fx").to_owned(),
+            title: tr!("Como usar o Pathdash", "How to use Pathdash").to_owned(),
             description: Some(format!(
                 "{} {}",
                 slogan(),
@@ -358,7 +358,7 @@ impl TabsView {
                                 div()
                                     .text_size(px(20.0))
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .child(tr!("Como usar o fx", "How to use fx")),
+                                    .child(tr!("Como usar o Pathdash", "How to use Pathdash")),
                             )
                             .child(div().text_color(rgba(t.text_secondary)).child(tr!(
                                 "Tudo se faz pelo teclado. Na dúvida, Ctrl+K encontra qualquer comando pelo nome.",
@@ -442,6 +442,6 @@ mod tests {
                 .flat_map(|(_, r)| r)
                 .all(|(k, w)| !k.is_empty() && !w.is_empty())
         );
-        assert!(slogan().contains("Pastas"));
+        assert!(slogan().contains("pasta"));
     }
 }
