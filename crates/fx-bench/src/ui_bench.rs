@@ -1085,6 +1085,63 @@ pub fn features() -> std::io::Result<()> {
     )
 }
 
+/// Median private memory (MiB) of fx idle on `root` with `env`, over
+/// `runs` fresh processes (ended with Stop-Process: several windows may be
+/// open).
+fn idle_private_mib(root: &Path, env: &[(&str, &str)], runs: usize) -> std::io::Result<f64> {
+    let mut samples = Vec::new();
+    for _ in 0..runs {
+        let mut child = Command::new(fx_exe()?)
+            .arg(root)
+            .env("FX_NO_STATE", "1")
+            .env("FX_SINGLE_INSTANCE", "0")
+            .env_remove("FX_TRACE")
+            .envs(env.iter().copied())
+            .spawn()?;
+        std::thread::sleep(Duration::from_secs(6));
+        let out = Command::new("powershell")
+            .args(["-NoProfile", "-Command"])
+            .arg(format!(
+                "$p = Get-Process -Id {0}; $p.PrivateMemorySize64; Stop-Process -Id {0} -Force",
+                child.id()
+            ))
+            .output()?;
+        let _ = child.wait();
+        let bytes: f64 = String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .parse()
+            .map_err(|_| std::io::Error::other("could not read the process memory"))?;
+        samples.push(bytes / (1024.0 * 1024.0));
+    }
+    samples.sort_by(f64::total_cmp);
+    Ok(samples[runs / 2])
+}
+
+/// P8b (each extra tab ≤ 3 MB) and P8c (each extra window ≤ 20 MB), D-064:
+/// fx idle on the fixtures root with 4 extra tabs, then 2 extra windows,
+/// against one window and one tab (medians of 3 processes each).
+pub fn memory_more() -> std::io::Result<()> {
+    const TABS: f64 = 4.0;
+    const WINDOWS: f64 = 2.0;
+    let root = fixtures_root()?;
+    let base = idle_private_mib(&root, &[], 3)?;
+    let tabs = idle_private_mib(&root, &[("FX_BENCH_TABS", "4")], 3)?;
+    let windows = idle_private_mib(&root, &[("FX_BENCH_WINDOWS", "2")], 3)?;
+    let (per_tab, per_window) = ((tabs - base) / TABS, (windows - base) / WINDOWS);
+    let verdict = |ok: bool| if ok { "pass" } else { "FAIL" };
+    println!("P8b/P8c: private memory per extra tab and window, idle, fx-fixtures (release)");
+    println!("  1 window, 1 tab {base:.1} MB · +4 tabs {tabs:.1} MB · +2 windows {windows:.1} MB");
+    println!(
+        "  P8b each tab {per_tab:.2} MB (target ≤ 3)  {}   P8c each window {per_window:.2} MB (target ≤ 20)  {}",
+        verdict(per_tab <= 3.0),
+        verdict(per_window <= 20.0)
+    );
+    Ok(())
+}
+
 /// P8 (≤ 80 MB): fx idle with one window on a small folder (the fixtures
 /// root: a few subfolders). Private bytes 6 s after opening, 5 processes,
 /// median. `FX_BENCH_ENV="A=1 B=0"` adds variables, to price a part.

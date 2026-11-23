@@ -27,6 +27,7 @@
 //! ```
 //! Run from the repository root: results go to `bench/results/`.
 
+mod copy_bench;
 mod enum_bench;
 mod fixtures;
 mod index_bench;
@@ -36,6 +37,7 @@ mod png;
 mod report;
 mod rng;
 mod search_bench;
+mod ship_bench;
 mod ui_bench;
 
 use std::process::ExitCode;
@@ -43,7 +45,7 @@ use std::time::Instant;
 
 use fixtures::{Outcome, Spec};
 
-const USAGE: &str = "usage: fx-bench fixtures [--clean] | enum | list | open | scroll | responsive <folder> | type | nav | path | tabs | drives | grid | copy | menu | features | terminal | memory | index (--volume C: | --synthetic N) | search (--volume C: | --synthetic N | --service) [--interactive] | all";
+const USAGE: &str = "usage: fx-bench fixtures [--clean] | enum | list | open | scroll | responsive <folder> | type | nav | path | tabs | drives | grid | copy | menu | features | terminal | memory | memory-more | ship | copy-speed | index (--volume C: | --synthetic N) | search (--volume C: | --synthetic N | --service) [--interactive] | all";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -65,6 +67,9 @@ fn main() -> ExitCode {
         ["menu"] => ui_bench::menu_latency(),
         ["features"] => ui_bench::features(),
         ["terminal"] => ui_bench::terminal(),
+        ["ship"] => ship_bench::run(),
+        ["copy-speed"] => copy_bench::run(&fixtures::default_root()),
+        ["memory-more"] => ui_bench::memory_more(),
         ["memory"] => ui_bench::memory(),
         ["all"] => run_all(),
         ["index", "--volume", volume] => index_bench::volume(volume),

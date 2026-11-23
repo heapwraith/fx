@@ -35,7 +35,7 @@ Revisadas em 2026-11-22 (D-064). **Limite** reprova um portão; **alvo** é onde
 | S2 | Instalador completo | ≤ 10 MB | 7 MB |
 | S3 | `fx-indexd.exe` / `fx-preview.exe` | ≤ 1 MB / ≤ 0,5 MB | — |
 
-**Hoje reprovam** (trabalho da Fase 5, T5.7): P6 (~20 s estimados para 2 milhões), P8 (86–88 MB), S2 (14,6 MB). P8b, P8c, P10, P13 e S1–S3 ainda não têm medição automática no `fx-bench`.
+**Hoje reprovam** (trabalho da Fase 5, T5.7): P6 (~20 s estimados para 2 milhões), P8 (88 MB) e P8c (24 MB por janela). Medidas pelo `fx-bench`: `ship` (S1–S3, P13), `memory-more` (P8b, P8c) e `copy-speed` (P10, contra a cópia do sistema, `CopyFileExW`).
 
 ## Protocolo
 

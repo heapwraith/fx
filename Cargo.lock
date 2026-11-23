@@ -2013,6 +2013,7 @@ dependencies = [
  "fx-core",
  "fx-fs",
  "fx-index",
+ "fx-ops",
  "tempfile",
 ]
 

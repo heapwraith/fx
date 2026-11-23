@@ -15,6 +15,7 @@ workspace = true
 fx-core.workspace = true
 fx-fs.workspace = true
 fx-index.workspace = true
+fx-ops.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

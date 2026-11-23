@@ -183,6 +183,36 @@ impl TabsView {
             seconds: std::collections::HashMap::new(),
         };
         view.focus_active(window, cx);
+        // P8b / P8c (`fx-bench memory-more`, T5.7): extra tabs, and extra
+        // windows (opened after this one is built).
+        // Once per process: the extra windows run this too.
+        static BENCH_EXTRAS: std::sync::atomic::AtomicBool =
+            std::sync::atomic::AtomicBool::new(false);
+        let first = !BENCH_EXTRAS.swap(true, std::sync::atomic::Ordering::Relaxed);
+        let count = |var: &str| {
+            if !first {
+                return 0;
+            }
+            std::env::var(var)
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(0)
+                .min(16)
+        };
+        for _ in 0..count("FX_BENCH_TABS") {
+            view.open_tab(window, cx);
+        }
+        let windows = count("FX_BENCH_WINDOWS");
+        if windows > 0 {
+            let path = view.current().read(cx).path().to_path_buf();
+            cx.defer(move |cx| {
+                if let Some(open) = cx.try_global::<crate::WindowOpener>().map(|o| o.0.clone()) {
+                    for _ in 0..windows {
+                        open(path.clone(), None, cx);
+                    }
+                }
+            });
+        }
         // P4 with the terminal open (`fx-bench terminal`, T5.4).
         if std::env::var_os("FX_BENCH_TERMINAL").is_some_and(|v| v == "1") {
             let tab = view.current();
