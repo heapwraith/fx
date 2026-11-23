@@ -54,6 +54,29 @@ pub fn is_default(classes: &str, exe: &str) -> bool {
         .all(|k| get(&format!(r"{classes}\{k}"), "").as_deref() == Some(command(k, exe).as_str()))
 }
 
+/// Who opens folders under `classes`, as Settings shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Owner {
+    /// This program (`exe`), for folders, drives and Win+E.
+    This,
+    /// Another program set by us (a backup exists): another copy of fx,
+    /// with its command line.
+    Other(String),
+    /// Explorer (nothing of ours is set).
+    Explorer,
+}
+
+/// Who opens folders now (reads four values: a worker thread).
+pub fn owner(classes: &str, backup: &str, exe: &str) -> Owner {
+    if is_default(classes, exe) {
+        return Owner::This;
+    }
+    match get(&format!(r"{classes}\{}", KEYS[0]), "") {
+        Some(command) if exists(backup) => Owner::Other(command),
+        _ => Owner::Explorer,
+    }
+}
+
 /// Makes fx (at `exe`) the default. `backup` keeps what was replaced; a
 /// second call keeps the first backup (so revert always goes back to the
 /// state before fx).
@@ -172,6 +195,23 @@ mod tests {
         }
         assert!(!exists(&r.backup()));
         assert!(!is_default(&r.classes(), EXE));
+    }
+
+    #[test]
+    fn owner_tells_this_copy_another_copy_and_explorer_apart() {
+        let r = Root::new("owner");
+        std::mem::drop(super::super::registry::create(&r.classes()).unwrap());
+        let (c, b) = (r.classes(), r.backup());
+        assert_eq!(owner(&c, &b, EXE), Owner::Explorer);
+        enable(&c, &b, EXE).unwrap();
+        assert_eq!(owner(&c, &b, EXE), Owner::This);
+        let other = r"D:\outro\pathdash.exe";
+        assert_eq!(
+            owner(&c, &b, other),
+            Owner::Other(format!("\"{EXE}\" \"%1\""))
+        );
+        revert(&c, &b).unwrap();
+        assert_eq!(owner(&c, &b, EXE), Owner::Explorer);
     }
 
     #[test]

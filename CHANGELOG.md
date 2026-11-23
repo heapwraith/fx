@@ -10,7 +10,15 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 - **Tema escuro por padrão.** Em Configurações › Aparência: Escuro, Claro ou Seguir o Windows, com troca na hora.
 - **Tamanhos em MB, GB e TB.** Arquivos grandes não aparecem mais como milhares de KB: `17,6 MB`, `2,5 GB` (abaixo de 1 MB continua em KB, como no Explorador). Vale para a lista, a busca, os totais de pasta, o Quick Look e o Narrador.
 
+- **Configurações › Sistema e Atualizações mostram o estado real:** se o Pathdash é o gerenciador padrão (ou outra cópia dele), se a busca no disco inteiro está ativa, instalada mas parada ou desligada, quando foi a última verificação de atualização e se há versão pronta (com "Reiniciar agora"). Cada linha tem um botão só, com a ação que faz sentido, mostra o que está fazendo enquanto espera ("Aguardando a permissão de administrador…") e o erro na própria linha, incluindo quando a permissão do Windows é recusada.
+- Barra de rolagem na Ajuda (F1) e nas Configurações.
+- **Tabelas no Quick Look de Markdown** (antes apareciam as barras `|`).
+- **Ctrl+F busca nesta pasta**, como diz o guia; Tab passa para o disco inteiro.
+
 ### Corrigido
+- **Linha do tempo:** os caminhos apareciam como `\\.\C:\…`, e por isso os arquivos de outros usuários do Windows não eram escondidos. O serviço precisa ser reinstalado (Desativar e Ativar em Configurações › Sistema) para levar a correção.
+- **Quick Look de imagens:** uma imagem quadrada passava da borda de baixo e era cortada; agora encaixa e fica centralizada, sem ampliar imagens pequenas.
+- Configurações: o primeiro Tab numa seção nova pulava o primeiro controle; o espaço vazio em "Sobre" e o texto de ajuda confuso no rodapé.
 - Com o Pathdash como gerenciador padrão, abrir uma unidade (`D:\`) pelo Windows mostrava um caminho quebrado (`D:"`): a barra final engolia a aspa da linha de comando.
 
 ## [0.3.0-beta] — 2026-11-23

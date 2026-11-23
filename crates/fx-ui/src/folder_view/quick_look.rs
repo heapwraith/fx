@@ -551,15 +551,44 @@ impl FolderView {
                 )
                 .child(div().text_color(rgba(t.text_secondary)).child(caption))
                 .into_any_element(),
-            Content::Image(image) => div()
-                .size_full()
-                .p(px(space(2)))
-                .child(
-                    img(ImageSource::Render(image))
-                        .size_full()
-                        .object_fit(ObjectFit::Contain),
-                )
-                .into_any_element(),
+            // Painted by hand, centred and fitted: a big image shrinks to the
+            // card, a small one keeps its pixels (one image pixel per screen
+            // pixel, never blurred). An `img` took its height from its
+            // aspect ratio and ran past the bottom of the card.
+            Content::Image(image) => canvas(
+                |_, _, _| (),
+                move |bounds, _, window, _| {
+                    let pad = px(space(2));
+                    let (room_w, room_h) = (
+                        f32::from(bounds.size.width - pad * 2.0),
+                        f32::from(bounds.size.height - pad * 2.0),
+                    );
+                    let natural = image.size(0);
+                    let scale = window.scale_factor();
+                    let (w, h) = (
+                        natural.width.0 as f32 / scale,
+                        natural.height.0 as f32 / scale,
+                    );
+                    if w <= 0.0 || h <= 0.0 || room_w <= 0.0 || room_h <= 0.0 {
+                        return;
+                    }
+                    let k = (room_w / w).min(room_h / h).min(1.0);
+                    let (w, h) = (w * k, h * k);
+                    let origin = gpui::point(
+                        bounds.origin.x + (bounds.size.width - px(w)) / 2.0,
+                        bounds.origin.y + (bounds.size.height - px(h)) / 2.0,
+                    );
+                    let _ = window.paint_image(
+                        gpui::Bounds::new(origin, gpui::size(px(w), px(h))),
+                        gpui::Corners::default(),
+                        image.clone(),
+                        0,
+                        false,
+                    );
+                },
+            )
+            .size_full()
+            .into_any_element(),
             Content::Markdown(lines, truncated) => markdown_view(&lines, truncated, t, cx),
             Content::Zip(rows, summary) => zip_view(rows, summary, t),
             Content::Text {
@@ -676,7 +705,16 @@ impl FolderView {
                             )),
                     ),
             )
-            .child(div().flex_1().min_h_0().child(body));
+            // An absolute box gives the body a definite size: without it a
+            // `size_full` image took its height from its content and ran
+            // past the bottom of the card.
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .relative()
+                    .child(div().absolute().inset_0().child(body)),
+            );
         Some(
             deferred(crate::motion::enter(
                 "quick-look-in",
@@ -930,6 +968,21 @@ fn markdown_view(
             Block::Rule => row.my(px(space(2))).h(px(1.0)).bg(rgba(t.divider)),
             Block::Blank => row.h(px(space(2))),
             Block::Item | Block::Text => row.child(l.text.clone()),
+            // Equal columns; the header bold over a rule, each row on a
+            // divider, like a table and not a line of pipes.
+            Block::TableRow(header) => row
+                .flex()
+                .gap(px(space(3)))
+                .py(px(space(1)))
+                .border_b_1()
+                .border_color(rgba(t.divider))
+                .when(header, |d| d.font_weight(gpui::FontWeight::SEMIBOLD))
+                .text_size(px(13.0))
+                .children(
+                    l.text
+                        .split('\t')
+                        .map(|cell| div().flex_1().min_w_0().child(cell.to_owned())),
+                ),
         };
         body = body.child(row);
     }

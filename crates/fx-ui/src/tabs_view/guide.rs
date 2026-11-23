@@ -387,20 +387,27 @@ impl TabsView {
             )
             .child(
                 div()
-                    .id("guide-body")
                     .flex_1()
                     .min_h_0()
-                    .overflow_y_scroll()
-                    .px(px(space(6)))
-                    .py(px(space(5)))
+                    .relative()
                     .child(
                         div()
-                            .flex()
-                            .flex_wrap()
-                            .gap_x(px(space(8)))
-                            .gap_y(px(space(5)))
-                            .children(sections),
-                    ),
+                            .id("guide-body")
+                            .size_full()
+                            .overflow_y_scroll()
+                            .track_scroll(&self.guide_scroll.handle)
+                            .px(px(space(6)))
+                            .py(px(space(5)))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_wrap()
+                                    .gap_x(px(space(8)))
+                                    .gap_y(px(space(5)))
+                                    .children(sections),
+                            ),
+                    )
+                    .child(crate::scrollbar::vertical(&self.guide_scroll, &t)),
             )
             .child(
                 div()
@@ -412,8 +419,8 @@ impl TabsView {
                     .text_size(px(CAPTION_SIZE))
                     .text_color(rgba(t.text_secondary))
                     .child(tr!(
-                        "Role para ver tudo · F1 abre esta tela de novo · Esc fecha",
-                        "Scroll to see everything · F1 opens this screen again · Esc closes"
+                        "F1 abre esta tela de novo · Esc fecha",
+                        "F1 opens this screen again · Esc closes"
                     )),
             )
     }

@@ -27,8 +27,26 @@ pub struct Recent {
     changes: VecDeque<Change>,
 }
 
+/// `C:\x` for the `\\.\C:\x` the journal reports (the volume's device
+/// path): what the user reads, and what the privacy filter compares.
+pub fn plain_path(path: PathBuf) -> PathBuf {
+    let Some(text) = path.to_str() else {
+        return path;
+    };
+    for prefix in [r"\\.\", r"\\?\"] {
+        if let Some(rest) = text.strip_prefix(prefix) {
+            let b = rest.as_bytes();
+            if b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':' {
+                return PathBuf::from(rest);
+            }
+        }
+    }
+    path
+}
+
 impl Recent {
     pub fn push(&mut self, mut change: Change) {
+        change.path = plain_path(change.path);
         if is_noise(&change.path) {
             return;
         }
@@ -102,6 +120,24 @@ mod tests {
             is_dir: false,
             at,
         }
+    }
+
+    #[test]
+    fn device_paths_become_drive_paths() {
+        let p = |s: &str| plain_path(PathBuf::from(s));
+        assert_eq!(
+            p(r"\\.\C:\Users\ana\a.txt"),
+            PathBuf::from(r"C:\Users\ana\a.txt")
+        );
+        assert_eq!(p(r"\\?\D:\x"), PathBuf::from(r"D:\x"));
+        assert_eq!(p(r"C:\x"), PathBuf::from(r"C:\x"));
+        assert_eq!(p(r"\\.\pipe\x"), PathBuf::from(r"\\.\pipe\x"));
+        let mut r = Recent::default();
+        r.push(change(r"\\.\C:\Users\ana\b.txt", ChangeKind::Created, 5));
+        assert_eq!(
+            r.since(0, 10, |_| true)[0].path,
+            PathBuf::from(r"C:\Users\ana\b.txt")
+        );
     }
 
     #[test]

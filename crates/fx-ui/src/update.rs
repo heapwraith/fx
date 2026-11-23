@@ -39,13 +39,21 @@ fn stamp_file() -> Option<PathBuf> {
     crate::store::state_path().map(|p| p.with_file_name("update-check.txt"))
 }
 
+fn last_check_secs() -> Option<u64> {
+    stamp_file()
+        .and_then(|f| std::fs::read_to_string(f).ok())
+        .and_then(|t| t.trim().parse().ok())
+}
+
+/// When GitHub was last asked (reads a tiny file: a worker thread).
+pub fn last_check() -> Option<std::time::SystemTime> {
+    last_check_secs().map(|s| std::time::UNIX_EPOCH + std::time::Duration::from_secs(s))
+}
+
 /// Whether the daily check should run now (reads a tiny file: call it on a
 /// worker thread).
 pub fn due() -> bool {
-    let last = stamp_file()
-        .and_then(|f| std::fs::read_to_string(f).ok())
-        .and_then(|t| t.trim().parse().ok());
-    crate::prefs::UPDATES.get() && fx_core::update::due(last, now_secs())
+    crate::prefs::UPDATES.get() && fx_core::update::due(last_check_secs(), now_secs())
 }
 
 /// Asks GitHub for a newer version (blocking; worker thread) and records

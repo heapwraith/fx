@@ -290,8 +290,10 @@ impl FolderView {
             ticket: 0,
             cancel: Arc::new(AtomicBool::new(false)),
             scroll: UniformListScrollHandle::new(),
+            // Ctrl+F searches this folder, as the guide says; Tab goes to the
+            // whole disk. Only a saved whole-disk search waits for the service.
             scope: Scope::Folder,
-            scope_chosen: false,
+            scope_chosen: true,
             disk: Disk::Unknown,
             order: Order::Relevance,
             filters: Filters::default(),
@@ -452,7 +454,7 @@ impl FolderView {
                     (Scope::Folder, Disk::Service | Disk::OwnIndex) => search.scope = Scope::Disk,
                     (Scope::Folder, _) => {
                         search.summary = Some(
-                            tr!("Para buscar no disco inteiro, ative o serviço na paleta (Ctrl+K)", "To search the whole disk, turn on the service in the palette (Ctrl+K)")
+                            tr!("Para buscar no disco inteiro, ative a busca em Configurações › Sistema (Ctrl+,)", "To search the whole disk, turn it on in Settings › System (Ctrl+,)")
                                 .into(),
                         );
                         cx.notify();

@@ -86,6 +86,10 @@ pub struct TabsView {
     settings: Option<settings::Section>,
     /// The Settings control with the keyboard (Tab order).
     settings_focus: usize,
+    /// What System and Updates show, read from Windows.
+    live: settings::Live,
+    settings_scroll: crate::scrollbar::Scroll,
+    guide_scroll: crate::scrollbar::Scroll,
     /// Comparing the two panes (T6.11).
     compare: Option<compare::Compare>,
     /// The sidebar place with the keyboard (F6), in `sidebar_targets` order.
@@ -189,6 +193,9 @@ impl TabsView {
             guide: false,
             settings: None,
             settings_focus: 0,
+            live: settings::Live::default(),
+            settings_scroll: crate::scrollbar::Scroll::new(),
+            guide_scroll: crate::scrollbar::Scroll::new(),
             compare: None,
             settings_keyboard: false,
             sidebar_focus: None,

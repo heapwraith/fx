@@ -141,7 +141,8 @@ impl FolderView {
                         .into_iter()
                         .filter_map(|h| {
                             Some(Item {
-                                path: h.path_buf(),
+                                // An older service sends `\\.\C:\…`.
+                                path: fx_index::recent::plain_path(h.path_buf()),
                                 kind: h.change?,
                                 at: (h.modified / 10_000_000) as i64 - 11_644_473_600,
                             })

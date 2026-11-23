@@ -12,6 +12,9 @@ pub enum Block {
     Rule,
     Text,
     Blank,
+    /// A table row: its cells in `text`, separated by `\t`; `true` for the
+    /// header (the row above the `|---|` line, which is left out).
+    TableRow(bool),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,7 +26,7 @@ pub struct MdLine {
 pub fn render(lines: &[impl AsRef<str>]) -> Vec<MdLine> {
     let mut out = Vec::with_capacity(lines.len());
     let mut fenced = false;
-    for line in lines {
+    for (i, line) in lines.iter().enumerate() {
         let raw = line.as_ref();
         let t = raw.trim_start();
         if t.starts_with("```") || t.starts_with("~~~") {
@@ -39,6 +42,14 @@ pub fn render(lines: &[impl AsRef<str>]) -> Vec<MdLine> {
         }
         let (block, text) = if t.is_empty() {
             (Block::Blank, String::new())
+        } else if t.starts_with('|') {
+            if table_separator(t) {
+                continue;
+            }
+            let header = lines
+                .get(i + 1)
+                .is_some_and(|next| table_separator(next.as_ref().trim()));
+            (Block::TableRow(header), cells(t))
         } else if let Some(level) = heading(t) {
             (
                 Block::Heading(level),
@@ -75,6 +86,22 @@ pub fn render(lines: &[impl AsRef<str>]) -> Vec<MdLine> {
         out.push(MdLine { block, text });
     }
     out
+}
+
+/// `|---|:--:|`: the line under a table header.
+fn table_separator(t: &str) -> bool {
+    t.starts_with('|') && t.contains('-') && t.chars().all(|c| matches!(c, '|' | '-' | ':' | ' '))
+}
+
+/// `| a | **b** |` → `a\tb`.
+fn cells(t: &str) -> String {
+    let inner = t.trim().trim_start_matches('|');
+    let inner = inner.strip_suffix('|').unwrap_or(inner);
+    inner
+        .split('|')
+        .map(|c| inline(c.trim()))
+        .collect::<Vec<_>>()
+        .join("\t")
 }
 
 fn heading(t: &str) -> Option<u8> {
@@ -161,6 +188,23 @@ mod tests {
         assert_eq!(r[5].text, "• ☑ feito");
         assert_eq!(r[6].text, "1. primeiro");
         assert_eq!(r[9].text, "let a = *b;", "code keeps its markers");
+    }
+
+    #[test]
+    fn tables_become_rows_of_cells() {
+        let r = render(&[
+            "| | Pathdash | Explorador |",
+            "|---|:---:|---|",
+            "| Abrir **100 mil** | ~10 ms | ~254 ms |",
+            "texto",
+        ]);
+        let blocks: Vec<Block> = r.iter().map(|l| l.block).collect();
+        assert_eq!(
+            blocks,
+            [Block::TableRow(true), Block::TableRow(false), Block::Text]
+        );
+        assert_eq!(r[0].text, "\tPathdash\tExplorador");
+        assert_eq!(r[1].text, "Abrir 100 mil\t~10 ms\t~254 ms");
     }
 
     #[test]

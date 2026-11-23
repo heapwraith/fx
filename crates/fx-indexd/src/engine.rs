@@ -309,6 +309,8 @@ mod tests {
         for (path, at) in [
             (r"C:\Users\Bia\Downloads\a.zip", 100),
             (r"C:\Users\Ana\segredo.txt", 150),
+            // As the journal reports it: still another user's file.
+            (r"\\.\C:\Users\Ana\diario.txt", 160),
             (r"C:\Users\Bia\notas.txt", 200),
         ] {
             e.recent.lock().unwrap().push(fx_index::recent::Change {

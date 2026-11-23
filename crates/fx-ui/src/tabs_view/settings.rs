@@ -80,6 +80,8 @@ pub(super) enum Act {
     Sidebar,
     AutoUpdate,
     CheckNow,
+    /// Restart into the version ready.
+    RestartToUpdate,
     CrashReports,
     DefaultManager(bool),
     IndexService(bool),
@@ -87,13 +89,235 @@ pub(super) enum Act {
     Link(&'static str),
 }
 
+/// The parts of System and Updates whose state lives in Windows (registry,
+/// service manager, files): read on a worker thread each time Settings
+/// opens and after every action. `None` while reading: nothing is assumed.
+#[derive(Default)]
+pub(super) struct Live {
+    owner: Option<fx_shell::default_manager::Owner>,
+    index: Option<fx_index::service::ServiceState>,
+    last_check: Option<std::time::SystemTime>,
+    /// The version downloaded, checked and waiting for Pathdash to close.
+    ready: Option<String>,
+    /// What runs now (its row shows it and offers no buttons meanwhile).
+    busy: Option<Topic>,
+    /// The outcome of the last check of this session.
+    checked: Option<Result<(), String>>,
+    /// The last action that went wrong, by row.
+    error: Option<(Topic, String)>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Topic {
+    Manager,
+    Index,
+    Update,
+}
+
+/// The state line under a row's text.
+pub(super) struct Status {
+    pub text: String,
+    pub tone: Tone,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Tone {
+    /// On, done, ready.
+    On,
+    /// Off, or neutral information.
+    Off,
+    /// Working on it.
+    Busy,
+    Error,
+}
+
+fn status(tone: Tone, text: impl Into<String>) -> Option<Status> {
+    Some(Status {
+        text: text.into(),
+        tone,
+    })
+}
+
+/// A failed system action in words: a refused UAC prompt reads as such.
+fn failure(e: &std::io::Error) -> String {
+    // ERROR_CANCELLED: the user said no to the administrator prompt.
+    if e.raw_os_error() == Some(1223) {
+        tr!(
+            "Cancelado: o Windows não recebeu a permissão de administrador.",
+            "Cancelled: Windows did not get administrator permission."
+        )
+        .to_owned()
+    } else {
+        trf!("Não deu certo: {e}", "That did not work: {e}")
+    }
+}
+
+/// "hoje às 18:20", "23/11/2026 17:46".
+fn when(t: std::time::SystemTime) -> String {
+    let offset = fx_shell::utc_offset_at(t);
+    let now = std::time::SystemTime::now();
+    let day = |t: std::time::SystemTime, o: i64| {
+        t.duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| (d.as_secs() as i64 + o).div_euclid(86_400))
+    };
+    let full = fx_core::format::date_time(t, offset);
+    if day(t, offset) == day(now, fx_shell::utc_offset_at(now)) {
+        let hour = full.rsplit(' ').next().unwrap_or(&full).to_owned();
+        trf!("hoje às {hour}", "today at {hour}")
+    } else {
+        full
+    }
+}
+
 impl TabsView {
+    /// Reads the state of System and Updates again (worker thread).
+    pub(super) fn refresh_live(&mut self, cx: &mut Context<Self>) {
+        let work = cx.background_executor().spawn(async move {
+            use fx_shell::default_manager::{BACKUP, CLASSES, owner};
+            let exe = std::env::current_exe()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            (
+                owner(CLASSES, BACKUP, &exe),
+                fx_index::service::service_state(),
+                crate::update::last_check(),
+                crate::update::ready().map(|(v, _, _)| v.to_string()),
+            )
+        });
+        cx.spawn(async move |this, cx| {
+            let (owner, index, last_check, ready) = work.await;
+            let _ = this.update(cx, |view, cx| {
+                let live = &mut view.live;
+                live.owner = Some(owner);
+                live.index = Some(index);
+                live.last_check = last_check;
+                live.ready = ready;
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Ends `topic`'s work: its error (if any) stays on its row, and the
+    /// real state is read again.
+    fn finish(&mut self, topic: Topic, error: Option<String>, cx: &mut Context<Self>) {
+        self.live.busy = None;
+        self.live.error = error.map(|e| (topic, e));
+        self.refresh_live(cx);
+        cx.notify();
+    }
+
+    fn start(&mut self, topic: Topic) -> bool {
+        if self.live.busy.is_some() {
+            return false;
+        }
+        self.live.busy = Some(topic);
+        if self.live.error.as_ref().is_some_and(|(t, _)| *t == topic) {
+            self.live.error = None;
+        }
+        true
+    }
+
+    fn set_default_manager(&mut self, enable: bool, cx: &mut Context<Self>) {
+        let Ok(exe) = std::env::current_exe() else {
+            return;
+        };
+        if !self.start(Topic::Manager) {
+            return;
+        }
+        let rx = fx_shell::launch::spawn_launch(move || {
+            use fx_shell::default_manager::{BACKUP, CLASSES, enable as on, revert};
+            if enable {
+                // Another copy may own it: back to Explorer first, so the
+                // backup keeps what Windows had, not that copy.
+                if !fx_shell::default_manager::is_default(CLASSES, &exe.to_string_lossy()) {
+                    revert(CLASSES, BACKUP)?;
+                }
+                on(CLASSES, BACKUP, &exe.to_string_lossy())
+            } else {
+                revert(CLASSES, BACKUP)
+            }
+        });
+        cx.spawn(async move |this, cx| {
+            let result = crate::chan::next(rx).await.unwrap_or(Ok(()));
+            let _ = this.update(cx, |view, cx| {
+                view.finish(Topic::Manager, result.err().map(|e| failure(&e)), cx);
+            });
+        })
+        .detach();
+    }
+
+    fn set_index_service(&mut self, install: bool, cx: &mut Context<Self>) {
+        let exe = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.join("fx-indexd.exe")))
+            .filter(|p| p.exists());
+        let Some(exe) = exe else {
+            self.live.error = Some((
+                Topic::Index,
+                tr!(
+                    "O fx-indexd.exe não está na pasta do Pathdash. Reinstalar o Pathdash resolve.",
+                    "fx-indexd.exe is not in the Pathdash folder. Reinstalling Pathdash fixes it."
+                )
+                .to_owned(),
+            ));
+            cx.notify();
+            return;
+        };
+        if !self.start(Topic::Index) {
+            return;
+        }
+        let args = if install { "install" } else { "uninstall" }.to_owned();
+        let rx = fx_shell::launch(fx_shell::launch::Launch::Elevated { exe, args });
+        cx.spawn(async move |this, cx| {
+            let result = crate::chan::next(rx).await.unwrap_or(Ok(()));
+            let _ = this.update(cx, |view, cx| {
+                view.finish(Topic::Index, result.err().map(|e| failure(&e)), cx);
+            });
+        })
+        .detach();
+    }
+
+    /// "Procurar agora": asks GitHub and, when there is a newer version,
+    /// downloads and checks it (a thread of its own: network, D-066).
+    fn check_now(&mut self, cx: &mut Context<Self>) {
+        if !self.start(Topic::Update) {
+            return;
+        }
+        let (tx, rx) = futures::channel::oneshot::channel();
+        let _ = std::thread::Builder::new()
+            .name("fx-update".into())
+            .spawn(move || {
+                let result = crate::update::check().and_then(|found| match found {
+                    Some(u) => crate::update::prepare(&u),
+                    None => Ok(()),
+                });
+                let _ = tx.send(result);
+            });
+        cx.spawn(async move |this, cx| {
+            let result = rx.await.unwrap_or_else(|_| {
+                Err(std::io::Error::other(tr!(
+                    "não foi possível começar",
+                    "could not start"
+                )))
+            });
+            let _ = this.update(cx, |view, cx| {
+                view.live.checked = Some(result.map_err(|e| e.to_string()));
+                view.finish(Topic::Update, None, cx);
+            });
+        })
+        .detach();
+    }
+
     pub(super) fn open_settings(&mut self, section: Section, cx: &mut Context<Self>) {
+        // A new section starts with no ring: the next Tab shows it on the
+        // first control (it used to land on the second one).
         if self.settings != Some(section) {
             self.settings_focus = 0;
+            self.settings_keyboard = false;
         }
         if self.settings.is_none() {
-            self.settings_keyboard = false;
+            self.refresh_live(cx);
         }
         self.settings = Some(section);
         cx.notify();
@@ -157,12 +381,13 @@ impl TabsView {
             Act::AutoUpdate => {
                 crate::prefs::UPDATES.switch();
             }
-            Act::CheckNow => tab.update(cx, |view, cx| view.check_updates(false, cx)),
+            Act::CheckNow => self.check_now(cx),
+            Act::RestartToUpdate => tab.update(cx, |view, cx| view.update_command(cx)),
             Act::CrashReports => {
                 crate::prefs::CRASH_REPORTS.switch();
             }
-            Act::DefaultManager(on) => tab.update(cx, |view, cx| view.default_manager(on, cx)),
-            Act::IndexService(on) => tab.update(cx, |view, cx| view.index_service(on, cx)),
+            Act::DefaultManager(on) => self.set_default_manager(on, cx),
+            Act::IndexService(on) => self.set_index_service(on, cx),
             Act::HowTo => {
                 self.settings = None;
                 self.open_guide(cx);
@@ -179,8 +404,9 @@ pub(super) enum Control {
     Switch(bool, Act),
     /// A choice among options: label, selected, action.
     Segments(Vec<(&'static str, bool, Act)>),
-    /// A value shown before the buttons (the version), then the buttons.
-    Buttons(Option<String>, Vec<(&'static str, Act)>),
+    /// A value, such as the version (read-only).
+    Value(String),
+    Buttons(Vec<(&'static str, Act)>),
 }
 
 /// One settings row: what it is, what it does, how to change it. The same
@@ -188,6 +414,8 @@ pub(super) enum Control {
 pub(super) struct Row {
     pub title: &'static str,
     pub detail: &'static str,
+    /// The live state, under the text.
+    pub status: Option<Status>,
     pub control: Control,
 }
 
@@ -210,7 +438,7 @@ pub(super) fn controls(rows: &[Row]) -> Vec<Focusable> {
     let mut out = Vec::new();
     for row in rows {
         match &row.control {
-            Control::None => {}
+            Control::None | Control::Value(_) => {}
             Control::Switch(on, act) => out.push(Focusable {
                 label: row.title.to_owned(),
                 kind: FocusKind::Switch(*on),
@@ -225,7 +453,7 @@ pub(super) fn controls(rows: &[Row]) -> Vec<Focusable> {
                     });
                 }
             }
-            Control::Buttons(_, buttons) => {
+            Control::Buttons(buttons) => {
                 for (label, act) in buttons {
                     out.push(Focusable {
                         label: (*label).to_owned(),
@@ -252,6 +480,7 @@ impl TabsView {
                         "O padrão segue o idioma do Windows.",
                         "By default it follows the Windows language."
                     ),
+                    status: None,
                     control: Control::Segments(vec![
                         ("Português", !english, Act::Language(false)),
                         ("English", english, Act::Language(true)),
@@ -266,6 +495,7 @@ impl TabsView {
                         "Excluir de vez (Shift+Delete) sempre pergunta.",
                         "Deleting for good (Shift+Delete) always asks."
                     ),
+                    status: None,
                     control: Control::Switch(
                         crate::prefs::CONFIRM_RECYCLE.get(),
                         Act::ConfirmRecycle,
@@ -280,6 +510,7 @@ impl TabsView {
                         "Vale na próxima abertura do Pathdash.",
                         "Applies the next time Pathdash opens."
                     ),
+                    status: None,
                     control: Control::Switch(
                         crate::prefs::RESTORE_SESSION.get(),
                         Act::RestoreSession,
@@ -293,6 +524,7 @@ impl TabsView {
                         "Ctrl+1, Ctrl+2 e Ctrl+3 também trocam.",
                         "Ctrl+1, Ctrl+2 and Ctrl+3 switch it too."
                     ),
+                    status: None,
                     control: Control::Segments(vec![
                         (
                             tr!("Compacta", "Compact"),
@@ -317,6 +549,7 @@ impl TabsView {
                         "Arquivos ocultos e de sistema (Ctrl+H).",
                         "Hidden and system files (Ctrl+H)."
                     ),
+                    status: None,
                     control: Control::Switch(self.look.show_hidden, Act::Hidden),
                 },
                 Row {
@@ -325,6 +558,7 @@ impl TabsView {
                         "Acesso rápido e unidades (Ctrl+B).",
                         "Quick access and drives (Ctrl+B)."
                     ),
+                    status: None,
                     control: Control::Switch(self.sidebar_open, Act::Sidebar),
                 },
                 Row {
@@ -333,6 +567,7 @@ impl TabsView {
                         "O alto contraste do Windows sempre tem prioridade.",
                         "Windows high contrast always comes first."
                     ),
+                    status: None,
                     control: {
                         use crate::prefs::ThemePick;
                         let pick = crate::prefs::theme();
@@ -356,30 +591,7 @@ impl TabsView {
                     },
                 },
             ],
-            Section::Updates => {
-                let version = crate::VERSION.split('+').next().unwrap_or(crate::VERSION);
-                vec![
-                    Row {
-                        title: tr!("Atualizações automáticas", "Automatic updates"),
-                        detail: tr!(
-                            "Baixa a versão nova em segundo plano, confere e instala quando você fecha o Pathdash.",
-                            "Downloads the new version in the background, checks it and installs it when you close Pathdash."
-                        ),
-                        control: Control::Switch(crate::prefs::UPDATES.get(), Act::AutoUpdate),
-                    },
-                    Row {
-                        title: tr!("Versão instalada", "Installed version"),
-                        detail: tr!(
-                            "A versão instalada deste Pathdash.",
-                            "The version of this Pathdash."
-                        ),
-                        control: Control::Buttons(
-                            Some(version.to_owned()),
-                            vec![(tr!("Procurar agora", "Check now"), Act::CheckNow)],
-                        ),
-                    },
-                ]
-            }
+            Section::Updates => self.update_rows(),
             Section::Privacy => vec![
                 Row {
                     title: tr!("Relatórios de falha", "Crash reports"),
@@ -387,6 +599,7 @@ impl TabsView {
                         "Se o Pathdash fechar com uma falha, guarda um relatório sem caminhos nem nomes neste computador. Nada é enviado sem você.",
                         "If Pathdash closes with a crash, it keeps a report with no paths or names on this computer. Nothing is sent without you."
                     ),
+                    status: None,
                     control: Control::Switch(crate::prefs::CRASH_REPORTS.get(), Act::CrashReports),
                 },
                 Row {
@@ -395,45 +608,11 @@ impl TabsView {
                         "Nenhum. A verificação de atualizações só consulta a lista de versões no GitHub.",
                         "None. The update check only reads the list of versions on GitHub."
                     ),
+                    status: None,
                     control: Control::None,
                 },
             ],
-            Section::System => vec![
-                Row {
-                    title: tr!("Gerenciador de arquivos padrão", "Default file manager"),
-                    detail: tr!(
-                        "Pastas, unidades e Win+E abrem no Pathdash. Voltar ao Explorador restaura tudo.",
-                        "Folders, drives and Win+E open in Pathdash. Back to Explorer restores everything."
-                    ),
-                    control: Control::Buttons(
-                        None,
-                        vec![
-                            (
-                                tr!("Usar o Pathdash", "Use Pathdash"),
-                                Act::DefaultManager(true),
-                            ),
-                            (
-                                tr!("Usar o Explorador", "Use Explorer"),
-                                Act::DefaultManager(false),
-                            ),
-                        ],
-                    ),
-                },
-                Row {
-                    title: tr!("Busca no disco inteiro", "Whole-disk search"),
-                    detail: tr!(
-                        "Um serviço do Windows mantém o índice dos discos NTFS. Pede administrador uma vez.",
-                        "A Windows service keeps the index of NTFS disks. Asks for administrator once."
-                    ),
-                    control: Control::Buttons(
-                        None,
-                        vec![
-                            (tr!("Ativar", "Turn on"), Act::IndexService(true)),
-                            (tr!("Desativar", "Turn off"), Act::IndexService(false)),
-                        ],
-                    ),
-                },
-            ],
+            Section::System => self.system_rows(),
             Section::About => vec![
                 Row {
                     title: tr!("Licença", "License"),
@@ -441,34 +620,267 @@ impl TabsView {
                         "Software livre, sob as licenças MIT ou Apache 2.0. Feito em Rust, nativo do Windows.",
                         "Free software, under the MIT or Apache 2.0 licenses. Made in Rust, native to Windows."
                     ),
+                    status: None,
                     control: Control::None,
                 },
                 Row {
-                    title: "",
-                    detail: "",
-                    control: Control::Buttons(
-                        None,
-                        vec![
-                            (tr!("Como usar (F1)", "How to use (F1)"), Act::HowTo),
-                            (
-                                tr!("Novidades", "What's new"),
-                                Act::Link(
-                                    "https://github.com/heapwraith/fx/blob/main/CHANGELOG.md",
-                                ),
-                            ),
-                            (
-                                tr!("Código e sugestões", "Code and feedback"),
-                                Act::Link("https://github.com/heapwraith/fx"),
-                            ),
-                            (
-                                tr!("Relatar um problema", "Report a problem"),
-                                Act::Link("https://github.com/heapwraith/fx/issues/new/choose"),
-                            ),
-                        ],
+                    title: tr!("Ajuda e projeto", "Help and project"),
+                    detail: tr!(
+                        "O guia de atalhos, o que mudou em cada versão e o código no GitHub.",
+                        "The shortcut guide, what changed in each version and the code on GitHub."
                     ),
+                    status: None,
+                    control: Control::Buttons(vec![
+                        (tr!("Como usar (F1)", "How to use (F1)"), Act::HowTo),
+                        (
+                            tr!("Novidades", "What's new"),
+                            Act::Link("https://github.com/heapwraith/fx/blob/main/CHANGELOG.md"),
+                        ),
+                        (
+                            tr!("Código e sugestões", "Code and feedback"),
+                            Act::Link("https://github.com/heapwraith/fx"),
+                        ),
+                        (
+                            tr!("Relatar um problema", "Report a problem"),
+                            Act::Link("https://github.com/heapwraith/fx/issues/new/choose"),
+                        ),
+                    ]),
                 },
             ],
         }
+    }
+
+    /// The error of `topic`'s last action, as its status.
+    fn error_of(&self, topic: Topic) -> Option<Status> {
+        match &self.live.error {
+            Some((t, e)) if *t == topic => status(Tone::Error, e.clone()),
+            _ => None,
+        }
+    }
+
+    fn update_rows(&self) -> Vec<Row> {
+        let version = crate::VERSION.split('+').next().unwrap_or(crate::VERSION);
+        let live = &self.live;
+        let busy = live.busy == Some(Topic::Update);
+        let last = live.last_check.map(when);
+        let (state, buttons) = if busy {
+            (
+                status(
+                    Tone::Busy,
+                    tr!(
+                        "Procurando no GitHub; uma versão nova é baixada e conferida…",
+                        "Checking GitHub; a new version is downloaded and verified…"
+                    ),
+                ),
+                vec![],
+            )
+        } else if let Some(v) = &live.ready {
+            (
+                status(
+                    Tone::On,
+                    trf!(
+                        "Versão {v} baixada e conferida. Entra quando você fechar o Pathdash.",
+                        "Version {v} downloaded and verified. It applies when you close Pathdash."
+                    ),
+                ),
+                vec![(tr!("Reiniciar agora", "Restart now"), Act::RestartToUpdate)],
+            )
+        } else {
+            let check = vec![(tr!("Procurar agora", "Check now"), Act::CheckNow)];
+            let text = match (&live.checked, &last) {
+                (Some(Err(e)), _) => {
+                    return self.update_rows_with(
+                        version,
+                        status(
+                            Tone::Error,
+                            trf!("Não foi possível verificar: {e}", "Could not check: {e}"),
+                        ),
+                        check,
+                    );
+                }
+                (Some(Ok(())), Some(at)) | (None, Some(at)) => trf!(
+                    "Você está na versão mais recente. Última verificação: {at}.",
+                    "You are on the latest version. Last checked {at}."
+                ),
+                (Some(Ok(())), None) => tr!(
+                    "Você está na versão mais recente.",
+                    "You are on the latest version."
+                )
+                .to_owned(),
+                (None, None) => tr!(
+                    "Ainda não verificado neste computador.",
+                    "Not checked on this computer yet."
+                )
+                .to_owned(),
+            };
+            (status(Tone::Off, text), check)
+        };
+        self.update_rows_with(version, state, buttons)
+    }
+
+    fn update_rows_with(
+        &self,
+        version: &str,
+        state: Option<Status>,
+        buttons: Vec<(&'static str, Act)>,
+    ) -> Vec<Row> {
+        vec![
+            Row {
+                title: tr!("Versão instalada", "Installed version"),
+                detail: "",
+                status: None,
+                control: Control::Value(version.to_owned()),
+            },
+            Row {
+                title: tr!("Procurar atualizações", "Check for updates"),
+                detail: tr!(
+                    "Consulta as versões publicadas no GitHub.",
+                    "Looks at the versions published on GitHub."
+                ),
+                status: state,
+                control: Control::Buttons(buttons),
+            },
+            Row {
+                title: tr!("Atualizações automáticas", "Automatic updates"),
+                detail: tr!(
+                    "Uma vez por dia, baixa a versão nova em segundo plano, confere e instala quando você fecha o Pathdash.",
+                    "Once a day, downloads the new version in the background, verifies it and installs it when you close Pathdash."
+                ),
+                status: None,
+                control: Control::Switch(crate::prefs::UPDATES.get(), Act::AutoUpdate),
+            },
+        ]
+    }
+
+    fn system_rows(&self) -> Vec<Row> {
+        use fx_index::service::ServiceState;
+        use fx_shell::default_manager::Owner;
+        let live = &self.live;
+        let checking = || (status(Tone::Busy, tr!("Verificando…", "Checking…")), vec![]);
+        let (manager_state, manager_buttons) = if live.busy == Some(Topic::Manager) {
+            (status(Tone::Busy, tr!("Aplicando…", "Applying…")), vec![])
+        } else {
+            match &live.owner {
+                None => checking(),
+                Some(Owner::This) => (
+                    status(
+                        Tone::On,
+                        tr!(
+                            "Ativo: pastas, unidades e Win+E abrem no Pathdash.",
+                            "On: folders, drives and Win+E open in Pathdash."
+                        ),
+                    ),
+                    vec![(
+                        tr!("Voltar ao Explorador", "Back to Explorer"),
+                        Act::DefaultManager(false),
+                    )],
+                ),
+                Some(Owner::Explorer) => (
+                    status(
+                        Tone::Off,
+                        tr!(
+                            "Desativado: o Explorador abre as pastas.",
+                            "Off: Explorer opens folders."
+                        ),
+                    ),
+                    vec![(
+                        tr!("Usar o Pathdash", "Use Pathdash"),
+                        Act::DefaultManager(true),
+                    )],
+                ),
+                Some(Owner::Other(command)) => (
+                    status(
+                        Tone::Off,
+                        trf!(
+                            "Outra cópia do Pathdash está como padrão: {command}",
+                            "Another copy of Pathdash is the default: {command}"
+                        ),
+                    ),
+                    vec![
+                        (
+                            tr!("Usar esta cópia", "Use this copy"),
+                            Act::DefaultManager(true),
+                        ),
+                        (
+                            tr!("Voltar ao Explorador", "Back to Explorer"),
+                            Act::DefaultManager(false),
+                        ),
+                    ],
+                ),
+            }
+        };
+        let (index_state, index_buttons) = if live.busy == Some(Topic::Index) {
+            (
+                status(
+                    Tone::Busy,
+                    tr!(
+                        "Aguardando a permissão de administrador do Windows…",
+                        "Waiting for Windows administrator permission…"
+                    ),
+                ),
+                vec![],
+            )
+        } else {
+            match live.index {
+                None => checking(),
+                Some(ServiceState::Running) => (
+                    status(
+                        Tone::On,
+                        tr!(
+                            "Ativa: o serviço do índice está rodando e a busca cobre os discos NTFS.",
+                            "On: the index service is running and search covers the NTFS disks."
+                        ),
+                    ),
+                    vec![(tr!("Desativar", "Turn off"), Act::IndexService(false))],
+                ),
+                Some(ServiceState::NotInstalled) => (
+                    status(
+                        Tone::Off,
+                        tr!(
+                            "Desativada: a busca procura dentro da pasta aberta.",
+                            "Off: search looks inside the open folder."
+                        ),
+                    ),
+                    vec![(tr!("Ativar", "Turn on"), Act::IndexService(true))],
+                ),
+                Some(ServiceState::Stopped | ServiceState::Other) => (
+                    status(
+                        Tone::Error,
+                        tr!(
+                            "O serviço está instalado, mas parado: a busca não usa o índice.",
+                            "The service is installed but stopped: search does not use the index."
+                        ),
+                    ),
+                    vec![
+                        (
+                            tr!("Ativar de novo", "Turn on again"),
+                            Act::IndexService(true),
+                        ),
+                        (tr!("Desativar", "Turn off"), Act::IndexService(false)),
+                    ],
+                ),
+            }
+        };
+        vec![
+            Row {
+                title: tr!("Gerenciador de arquivos padrão", "Default file manager"),
+                detail: tr!(
+                    "Pastas, unidades e Win+E abrem no Pathdash. Voltar ao Explorador restaura o que havia.",
+                    "Folders, drives and Win+E open in Pathdash. Going back to Explorer restores what was there."
+                ),
+                status: self.error_of(Topic::Manager).or(manager_state),
+                control: Control::Buttons(manager_buttons),
+            },
+            Row {
+                title: tr!("Busca no disco inteiro", "Whole-disk search"),
+                detail: tr!(
+                    "Um serviço do Windows mantém o índice dos discos NTFS. Ativar e desativar pedem permissão de administrador.",
+                    "A Windows service keeps the index of the NTFS disks. Turning it on or off asks for administrator permission."
+                ),
+                status: self.error_of(Topic::Index).or(index_state),
+                control: Control::Buttons(index_buttons),
+            },
+        ]
     }
 
     /// Settings as a screen reader reads them: the sections, then each row
@@ -507,8 +919,12 @@ impl TabsView {
                 items.push(Item::Text(text));
                 acts.push(None);
             }
-            if let Control::Buttons(Some(value), _) = &row.control {
+            if let Control::Value(value) = &row.control {
                 items.push(Item::Text(value.clone()));
+                acts.push(None);
+            }
+            if let Some(st) = &row.status {
+                items.push(Item::Text(st.text.clone()));
                 acts.push(None);
             }
             for c in controls(std::slice::from_ref(row)) {
@@ -639,13 +1055,17 @@ impl TabsView {
         for (r, row) in rows.into_iter().enumerate() {
             // Two or more buttons go under the text, across the row (they do
             // not fit beside it in a narrow window).
-            let stacked = matches!(&row.control, Control::Buttons(_, b) if b.len() > 1);
+            let stacked = matches!(&row.control, Control::Buttons(b) if b.len() > 1);
             let row_act = match row.control {
                 Control::Switch(_, act) => Some(act),
                 _ => None,
             };
             let control: gpui::AnyElement = match row.control {
                 Control::None => div().into_any_element(),
+                Control::Value(v) => div()
+                    .text_color(rgba(t.text_secondary))
+                    .child(v)
+                    .into_any_element(),
                 Control::Switch(on, _) => {
                     let id = SharedString::from(format!("set-{r}-switch"));
                     let el = ring(next == focus, switch(id, on));
@@ -685,11 +1105,8 @@ impl TabsView {
                     }
                     seg.into_any_element()
                 }
-                Control::Buttons(value, buttons) => {
+                Control::Buttons(buttons) => {
                     let mut line = div().flex().flex_wrap().items_center().gap(px(space(2)));
-                    if let Some(v) = value {
-                        line = line.child(div().text_color(rgba(t.text_secondary)).child(v));
-                    }
                     for (k, (label, act)) in buttons.into_iter().enumerate() {
                         let id = SharedString::from(format!("set-{r}-b{k}"));
                         line = line.child(ring(next == focus, button(id, label, act, cx)));
@@ -698,6 +1115,45 @@ impl TabsView {
                     line.into_any_element()
                 }
             };
+            let state = row.status.map(|st| {
+                let dot = match st.tone {
+                    Tone::On => t.accent,
+                    Tone::Off | Tone::Busy => t.text_secondary,
+                    Tone::Error => t.danger,
+                };
+                div()
+                    .pt(px(space(1)))
+                    .flex()
+                    .items_start()
+                    .gap(px(space(2)))
+                    .text_size(px(CAPTION_SIZE))
+                    .child(
+                        // An outlined dot while working or off, filled when
+                        // on or wrong: the state reads at a glance.
+                        div()
+                            .flex_none()
+                            .mt(px(4.0))
+                            .size(px(8.0))
+                            .rounded_full()
+                            .when(matches!(st.tone, Tone::On | Tone::Error), |d| {
+                                d.bg(rgba(dot))
+                            })
+                            .when(matches!(st.tone, Tone::Off | Tone::Busy), |d| {
+                                d.border_1().border_color(rgba(dot))
+                            }),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .text_color(rgba(if st.tone == Tone::Busy {
+                                t.text_secondary
+                            } else {
+                                t.text
+                            }))
+                            .child(st.text),
+                    )
+            });
             let text = div()
                 .flex_1()
                 .min_w_0()
@@ -712,7 +1168,8 @@ impl TabsView {
                             .text_color(rgba(t.text_secondary))
                             .child(row.detail),
                     )
-                });
+                })
+                .children(state);
             let line = div()
                 .id(SharedString::from(format!("set-row-{r}")))
                 .py(px(space(3)))
@@ -780,25 +1237,39 @@ impl TabsView {
                             .py(px(space(2)))
                             .text_size(px(CAPTION_SIZE))
                             .text_color(rgba(t.text_secondary))
-                            .child(tr!("Tab e Espaço: teclado", "Tab and Space: keyboard"))
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.0))
+                            .child(tr!("↑ ↓ trocam de seção", "↑ ↓ change section"))
+                            .child(tr!(
+                                "Tab e Espaço usam os controles",
+                                "Tab and Space use controls"
+                            ))
                             .child(tr!("Esc fecha", "Esc closes")),
                     ),
             )
             .child(
                 div()
-                    .id("settings-body")
                     .flex_1()
                     .min_w_0()
-                    .p(px(space(6)))
-                    .overflow_y_scroll()
+                    .relative()
                     .child(
                         div()
-                            .text_size(px(20.0))
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .pb(px(space(2)))
-                            .child(section.label()),
+                            .id("settings-body")
+                            .size_full()
+                            .p(px(space(6)))
+                            .overflow_y_scroll()
+                            .track_scroll(&self.settings_scroll.handle)
+                            .child(
+                                div()
+                                    .text_size(px(20.0))
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .pb(px(space(2)))
+                                    .child(section.label()),
+                            )
+                            .child(body),
                     )
-                    .child(body),
+                    .child(crate::scrollbar::vertical(&self.settings_scroll, &t)),
             );
         Some(
             deferred(crate::motion::enter(
