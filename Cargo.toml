@@ -110,6 +110,8 @@ features = [
 
 [patch.crates-io]
 gpui = { path = "third_party/gpui" }
+# Sem o zed-reqwest (hyper, rustls, ring): o fx não faz HTTP pelo GPUI (T5.7, D-071).
+gpui_http_client = { path = "third_party/gpui_http_client" }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

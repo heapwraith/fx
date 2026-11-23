@@ -41,7 +41,7 @@ Seguir a pasta da aba (`cd`) quando ela muda, cmd além do PowerShell, rolar o h
 
 ## T5.6 — Robustez
 - [ ] Concluída em: ____ · Resumo:
-- Parcial em 2026-11-23: o `fx-indexd` desliga um cliente que não termina a conversa em 15 s (um vigia por conexão cancela a leitura ou escrita presa com `CancelSynchronousIo`; desconectar de outra thread esperaria a mesma chamada presa); o teste do pipe confere que um cliente parado é desligado e não atrapalha os outros. Os scripts de entrada (rolagem, menu, `drive.ps1`) conferem que o fx está em primeiro plano antes de mandar teclas ou cliques e falham com mensagem clara se não estiver (os de digitação já faziam isso); o `drive.ps1` refoca antes de cada passo de entrada. Rolagem medida depois: 0 de 4.001 quadros perdidos. A cópia do desinstalador em `%TEMP%` se apaga ao terminar (um `cmd` oculto espera ~2 s e a remove) e todo `fx-setup` que roda apaga cópias velhas; conferido desinstalando de uma pasta de teste: a pasta sumiu e nenhuma cópia ficou.
+- Parcial em 2026-11-23: o `fx-indexd` desliga um cliente que não termina a conversa em 15 s (um vigia por conexão cancela a leitura ou escrita presa com `CancelSynchronousIo`; desconectar de outra thread esperaria a mesma chamada presa); o teste do pipe confere que um cliente parado é desligado e não atrapalha os outros. Os scripts de entrada (rolagem, menu, `drive.ps1`) conferem que o fx está em primeiro plano antes de mandar teclas ou cliques e falham com mensagem clara se não estiver (os de digitação já faziam isso); o `drive.ps1` refoca antes de cada passo de entrada. Rolagem medida depois: 0 de 4.001 quadros perdidos. A cópia do desinstalador em `%TEMP%` se apaga ao terminar (um `cmd` oculto espera ~2 s e a remove) e todo `fx-setup` que roda apaga cópias velhas; conferido desinstalando de uma pasta de teste: a pasta sumiu e nenhuma cópia ficou. ARM64 no WSL: só o `fx-indexd` compila; o `ring` saiu (D-071), mas o `psm` não monta com `clang-cl` fora do Windows (diagnóstico na D-071); o CI segue compilando o ARM64.
 
 - `fx-indexd`: tempo limite para conexões paradas.
 - Janela de prévia do Windows: atraso de até 250 ms ao mover a janela e sobreposição a menus.
@@ -53,6 +53,7 @@ Seguir a pasta da aba (`cd`) quando ela muda, cmd além do PowerShell, rolar o h
 
 ## T5.7 — Metas novas que hoje reprovam (D-064)
 - [ ] Concluída em: ____ · Resumo:
+- Parcial em 2026-11-23: S1 subiu para ≤ 20 MB (D-069, pedido do usuário; hoje 18,4 MB). `gpui_http_client` vendorizado sem o `reqwest` (D-071): 56 pacotes a menos, mas sem efeito no tamanho nem na memória (o código já era descartado). P2 voltou a 73–78 ms de mediana (D-070).
 
 - **P8 ≤ 85 MB e S1 `fx.exe` ≤ 12 MB:** tirar do GPUI vendorizado o cliente HTTP que o fx não usa (`gpui_http_client`, `reqwest`, `rustls`, `ring`) e medir o que mais pesa no processo parado (WinTrust/Crypt32 carregadas pelo shell, atlas de glifos).
 - **S2 instalador ≤ 10 MB:** comprimir o programa do instalador (hoje 6,7 MB sem compressão) ou reduzir o GPUI que ele leva.
