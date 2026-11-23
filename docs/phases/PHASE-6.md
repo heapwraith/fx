@@ -82,7 +82,7 @@ Painel duplo mostrando o que difere entre duas pastas; sincronizar pelo motor se
 Conjuntos de abas e painéis por projeto ("Trabalho", "Fotos"), trocados pela paleta.
 
 ### T6.14 — Abas entre janelas e mais divisões
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-23 · Resumo: arrastar uma aba da faixa e soltá-la sobre os painéis abre essa aba numa janela nova (pasta, ordenação e vista preservadas) e a tira desta; "Mover aba para nova janela" na paleta faz o mesmo pelo teclado. Além do F3 (painel duplo), Ctrl+F3 acrescenta painéis até 4 por aba e Ctrl+Shift+F3 fecha o painel em foco; Tab passa ao próximo, F5/F6 copiam ou movem para o próximo, a barra de destaque mostra o ativo (`tabs_view/dual.rs`). O GPUI não leva um arrasto de uma janela para outra, por isso juntar abas de janelas diferentes não é possível por arrasto (fica como limite registrado). Conferida nas capturas (três painéis).
 
 Arrastar uma aba para fora vira janela; dividir em mais de dois painéis.
 

@@ -160,6 +160,13 @@ pub fn sections() -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
                 ("Ctrl+Tab", tr!("próxima aba", "next tab")),
                 ("F3", tr!("painel duplo", "dual pane")),
                 (
+                    "Ctrl+F3",
+                    tr!(
+                        "mais um painel (até 4); Ctrl+Shift+F3 fecha",
+                        "one more pane (up to 4); Ctrl+Shift+F3 closes"
+                    ),
+                ),
+                (
                     "F5 F6",
                     tr!(
                         "copiar ou mover para o outro painel",

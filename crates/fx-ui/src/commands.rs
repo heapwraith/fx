@@ -54,6 +54,8 @@ pub enum Action {
     SaveWorkspace,
     /// T6.7: a ZIP of the selection.
     CompressZip,
+    /// T6.14: the active tab moves to a new window.
+    TabToWindow,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -129,6 +131,7 @@ impl Command {
             Action::Group(_) => "\u{F168}",       // GroupList
             Action::MediaColumn(_) => "\u{E71D}", // AllApps (columns)
             Action::CompressZip => "\u{F012}",    // ZipFolder
+            Action::TabToWindow => "\u{E8A7}",    // OpenInNewWindow
         }
     }
 
@@ -230,6 +233,15 @@ pub const COMMANDS: &[Command] = &[
         "ctrl-e",
     ),
     direct(("Compactar em ZIP", "Compress to ZIP"), Action::CompressZip),
+    direct(
+        ("Mover aba para nova janela", "Move tab to new window"),
+        Action::TabToWindow,
+    ),
+    window(
+        ("Dividir: mais um painel", "Split: one more pane"),
+        "ctrl-f3",
+    ),
+    window(("Fechar este painel", "Close this pane"), "ctrl-shift-f3"),
     direct(
         ("Agrupar por tipo", "Group by type"),
         Action::Group(GroupBy::Type),

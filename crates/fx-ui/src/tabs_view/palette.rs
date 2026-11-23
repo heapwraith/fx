@@ -490,6 +490,10 @@ impl TabsView {
                 }
                 Action::Group(by) => tab.update(cx, |view, cx| view.set_group_by(by, cx)),
                 Action::CompressZip => tab.update(cx, |view, cx| view.compress_zip(cx)),
+                Action::TabToWindow => {
+                    let i = self.tabs.active_index();
+                    self.tab_to_window(i, window, cx);
+                }
                 Action::MediaColumn(col) => {
                     tab.update(cx, |view, cx| view.toggle_media_column(col, cx))
                 }

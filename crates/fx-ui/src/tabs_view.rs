@@ -214,6 +214,11 @@ impl TabsView {
             "palette" => self.open_palette(cx),
             "sidebar" => self.sidebar_focus = Some(arg.parse().unwrap_or(0)),
             "guide" => self.open_guide(cx),
+            // Three panes (T6.14).
+            "panes" => {
+                self.toggle_dual(window, cx);
+                self.add_pane(window, cx);
+            }
             "compare" => {
                 self.toggle_dual(window, cx);
                 self.start_compare(cx);
@@ -578,6 +583,15 @@ impl TabsView {
         let handled = match ks.key.as_str() {
             "f3" if plain => {
                 self.toggle_dual(window, cx);
+                true
+            }
+            // More panes (T6.14).
+            "f3" if m.control && !m.alt && !m.shift => {
+                self.add_pane(window, cx);
+                true
+            }
+            "f3" if m.control && m.shift && !m.alt => {
+                self.close_pane(window, cx);
                 true
             }
             "tab" if plain => self.switch_pane(window, cx),
