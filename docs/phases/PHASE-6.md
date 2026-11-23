@@ -98,6 +98,11 @@ Arrastar uma aba para fora vira janela; dividir em mais de dois painéis.
 
 Converter/redimensionar imagens, juntar PDFs, renomear fotos pela data EXIF, direto da seleção, pela paleta.
 
+### T6.17 — Comparar arquivos (diff)
+- [x] Concluída em: 2026-11-23 · Resumo: registrada a pedido do usuário em 2026-11-23. "Comparar arquivos (selecionados)" na paleta: dois textos lado a lado, linha a linha, pelo algoritmo de Myers (`fx-core/src/diff.rs`, início e fim comuns separados antes; 10 mil linhas com 41 trechos em milissegundos; acima de 2 mil trechos diz que são diferentes demais), com − + ~ na margem (forma, não só cor), N/F8 e P/Shift+F8 pulando entre trechos; outros arquivos dizem se são idênticos byte a byte ou em que byte diferem (e as dimensões, se forem imagens); três ou mais ficam agrupados por conteúdo idêntico. Leitura numa thread, nada é alterado; leitor de tela ouve cada trecho com o antes e o depois. 3 testes novos (mais o `first_difference` no teste de duplicados); conferida nas capturas.
+
+Comparar dois ou mais arquivos: texto lado a lado, binários idênticos ou o primeiro byte diferente, grupos de idênticos para três ou mais.
+
 ---
 
 ## Análise de 2026-11-22 (D-068)

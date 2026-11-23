@@ -149,18 +149,33 @@ fn confirm(mut files: Vec<PathBuf>, size: u64, cancel: &AtomicBool) -> Vec<DupGr
 }
 
 /// Whether two files have the same bytes (compared in blocks).
-fn same_content(a: &Path, b: &Path) -> io::Result<bool> {
+pub fn same_content(a: &Path, b: &Path) -> io::Result<bool> {
+    Ok(first_difference(a, b)?.is_none())
+}
+
+/// The offset of the first byte where two files differ (the shorter
+/// one's length when one is a prefix of the other), `None` if identical.
+/// Compared in 1 MiB blocks.
+pub fn first_difference(a: &Path, b: &Path) -> io::Result<Option<u64>> {
     let (mut fa, mut fb) = (File::open(a)?, File::open(b)?);
     let (mut ba, mut bb) = (vec![0u8; BLOCK], vec![0u8; BLOCK]);
+    let mut at = 0u64;
     loop {
         let na = read_full(&mut fa, &mut ba)?;
         let nb = read_full(&mut fb, &mut bb)?;
-        if na != nb || ba[..na] != bb[..nb] {
-            return Ok(false);
+        let n = na.min(nb);
+        if ba[..n] != bb[..n]
+            && let Some(k) = (0..n).find(|&k| ba[k] != bb[k])
+        {
+            return Ok(Some(at + k as u64));
+        }
+        if na != nb {
+            return Ok(Some(at + n as u64));
         }
         if na == 0 {
-            return Ok(true);
+            return Ok(None);
         }
+        at += n as u64;
     }
 }
 
@@ -208,6 +223,14 @@ mod tests {
             vec![d.join("sub").join("y.txt"), d.join("x.txt")]
         );
         assert!(steps.contains(&DupProgress::Listing(6)));
+        assert_eq!(
+            first_difference(&d.join("a.bin"), &d.join("c.bin")).unwrap(),
+            Some(100_000)
+        );
+        assert_eq!(
+            first_difference(&d.join("a.bin"), &d.join("sub").join("b.bin")).unwrap(),
+            None
+        );
         // A minimum size leaves small files out.
         assert_eq!(find_duplicates(d, 1_000, &cancel, &mut |_| {}).len(), 1);
     }

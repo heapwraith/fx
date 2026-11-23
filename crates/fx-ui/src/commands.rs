@@ -56,6 +56,8 @@ pub enum Action {
     CompressZip,
     /// T6.14: the active tab moves to a new window.
     TabToWindow,
+    /// T6.17: compares the selected files.
+    DiffFiles,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -132,6 +134,7 @@ impl Command {
             Action::MediaColumn(_) => "\u{E71D}", // AllApps (columns)
             Action::CompressZip => "\u{F012}",    // ZipFolder
             Action::TabToWindow => "\u{E8A7}",    // OpenInNewWindow
+            Action::DiffFiles => "\u{E8F9}",      // Switch
         }
     }
 
@@ -233,6 +236,13 @@ pub const COMMANDS: &[Command] = &[
         "ctrl-e",
     ),
     direct(("Compactar em ZIP", "Compress to ZIP"), Action::CompressZip),
+    direct(
+        (
+            "Comparar arquivos (selecionados)",
+            "Compare files (selected)",
+        ),
+        Action::DiffFiles,
+    ),
     direct(
         ("Mover aba para nova janela", "Move tab to new window"),
         Action::TabToWindow,

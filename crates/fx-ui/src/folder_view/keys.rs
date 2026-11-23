@@ -57,6 +57,9 @@ impl FolderView {
             self.toggle_duplicates(cx);
             return;
         }
+        if self.file_diff_key(ks, cx) {
+            return;
+        }
         if self.duplicates_key(ks, window, cx) {
             return;
         }

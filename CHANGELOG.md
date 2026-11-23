@@ -41,6 +41,7 @@ Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualiz
 - **Arquivos compactados:** Enter num ZIP abre como pasta; Ctrl+E extrai (também 7z, RAR e tar), Ctrl+C copia de dentro dele e "Compactar em ZIP" na paleta cria um, tudo com progresso real, conflitos perguntando e desfazer.
 - **Busca no conteúdo:** `conteúdo:"nota fiscal"` na busca acha os arquivos que contêm o texto — nesta pasta lendo os arquivos, no disco inteiro pelo índice do Windows.
 - **Abas e painéis:** soltar uma aba sobre os painéis a leva para uma janela nova (também pela paleta); Ctrl+F3 divide em até 4 painéis, Ctrl+Shift+F3 fecha o painel.
+- **Comparar arquivos** (paleta): dois textos lado a lado com as linhas que mudaram, N e P pulando entre trechos; outros arquivos dizem se são idênticos ou onde diferem; três ou mais ficam agrupados pelos idênticos.
 - **Status do Git:** em pastas de repositórios, cada item mostra se está alterado (M), novo (?), adicionado (A), renomeado (R), apagado (D) ou em conflito (!).
 - **Comparar pastas:** com o painel duplo, "Comparar com o outro painel" mostra o que difere entre as duas pastas e copia para um lado ou outro, perguntando nos conflitos.
 - **Ações rápidas com imagens** (paleta): copiar as imagens selecionadas como JPG ou PNG, ou com metade do tamanho (o original nunca muda), e renomear fotos pela data em que foram tiradas, com desfazer.

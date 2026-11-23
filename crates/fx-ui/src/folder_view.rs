@@ -26,6 +26,7 @@ mod disk_map;
 mod dnd;
 mod duplicates;
 mod edit_ops;
+mod file_diff;
 mod git;
 mod grid;
 mod groups;
@@ -244,6 +245,8 @@ pub struct FolderView {
     media: groups::Media,
     /// The ZIP the folder shown is inside of (T6.7): read-only.
     archive: Option<PathBuf>,
+    /// Comparing files (T6.17).
+    file_diff: Option<file_diff::FileDiff>,
     /// The embedded terminal (Ctrl+J, T3.5).
     terminal: Option<terminal::Terminal>,
     /// Width of the breadcrumb area in the last frame (T2.3), and whether
@@ -460,6 +463,7 @@ impl FolderView {
             groups: groups::Groups::default(),
             media: groups::Media::default(),
             archive: None,
+            file_diff: None,
         };
         crate::visits::visit(&view.path);
         view.start_loading(cx);
@@ -1792,6 +1796,7 @@ impl Render for FolderView {
             .children(self.render_disk_map(cx))
             .children(self.render_timeline(cx))
             .children(self.render_duplicates(cx))
+            .children(self.render_file_diff())
             .children(self.render_terminal(cx))
             .children(self.render_batch_rename(cx))
             .children(self.render_view_menu(cx))
@@ -1834,6 +1839,11 @@ impl FolderView {
     pub fn debug_open(&mut self, what: &str, window: &mut Window, cx: &mut Context<Self>) {
         match what {
             "search" => self.open_search(cx),
+            // Comparing two texts of the fixture folder (T6.17).
+            "diff" => {
+                let files = vec![self.path.join("leia-me.txt"), self.path.join("sem-bom.txt")];
+                self.file_diff_of(files, cx);
+            }
             // Content search in this folder (T6.8).
             "content" => self.debug_search("content:BOM", cx),
             "columns" => self.toggle_columns(window, cx),
@@ -1859,6 +1869,7 @@ impl FolderView {
             .or_else(|| self.disk_map_overlay())
             .or_else(|| self.timeline_overlay())
             .or_else(|| self.duplicates_overlay())
+            .or_else(|| self.file_diff_overlay())
             .or_else(|| self.quick_look_overlay())
             .or_else(|| self.view_menu_overlay())
             .or_else(|| self.search_overlay())
