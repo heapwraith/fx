@@ -3,10 +3,8 @@
 mod find;
 mod handle_info;
 pub mod ops;
-mod powershell;
 pub mod recycle;
 mod watch;
-pub mod winsearch;
 
 pub use watch::{Watcher, watch};
 

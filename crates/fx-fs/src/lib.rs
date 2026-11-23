@@ -22,8 +22,6 @@ pub use windows::ops::{com_init, copy_file, is_aborted, is_cross_device, rename_
 #[cfg(windows)]
 pub use windows::recycle;
 #[cfg(windows)]
-pub use windows::winsearch;
-#[cfg(windows)]
 pub use windows::{Watcher, enumerate, set_cloud_pin, watch};
 
 /// A recycled item: where it was and where the Recycle Bin keeps it.

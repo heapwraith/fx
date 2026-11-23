@@ -24,6 +24,7 @@ Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualiz
 
 ### Mudado
 - **Compactados sem programas do Windows** (D-069): ZIP, 7z e tar são lidos e escritos por bibliotecas Rust, as mesmas no Windows e no Linux, dentro do próprio fx; acabou o PowerShell oculto e o `tar.exe`. RAR deixou de ser aberto (não há leitor livre em Rust).
+- **Busca no conteúdo sem o Windows Search** (D-069): no disco inteiro, o índice do fx acha os arquivos pelo nome ou extensão e o fx lê o conteúdo deles; só `conteúdo:` sem nome nem extensão pede um dos dois em vez de ler o disco todo.
 - Delete pergunta antes de enviar para a Lixeira (dá para desligar na paleta); as confirmações usam um diálogo do fx, traduzido, em vez da caixa do Windows.
 - Barra de progresso mais visível, com porcentagem, velocidade e tempo restante; a operação concluída fica um instante na tela.
 - **Configurações** (Ctrl+, ou a engrenagem no rodapé da barra lateral): idioma, Lixeira, sessão, aparência, atualizações, privacidade, sistema e "Sobre o fx". O rodapé da lateral também tem "Ajuda" (F1).
@@ -40,7 +41,7 @@ Fases 3 e 4: virar o padrão, recursos avançados, instalador próprio e atualiz
 - **Painel de detalhes** (Alt+Shift+P): dimensões, duração, data da foto, câmera, autor e outros dados do item, como o Windows os mostra.
 - **Agrupar por e colunas de mídia** (menu Exibir, paleta): agrupar por tipo, data ou tamanho, com cabeçalhos na lista; colunas Dimensões, Duração e Data da foto.
 - **Arquivos compactados:** Enter num ZIP abre como pasta; Ctrl+E extrai (também 7z e tar, com gzip, bzip2 ou xz), Ctrl+C copia de dentro dele e "Compactar em ZIP" na paleta cria um, tudo com progresso real, conflitos perguntando e desfazer.
-- **Busca no conteúdo:** `conteúdo:"nota fiscal"` na busca acha os arquivos que contêm o texto — nesta pasta lendo os arquivos, no disco inteiro pelo índice do Windows.
+- **Busca no conteúdo:** `conteúdo:"nota fiscal"` na busca acha os arquivos que contêm o texto — nesta pasta lendo os arquivos; no disco inteiro, lendo os que o índice do fx acha pelo nome ou pela extensão.
 - **Abas e painéis:** soltar uma aba sobre os painéis a leva para uma janela nova (também pela paleta); Ctrl+F3 divide em até 4 painéis, Ctrl+Shift+F3 fecha o painel.
 - **Comparar arquivos** (paleta): dois textos lado a lado com as linhas que mudaram, N e P pulando entre trechos; outros arquivos dizem se são idênticos ou onde diferem; três ou mais ficam agrupados pelos idênticos.
 - **Status do Git:** em pastas de repositórios, cada item mostra se está alterado (M), novo (?), adicionado (A), renomeado (R), apagado (D) ou em conflito (!).

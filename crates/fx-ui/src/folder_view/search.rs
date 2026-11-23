@@ -10,8 +10,8 @@
 //!   worker thread (`fx_fs::search_tree_where`), results in batches.
 //!
 //! Filters are typed with the name (`tipo:imagem`, `ext:pdf`,
-//! `tamanho:>10mb`, `data:semana`, `conteúdo:texto` (T6.8: this folder reads
-//! the files, the whole disk asks the Windows Search index);
+//! `tamanho:>10mb`, `data:semana`, `conteúdo:texto` (T6.8: the files are
+//! read; in the whole disk, those the index finds by name or extension);
 //! `fx_core::search_filter`) and applied
 //! inside each search, so they never cost a result place. Results show size
 //! and date, sort by relevance, name, size or date (click the header), open
@@ -269,8 +269,9 @@ enum Backend {
     Service,
     OwnIndex(String, Arc<Index>),
     Folder(PathBuf),
-    /// `conteúdo:` in the whole disk: the Windows Search index (T6.8).
-    WinSearch,
+    /// `conteúdo:` in the whole disk: the inner backend finds the files by
+    /// name or extension, then their content is read (T6.8, D-069).
+    DiskContent(Box<Backend>),
 }
 
 impl FolderView {
@@ -536,7 +537,6 @@ impl FolderView {
         }
         let backend = match (search.scope, search.disk) {
             _ if filters.tags != 0 => Backend::Tags,
-            (Scope::Disk, _) if filters.content.is_some() => Backend::WinSearch,
             (Scope::Disk, Disk::Service) => Backend::Service,
             (Scope::Disk, Disk::OwnIndex) => {
                 match volume_of(&search.root).and_then(|v| index_for(&v).map(|i| (v, i))) {
@@ -546,6 +546,12 @@ impl FolderView {
             }
             _ => Backend::Folder(search.root.clone()),
         };
+        let backend = match backend {
+            b @ (Backend::Service | Backend::OwnIndex(..)) if filters.content.is_some() => {
+                Backend::DiskContent(Box::new(b))
+            }
+            b => b,
+        };
         let (ticket, cancel) = (search.ticket, search.cancel.clone());
         let (tx, rx) = channel::<Vec<Found>>();
         let (done_tx, done_rx) = channel::<String>();
@@ -553,13 +559,8 @@ impl FolderView {
             .name("fx-search".into())
             .spawn(move || {
                 let summary = match backend {
-                    Backend::Service => service_search(&filters, &tx),
-                    Backend::Tags => tag_search(&filters, &tx),
-                    Backend::OwnIndex(volume, index) => {
-                        index_search(&index, &volume, &filters, &cancel, &tx)
-                    }
-                    Backend::Folder(root) => tree_search(&root, &filters, &cancel, &tx),
-                    Backend::WinSearch => winsearch(&filters, &cancel, &tx),
+                    Backend::DiskContent(inner) => disk_content(*inner, &filters, &cancel, &tx),
+                    other => plain_search(other, &filters, &cancel, &tx),
                 };
                 drop(tx);
                 let _ = done_tx.send(summary);
@@ -1106,58 +1107,77 @@ fn sort_found(hits: &mut [Found], order: Order) {
     }
 }
 
-/// `conteúdo:` in the whole disk: what the Windows Search index has,
-/// filtered by name and the other filters; returns the summary line.
-fn winsearch(
+/// One search on `backend`; returns the summary line.
+fn plain_search(
+    backend: Backend,
     filters: &Filters,
     cancel: &AtomicBool,
     tx: &std::sync::mpsc::Sender<Vec<Found>>,
 ) -> String {
-    let Some(text) = filters.content.as_deref() else {
-        return String::new();
+    match backend {
+        Backend::Service => service_search(filters, tx),
+        Backend::Tags => tag_search(filters, tx),
+        Backend::OwnIndex(volume, index) => index_search(&index, &volume, filters, cancel, tx),
+        Backend::Folder(root) => tree_search(&root, filters, cancel, tx),
+        Backend::DiskContent(inner) => disk_content(*inner, filters, cancel, tx),
+    }
+}
+
+/// `conteúdo:` in the whole disk: the index finds the files by name or
+/// extension (its usual result limit), then each one is read; returns the
+/// summary line. Without a name or extension the whole disk would have to
+/// be read, so it asks for one instead.
+fn disk_content(
+    inner: Backend,
+    filters: &Filters,
+    cancel: &AtomicBool,
+    tx: &std::sync::mpsc::Sender<Vec<Found>>,
+) -> String {
+    let Some(content) = filters.content.as_deref() else {
+        return plain_search(inner, filters, cancel, tx);
     };
-    let needle = fx_core::natural::fold(filters.text.trim());
-    let mut found = Vec::new();
-    let mut sent = 0;
-    let result =
-        fx_fs::winsearch::search_content(text, None, SERVICE_LIMIT as usize, &mut |path| {
-            if cancel.load(Ordering::Relaxed) {
-                return;
-            }
-            let Ok(meta) = std::fs::metadata(&path) else {
-                return;
-            };
-            let name = path
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            let modified = meta.modified().map(unix).unwrap_or(0);
-            if !needle.is_empty() && !fx_core::natural::fold(&name).contains(&needle) {
-                return;
-            }
-            if !filters.matches(&name, meta.is_dir(), meta.len(), modified) {
-                return;
-            }
-            found.push(Found::new(path, meta.is_dir(), meta.len(), modified));
-            if found.len() >= 64 {
+    if filters.text.trim().is_empty() && filters.exts.is_empty() {
+        return tr!(
+            "No disco inteiro, junte ao conteúdo parte do nome ou ext: (ex.: ext:txt conteúdo:nota); Tab busca nesta pasta lendo todos os arquivos",
+            "On the whole disk, add part of the name or ext: to the content (e.g. ext:txt content:note); Tab searches this folder reading every file"
+        )
+        .into();
+    }
+    let mut by_name = filters.clone();
+    by_name.content = None;
+    by_name.dirs = Some(false);
+    let (ctx, crx) = channel::<Vec<Found>>();
+    let inner_summary = plain_search(inner, &by_name, cancel, &ctx);
+    drop(ctx);
+    let candidates: Vec<Found> = crx.into_iter().flatten().collect();
+    if candidates.is_empty() {
+        return inner_summary;
+    }
+    let needle = fx_fs::content::fold_needle(content);
+    let (mut found, mut sent) = (Vec::new(), 0);
+    for c in &candidates {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        if c.size <= fx_fs::content::MAX_SIZE
+            && fx_fs::content::file_contains(&c.path, &needle, cancel).unwrap_or(false)
+        {
+            found.push(c.clone());
+            if found.len() >= 16 {
                 sent += found.len();
                 let _ = tx.send(std::mem::take(&mut found));
             }
-        });
+        }
+    }
     sent += found.len();
     let _ = tx.send(found);
-    match result {
-        Ok(()) => trf!(
-            "{} com esse conteúdo no índice do Windows (só as pastas que ele indexa; Tab busca nesta pasta lendo os arquivos){}",
-            "{} with that content in the Windows index (only the folders it indexes; Tab searches this folder reading the files){}",
-            fx_core::format::items(sent),
-            filter_suffix(filters)
-        ),
-        Err(e) => trf!(
-            "o índice do Windows não respondeu ({e}); Tab busca nesta pasta lendo os arquivos",
-            "the Windows index did not answer ({e}); Tab searches this folder reading the files"
-        ),
-    }
+    trf!(
+        "{} com esse conteúdo entre {} achados pelo nome no disco inteiro{}",
+        "{} with that content among {} found by name on the whole disk{}",
+        fx_core::format::items(sent),
+        fx_core::format::count(candidates.len()),
+        filter_suffix(filters)
+    )
 }
 
 /// " · imagens · > 10 MB" for the summary line.
@@ -1440,5 +1460,29 @@ mod tests {
         assert_eq!(names(&hits), ["b10.txt", "b2.txt", "pasta"]);
         sort_found(&mut hits, Order::Relevance);
         assert_eq!(names(&hits), ["b10.txt", "pasta", "b2.txt"]);
+    }
+
+    #[test]
+    fn content_on_the_disk_reads_what_the_index_finds_by_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let d = dir.path();
+        std::fs::create_dir(d.join("sub")).unwrap();
+        std::fs::write(d.join("sub").join("a.txt"), "a nota fiscal de maio").unwrap();
+        std::fs::write(d.join("b.txt"), "outra coisa").unwrap();
+        std::fs::write(d.join("c.md"), "nota fiscal").unwrap();
+        let run = |query: &str| {
+            let (tx, rx) = channel();
+            let filters = Filters::parse(query, 0, 0);
+            let inner = Backend::Folder(d.to_path_buf());
+            let summary = disk_content(inner, &filters, &AtomicBool::new(false), &tx);
+            drop(tx);
+            (rx.into_iter().flatten().collect::<Vec<Found>>(), summary)
+        };
+        let (hits, summary) = run("ext:txt conteúdo:\"nota fiscal\"");
+        let names: Vec<String> = hits.iter().map(|f| f.name.to_string()).collect();
+        assert_eq!(names, ["a.txt"], "{summary}");
+        assert!(summary.contains('2'), "2 candidates by name: {summary}");
+        let (hits, summary) = run("conteúdo:nota");
+        assert!(hits.is_empty(), "no reading the whole disk: {summary}");
     }
 }
