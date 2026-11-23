@@ -10,7 +10,9 @@
 //!   worker thread (`fx_fs::search_tree_where`), results in batches.
 //!
 //! Filters are typed with the name (`tipo:imagem`, `ext:pdf`,
-//! `tamanho:>10mb`, `data:semana`; `fx_core::search_filter`) and applied
+//! `tamanho:>10mb`, `data:semana`, `conteúdo:texto` (T6.8: this folder reads
+//! the files, the whole disk asks the Windows Search index);
+//! `fx_core::search_filter`) and applied
 //! inside each search, so they never cost a result place. Results show size
 //! and date, sort by relevance, name, size or date (click the header), open
 //! with Enter or a double click, show in their folder with Ctrl+Enter, drag
@@ -267,6 +269,8 @@ enum Backend {
     Service,
     OwnIndex(String, Arc<Index>),
     Folder(PathBuf),
+    /// `conteúdo:` in the whole disk: the Windows Search index (T6.8).
+    WinSearch,
 }
 
 impl FolderView {
@@ -499,6 +503,18 @@ impl FolderView {
         true
     }
 
+    /// Debug hook (`FX_OPEN=content`): the panel searching this folder for
+    /// `query`.
+    pub(super) fn debug_search(&mut self, query: &str, cx: &mut Context<Self>) {
+        self.open_search(cx);
+        if let Some(s) = self.search.as_mut() {
+            s.scope = Scope::Folder;
+            s.scope_chosen = true;
+            s.query = query.to_owned();
+        }
+        self.run_search(cx);
+    }
+
     /// Cancels the running search and starts one for the current text.
     fn run_search(&mut self, cx: &mut Context<Self>) {
         let Some(search) = self.search.as_mut() else {
@@ -520,6 +536,7 @@ impl FolderView {
         }
         let backend = match (search.scope, search.disk) {
             _ if filters.tags != 0 => Backend::Tags,
+            (Scope::Disk, _) if filters.content.is_some() => Backend::WinSearch,
             (Scope::Disk, Disk::Service) => Backend::Service,
             (Scope::Disk, Disk::OwnIndex) => {
                 match volume_of(&search.root).and_then(|v| index_for(&v).map(|i| (v, i))) {
@@ -542,6 +559,7 @@ impl FolderView {
                         index_search(&index, &volume, &filters, &cancel, &tx)
                     }
                     Backend::Folder(root) => tree_search(&root, &filters, &cancel, &tx),
+                    Backend::WinSearch => winsearch(&filters, &cancel, &tx),
                 };
                 drop(tx);
                 let _ = done_tx.send(summary);
@@ -760,8 +778,8 @@ impl FolderView {
                     "Type part of the name: \"repo\" finds report-2026.pdf."
                 ),
                 tr!(
-                    "Filtros: tipo:imagem · ext:pdf · tamanho:>10mb · data:semana · etiqueta:vermelho",
-                    "Filters: type:image · ext:pdf · size:>10mb · date:week · tag:red"
+                    "Filtros: tipo:imagem · ext:pdf · tamanho:>10mb · data:semana · etiqueta:vermelho · conteúdo:\"nota fiscal\"",
+                    "Filters: type:image · ext:pdf · size:>10mb · date:week · tag:red · content:\"invoice\""
                 ),
             ]
         });
@@ -1088,6 +1106,60 @@ fn sort_found(hits: &mut [Found], order: Order) {
     }
 }
 
+/// `conteúdo:` in the whole disk: what the Windows Search index has,
+/// filtered by name and the other filters; returns the summary line.
+fn winsearch(
+    filters: &Filters,
+    cancel: &AtomicBool,
+    tx: &std::sync::mpsc::Sender<Vec<Found>>,
+) -> String {
+    let Some(text) = filters.content.as_deref() else {
+        return String::new();
+    };
+    let needle = fx_core::natural::fold(filters.text.trim());
+    let mut found = Vec::new();
+    let mut sent = 0;
+    let result =
+        fx_fs::winsearch::search_content(text, None, SERVICE_LIMIT as usize, &mut |path| {
+            if cancel.load(Ordering::Relaxed) {
+                return;
+            }
+            let Ok(meta) = std::fs::metadata(&path) else {
+                return;
+            };
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let modified = meta.modified().map(unix).unwrap_or(0);
+            if !needle.is_empty() && !fx_core::natural::fold(&name).contains(&needle) {
+                return;
+            }
+            if !filters.matches(&name, meta.is_dir(), meta.len(), modified) {
+                return;
+            }
+            found.push(Found::new(path, meta.is_dir(), meta.len(), modified));
+            if found.len() >= 64 {
+                sent += found.len();
+                let _ = tx.send(std::mem::take(&mut found));
+            }
+        });
+    sent += found.len();
+    let _ = tx.send(found);
+    match result {
+        Ok(()) => trf!(
+            "{} com esse conteúdo no índice do Windows (só as pastas que ele indexa; Tab busca nesta pasta lendo os arquivos){}",
+            "{} with that content in the Windows index (only the folders it indexes; Tab searches this folder reading the files){}",
+            fx_core::format::items(sent),
+            filter_suffix(filters)
+        ),
+        Err(e) => trf!(
+            "o índice do Windows não respondeu ({e}); Tab busca nesta pasta lendo os arquivos",
+            "the Windows index did not answer ({e}); Tab searches this folder reading the files"
+        ),
+    }
+}
+
 /// " · imagens · > 10 MB" for the summary line.
 fn filter_suffix(filters: &Filters) -> String {
     filters.labels.iter().map(|l| format!(" · {l}")).collect()
@@ -1178,6 +1250,7 @@ fn tree_search(
     tx: &std::sync::mpsc::Sender<Vec<Found>>,
 ) -> String {
     let (htx, hrx) = channel::<Vec<SearchHit>>();
+    let needle = filters.content.as_deref().map(fx_fs::content::fold_needle);
     let keep = |h: &SearchHit| {
         let name = h
             .path
@@ -1185,6 +1258,11 @@ fn tree_search(
             .map(|n| n.to_string_lossy())
             .unwrap_or_default();
         filters.matches(&name, h.is_dir, h.size, unix(h.modified))
+            && needle.as_deref().is_none_or(|n| {
+                !h.is_dir
+                    && h.size <= fx_fs::content::MAX_SIZE
+                    && fx_fs::content::file_contains(&h.path, n, cancel).unwrap_or(false)
+            })
     };
     let summary = std::thread::scope(|scope| {
         let forward = scope.spawn(|| {

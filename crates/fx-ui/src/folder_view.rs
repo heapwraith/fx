@@ -1834,6 +1834,8 @@ impl FolderView {
     pub fn debug_open(&mut self, what: &str, window: &mut Window, cx: &mut Context<Self>) {
         match what {
             "search" => self.open_search(cx),
+            // Content search in this folder (T6.8).
+            "content" => self.debug_search("content:BOM", cx),
             "columns" => self.toggle_columns(window, cx),
             "map" => self.toggle_disk_map(cx),
             "timeline" => self.toggle_timeline(cx),

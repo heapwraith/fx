@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 pub use fx_core::{Attributes, Change, Entry};
 
+pub mod content;
 pub mod duplicates;
 pub mod tree;
 
@@ -21,6 +22,8 @@ pub use windows::archive;
 pub use windows::ops::{com_init, copy_file, is_aborted, is_cross_device, rename_no_replace};
 #[cfg(windows)]
 pub use windows::recycle;
+#[cfg(windows)]
+pub use windows::winsearch;
 #[cfg(windows)]
 pub use windows::{Watcher, enumerate, set_cloud_pin, watch};
 

@@ -29,6 +29,9 @@ pub struct Filters {
     /// Color tags every result must have (T3.4); checked by the caller,
     /// who knows the tags of each path.
     pub tags: u8,
+    /// Text the file must contain (T6.8, `conteúdo:`), as typed; checked by
+    /// the caller, who reads the file.
+    pub content: Option<String>,
     /// One short label per filter understood ("imagens", "> 10 MB"), for the UI.
     pub labels: Vec<String>,
     /// Filter words fx could not read ("tamanho:muito").
@@ -59,17 +62,59 @@ const ARCHIVES: &[&str] = &[
 
 const DAY: i64 = 86_400;
 
+/// The words of a query; a double-quoted part stays one word with its
+/// spaces (`conteúdo:"nota fiscal"`).
+fn words(query: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut start: Option<usize> = None;
+    let mut quoted = false;
+    for (i, c) in query.char_indices() {
+        match c {
+            '"' => {
+                quoted = !quoted;
+                start.get_or_insert(i);
+            }
+            c if c.is_whitespace() && !quoted => {
+                if let Some(s) = start.take() {
+                    out.push(&query[s..i]);
+                }
+            }
+            _ => {
+                start.get_or_insert(i);
+            }
+        }
+    }
+    if let Some(s) = start {
+        out.push(&query[s..]);
+    }
+    out
+}
+
 impl Filters {
     /// Reads `query`. `now` (Unix seconds) and `utc_offset` (seconds east of
     /// UTC) anchor relative dates like "hoje" to the local calendar.
     pub fn parse(query: &str, now: i64, utc_offset: i64) -> Self {
         let mut f = Filters::default();
         let mut text: Vec<&str> = Vec::new();
-        for word in query.split_whitespace() {
+        for word in words(query) {
             let Some((key, value)) = word.split_once(':') else {
                 text.push(word);
                 continue;
             };
+            if matches!(
+                strip_accents(&key.to_lowercase()).as_str(),
+                "conteudo" | "contem" | "content" | "contains"
+            ) {
+                let value = value.trim_matches('"');
+                if value.is_empty() {
+                    f.problems.push(word.to_owned());
+                } else {
+                    f.labels
+                        .push(crate::trf!("contém \"{}\"", "contains \"{}\"", value));
+                    f.content = Some(value.to_owned());
+                }
+                continue;
+            }
             let value = value.to_lowercase();
             let ok = match key.to_lowercase().as_str() {
                 "tipo" | "type" => f.kind(&value),
@@ -110,6 +155,7 @@ impl Filters {
             || self.modified_min.is_some()
             || self.modified_max.is_some()
             || self.tags != 0
+            || self.content.is_some()
     }
 
     /// Whether an entry passes the filters (the name is matched elsewhere).
@@ -343,6 +389,19 @@ fn strip_accents(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn content_filter_keeps_quoted_phrases() {
+        let f = Filters::parse(r#"conteúdo:"Nota Fiscal" ext:pdf 2026"#, 0, 0);
+        assert_eq!(f.content.as_deref(), Some("Nota Fiscal"));
+        assert_eq!(f.text, "2026");
+        assert_eq!(f.exts, ["pdf"]);
+        assert!(f.is_active());
+        let g = Filters::parse("content:todo", 0, 0);
+        assert_eq!(g.content.as_deref(), Some("todo"));
+        assert_eq!(g.text, "");
+        assert_eq!(Filters::parse("conteudo:", 0, 0).problems, ["conteudo:"]);
+    }
+
     use super::*;
 
     const BRT: i64 = -3 * 3600;

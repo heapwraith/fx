@@ -220,7 +220,7 @@ impl TabsView {
             }
             "history" => self.history_open = true,
             "search" | "columns" | "map" | "timeline" | "duplicates" | "details" | "group"
-            | "viewmenu" => {
+            | "content" | "viewmenu" => {
                 let tab = self.current();
                 tab.update(cx, |tab, cx| tab.debug_open(kind, window, cx));
             }
