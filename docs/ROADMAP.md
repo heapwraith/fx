@@ -30,4 +30,4 @@ Detalhada em [`phases/PHASE-6.md`](phases/PHASE-6.md): funcionalidades que nasce
 
 ## Mais adiante
 
-Porte para macOS e Linux (a interface e o instalador já usam GPUI; falta a camada do sistema, D-012) e plugins.
+Porte para Linux (D-069; macOS fora do escopo; a interface e o instalador já usam GPUI; falta a camada do sistema, D-012) e plugins.

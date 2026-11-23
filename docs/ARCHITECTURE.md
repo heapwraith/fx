@@ -61,7 +61,7 @@ Só Windows é suportado e medido por enquanto, mas o código do Windows fica is
 
 - `fx-core` não conhece o Windows; `fx-ui` e `fx-setup` falam com o sistema só pelas interfaces de `fx-fs`, `fx-shell`, `fx-index` e `fx-ops`.
 - Cada um desses crates expõe tipos neutros na raiz e guarda a implementação em `src/windows/` (`#[cfg(windows)]`). Tipos do `windows-rs` nunca aparecem na API pública.
-- Não há stubs para outros sistemas. Escrever a segunda implementação é o trabalho do porte; a interface (GPUI) já roda em macOS e Linux.
+- Não há stubs para outros sistemas. Escrever a segunda implementação é o trabalho do porte; a interface (GPUI) já roda no Linux, o único outro alvo (D-069).
 
 ## Processos
 
