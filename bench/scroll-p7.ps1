@@ -17,6 +17,8 @@ public static class P7 {
     [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
     [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte s, uint f, UIntPtr e);
     [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out RECT r);
     [DllImport("user32.dll")] static extern bool ClientToScreen(IntPtr h, ref POINT p);
     [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr h);
@@ -32,7 +34,13 @@ public static class P7 {
     // then wheelEvents events of wheelDelta are sent every stepMs.
     public static string Run(IntPtr hwnd, int wheelEvents, int wheelDelta, double stepMs, double dragMs) {
         SetProcessDPIAware();
-        SetForegroundWindow(hwnd);
+        // T5.6: never scroll another window (an Alt tap lets a background
+        // process take the foreground).
+        for (int i = 0; i < 5 && GetForegroundWindow() != hwnd; i++) {
+            keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero);
+            SetForegroundWindow(hwnd); Thread.Sleep(150);
+        }
+        if (GetForegroundWindow() != hwnd) throw new Exception("fx window is not in the foreground");
         Thread.Sleep(400);
         RECT rc; GetClientRect(hwnd, out rc);
         POINT origin = new POINT(); ClientToScreen(hwnd, ref origin);

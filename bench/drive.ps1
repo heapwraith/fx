@@ -41,6 +41,7 @@ function Focus {
         [Drv]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero); [Drv]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
         [Drv]::SetForegroundWindow($h) | Out-Null; Start-Sleep -Milliseconds 150
     }
+    if ([Drv]::GetForegroundWindow() -ne $h) { throw "fx window is not in the foreground" }
 }
 $vk = @{
     enter = 0x0D; esc = 0x1B; space = 0x20; tab = 0x09; up = 0x26; down = 0x28; left = 0x25; right = 0x27
@@ -87,6 +88,8 @@ Focus
 foreach ($step in $Steps.Split(';')) {
     if (-not $step) { continue }
     $i = $step.IndexOf(':'); $op = $step.Substring(0, $i); $arg = $step.Substring($i + 1)
+    # Input goes to fx only: focus again if something took the foreground.
+    if ($op -in 'key', 'type', 'click', 'rclick', 'drag' -and [Drv]::GetForegroundWindow() -ne $h) { Focus }
     switch ($op) {
         'key' { Press $arg }
         'type' { foreach ($c in $arg.ToCharArray()) { TypeChar $c } }

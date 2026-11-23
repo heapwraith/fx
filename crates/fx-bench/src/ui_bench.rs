@@ -325,7 +325,7 @@ fn scroll_in(folder: &Path, label: &str, env: &[(&str, &str)], task: &str) -> st
         .unwrap_or(fixtures::Spec::FULL.flat_files as f64);
     let list_px = items * row_px;
     let reached = -trace.number("final_offset_px").unwrap_or(0.0) / list_px;
-    // D-014: at most 0.5% dropped frames (interval ≥ 1.5 refresh periods).
+    // D-064: at most 0.1% dropped frames (interval ≥ 1.5 refresh periods).
     let dropped_fraction = total.dropped as f64 / total.frames as f64;
     let pass = dropped_fraction <= MAX_DROPPED_FRACTION;
 
@@ -351,7 +351,7 @@ fn scroll_in(folder: &Path, label: &str, env: &[(&str, &str)], task: &str) -> st
     }
     show("all", &total);
     println!(
-        "  dropped {:.2}% of frames (P7, D-014: ≤ {:.1}%)  {}",
+        "  dropped {:.2}% of frames (P7, D-064: ≤ {:.1}%)  {}",
         dropped_fraction * 100.0,
         MAX_DROPPED_FRACTION * 100.0,
         if pass { "pass" } else { "FAIL" }

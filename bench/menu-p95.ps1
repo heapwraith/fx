@@ -25,6 +25,7 @@ public static class Menu {
             keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero);
             SetForegroundWindow(hwnd); Thread.Sleep(150);
         }
+        if (GetForegroundWindow() != hwnd) throw new Exception("fx window is not in the foreground");
         POINT o = new POINT(); ClientToScreen(hwnd, ref o);
         double s = GetDpiForWindow(hwnd) / 96.0;
         // Rows start below the tab strip (40), path bar (48) and column header
