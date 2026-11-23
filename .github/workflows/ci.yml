@@ -153,10 +153,10 @@ jobs:
         shell: pwsh
         run: |
           $v = "${{ steps.version.outputs.version }}"
-          Copy-Item LICENSE-MIT, LICENSE-APACHE, README.md, CHANGELOG.md dist/
+          Copy-Item LICENSE-MIT, LICENSE-APACHE, THIRD-PARTY-NOTICES.txt, README.md, CHANGELOG.md dist/
           Compress-Archive -Path dist/* -DestinationPath "fx-$v-windows-x64.zip"
           New-Item -ItemType Directory arm64zip | Out-Null
-          Copy-Item arm64/target/aarch64-pc-windows-msvc/release/*.exe, LICENSE-MIT, LICENSE-APACHE, README.md, CHANGELOG.md arm64zip/
+          Copy-Item arm64/target/aarch64-pc-windows-msvc/release/*.exe, LICENSE-MIT, LICENSE-APACHE, THIRD-PARTY-NOTICES.txt, README.md, CHANGELOG.md arm64zip/
           Compress-Archive -Path arm64zip/* -DestinationPath "fx-$v-windows-arm64.zip"
           $lines = Get-Content CHANGELOG.md
           $start = ($lines | Select-String -Pattern "^## \[$([regex]::Escape($v))\]").LineNumber
