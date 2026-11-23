@@ -157,6 +157,7 @@ impl Persist {
             visits: crate::visits::saved(),
             workspaces: crate::workspaces::saved(),
             undo: crate::undo_store::saved(),
+            searches: crate::searches::saved(),
         }
     }
 
@@ -200,6 +201,10 @@ pub fn load_lists(persist: bool) {
             match db.load_visits() {
                 Ok(v) => crate::visits::set_loaded(v),
                 Err(e) => log::warn!("folder visits could not be read: {e}"),
+            }
+            match db.load_searches() {
+                Ok(q) => crate::searches::set_loaded(q),
+                Err(e) => log::warn!("saved searches could not be read: {e}"),
             }
             match db.load_workspaces() {
                 Ok(w) => crate::workspaces::set_loaded(w),

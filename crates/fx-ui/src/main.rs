@@ -31,6 +31,7 @@ mod persist;
 mod places;
 mod prefs;
 mod prompt;
+mod searches;
 mod store;
 mod tabs_view;
 mod tags;

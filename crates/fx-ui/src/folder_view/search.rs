@@ -202,6 +202,9 @@ pub(super) struct Search {
     filters: Filters,
     /// Mouse button down on a result: where, and which (drag out).
     press: Option<(Point<Pixels>, usize)>,
+    /// A saved search (T6.3): on the whole disk, it refreshes by itself;
+    /// bumped to stop an older refresh loop.
+    live: Option<u64>,
 }
 
 /// MFT indexes by volume ("C:"), for the whole process (elevated only).
@@ -288,6 +291,7 @@ impl FolderView {
             order: Order::Relevance,
             filters: Filters::default(),
             press: None,
+            live: None,
         });
         // Elevated: start reading the MFT now, it takes a few seconds.
         let elevated_index = volume_of(&self.path).is_some_and(|v| {
@@ -314,12 +318,73 @@ impl FolderView {
                 if s.disk != Disk::Unavailable && !s.scope_chosen {
                     s.scope = Scope::Disk;
                     view.run_search(cx);
+                } else if !s.query.trim().is_empty() && !s.running && s.hits.is_empty() {
+                    // A saved search opened before this was known.
+                    view.run_search(cx);
                 }
                 cx.notify();
             });
         })
         .detach();
         cx.notify();
+    }
+
+    /// Opens a saved search (T6.3): the panel filled in, on the whole disk
+    /// when it was saved that way (and possible here), refreshing by itself.
+    pub fn open_saved_search(&mut self, q: &crate::store::SearchState, cx: &mut Context<Self>) {
+        let fresh = self.search.is_none();
+        self.open_search(cx);
+        let Some(s) = self.search.as_mut() else {
+            return;
+        };
+        s.query = q.query.clone();
+        let ticket = s.live.map_or(1, |t| t + 1);
+        s.live = Some(ticket);
+        if q.disk && fresh {
+            // The service check (started by `open_search`) runs it on the
+            // whole disk, or in this folder if the disk cannot be searched.
+            s.scope_chosen = false;
+        } else {
+            s.scope_chosen = true;
+            if q.disk && s.disk != Disk::Unavailable {
+                s.scope = Scope::Disk;
+            } else {
+                s.scope = Scope::Folder;
+                if !q.disk {
+                    s.root = q.root.clone();
+                }
+            }
+            self.run_search(cx);
+        }
+        self.keep_live(ticket, cx);
+    }
+
+    /// While the saved search stays open on the whole disk, asks again every
+    /// 10 s (the index answers in milliseconds; results are real, not kept).
+    fn keep_live(&mut self, ticket: u64, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_secs(10))
+                    .await;
+                let go_on = this
+                    .update(cx, |view, cx| {
+                        let Some(s) = view.search.as_ref().filter(|s| s.live == Some(ticket))
+                        else {
+                            return false;
+                        };
+                        if s.scope == Scope::Disk && s.disk == Disk::Service && !s.running {
+                            view.run_search(cx);
+                        }
+                        true
+                    })
+                    .unwrap_or(false);
+                if !go_on {
+                    return;
+                }
+            }
+        })
+        .detach();
     }
 
     fn close_search(&mut self) {
@@ -341,6 +406,27 @@ impl FolderView {
             return false;
         };
         let m = ks.modifiers;
+        // Ctrl+S: keeps this search (T6.3), in the sidebar and the palette.
+        if ks.key == "s" && m.control && !m.shift && !m.alt {
+            let query = search.query.trim().to_owned();
+            if !query.is_empty() {
+                let already = crate::searches::save(crate::store::SearchState {
+                    query: query.clone(),
+                    disk: search.scope == Scope::Disk,
+                    root: search.root.clone(),
+                });
+                let text = if already {
+                    trf!("Busca \"{query}\" atualizada", "Search \"{query}\" updated")
+                } else {
+                    trf!(
+                        "Busca \"{query}\" salva: está na barra lateral e no Ctrl+K",
+                        "Search \"{query}\" saved: it is in the sidebar and in Ctrl+K"
+                    )
+                };
+                self.show_notice(text, cx);
+            }
+            return true;
+        }
         let mut query = search.query.clone();
         match ks.key.as_str() {
             "escape" => {
@@ -639,7 +725,7 @@ impl FolderView {
             (_, true) => trf!("procurando… {}", "searching… {}", fx_core::format::items(s.hits.len())),
             (Some(text), false) => text.clone(),
             (None, false) => {
-                tr!("Enter abre · Ctrl+Enter mostra na pasta · Tab muda onde buscar · Esc fecha", "Enter opens · Ctrl+Enter shows in folder · Tab changes where to search · Esc closes")
+                tr!("Enter abre · Ctrl+Enter mostra na pasta · Tab muda onde buscar · Ctrl+S salva · Esc fecha", "Enter opens · Ctrl+Enter shows in folder · Tab changes where to search · Ctrl+S saves · Esc closes")
                     .to_owned()
             }
         };

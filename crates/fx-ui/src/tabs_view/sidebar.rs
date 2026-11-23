@@ -253,6 +253,71 @@ impl TabsView {
             );
         }
 
+        // Saved searches (T6.3): open in the active tab, refreshing by themselves.
+        let saved = crate::searches::list();
+        if !saved.is_empty() {
+            col = col.child(caption(tr!("Buscas", "Searches")));
+        }
+        for (k, q) in saved.into_iter().enumerate() {
+            let group: SharedString = format!("search-{k}").into();
+            let (open, forget) = (q.clone(), q.query.clone());
+            col = col.child(
+                div()
+                    .id(("saved-search", k))
+                    .group(group.clone())
+                    .h(px(ITEM_HEIGHT))
+                    .mx(px(space(1)))
+                    .px(px(space(3)))
+                    .flex()
+                    .items_center()
+                    .gap(px(space(3)))
+                    .rounded(px(RADIUS))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(rgba(t.hover)))
+                    .child(
+                        div()
+                            .flex_none()
+                            .font_family(icon_font)
+                            .text_size(px(14.0))
+                            .child("\u{E721}"),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .child(SharedString::from(q.query.clone())),
+                    )
+                    .child(
+                        div()
+                            .id(("forget-search", k))
+                            .flex_none()
+                            .size(px(20.0))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(px(RADIUS))
+                            .font_family(icon_font)
+                            .text_size(px(10.0))
+                            .text_color(rgba(t.text_secondary))
+                            .opacity(0.0)
+                            .group_hover(group, |s| s.opacity(1.0))
+                            .hover(|s| s.bg(rgba(t.hover)))
+                            .child(ICON_CLOSE)
+                            .on_click(cx.listener(move |_, _: &ClickEvent, _, cx| {
+                                crate::searches::remove(&forget);
+                                cx.stop_propagation();
+                                cx.notify();
+                            })),
+                    )
+                    .on_click(cx.listener(move |view, _: &ClickEvent, _, cx| {
+                        let q = open.clone();
+                        view.current()
+                            .update(cx, |tab, cx| tab.open_saved_search(&q, cx));
+                    })),
+            );
+        }
+
         col = col.child(caption(tr!("Este computador", "This PC")));
         for (k, d) in places.drives.iter().enumerate() {
             let active = d.root == current;

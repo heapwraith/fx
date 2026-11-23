@@ -25,7 +25,7 @@ Treemap de qualquer pasta ou disco mostrando o que ocupa espaço, em milissegund
 "O que mudou nos últimos 10 minutos, 1 hora, hoje", no disco todo: criados, alterados, apagados; achar "aquele arquivo que baixei agora há pouco". **Base:** o `fx-indexd` já segue o diário USN a cada 250 ms. **Concorrentes:** ninguém expõe o USN ao usuário.
 
 ### T6.3 — Buscas vivas
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: Ctrl+S no painel de busca salva a busca (texto e alcance) numa tabela `searches` do `state.db`; ela aparece na barra lateral ("Buscas", × para esquecer) e na paleta ("Busca: …"), abre o painel preenchido e, no disco inteiro com o serviço, refaz a busca sozinha a cada 10 s enquanto aberta (resultados reais); sem o serviço, busca na pasta (2 testes novos).
 
 Uma busca vira aba ou pasta virtual que se atualiza sozinha (ex.: `tipo:pdf data:semana`, `tamanho:>1gb`), fixável na barra lateral. **Base:** filtros e serviço prontos; o USN atualiza. **Concorrentes:** o Finder tem pastas inteligentes, mais lentas; Explorador e Files não têm.
 

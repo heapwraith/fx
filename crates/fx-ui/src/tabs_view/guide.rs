@@ -97,6 +97,13 @@ pub fn sections() -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
                     "Ctrl+K",
                     tr!("paleta: todo comando e pasta", "palette: every command"),
                 ),
+                (
+                    "Ctrl+S",
+                    tr!(
+                        "na busca: salvar (barra lateral)",
+                        "in search: save it (sidebar)"
+                    ),
+                ),
             ],
         ),
         (

@@ -49,6 +49,10 @@ enum Item {
     },
     /// Deletes a workspace (offered only when searching).
     RemoveWorkspace(String),
+    /// A saved search (T6.3).
+    Search(crate::store::SearchState),
+    /// Forgets a saved search (offered only when searching).
+    RemoveSearch(String),
 }
 
 impl Item {
@@ -60,6 +64,8 @@ impl Item {
             Item::RemoveWorkspace(name) => {
                 trf!("Excluir espaço: {}", "Delete workspace: {}", name)
             }
+            Item::Search(q) => trf!("Busca: {}", "Search: {}", q.query),
+            Item::RemoveSearch(query) => trf!("Esquecer busca: {}", "Forget search: {}", query),
         }
     }
 }
@@ -92,8 +98,8 @@ impl Palette {
                 .collect();
             let pinned = (0..self.items.len())
                 .filter(|&i| matches!(self.items[i], Item::Folder { pinned: true, .. }));
-            let spaces =
-                (0..self.items.len()).filter(|&i| matches!(self.items[i], Item::Workspace { .. }));
+            let spaces = (0..self.items.len())
+                .filter(|&i| matches!(self.items[i], Item::Workspace { .. } | Item::Search(_)));
             let commands =
                 (0..self.items.len()).filter(|&i| matches!(self.items[i], Item::Command(_)));
             self.shown = recent
@@ -203,6 +209,9 @@ impl TabsView {
         }));
         items.extend(COMMANDS.iter().map(Item::Command));
         items.extend(spaces.into_iter().map(|w| Item::RemoveWorkspace(w.name)));
+        let saved = crate::searches::list();
+        items.extend(saved.iter().map(|q| Item::RemoveSearch(q.query.clone())));
+        items.extend(saved.into_iter().map(Item::Search));
         let mut palette = Palette {
             query: String::new(),
             items,
@@ -323,7 +332,20 @@ impl TabsView {
                         "{tabs}, opens in a new window"
                     ))
                 }
-                Item::RemoveWorkspace(_) => None,
+                Item::Search(q) => Some(if q.disk {
+                    tr!(
+                        "busca salva, no disco inteiro",
+                        "saved search, on the whole disk"
+                    )
+                    .to_owned()
+                } else {
+                    trf!(
+                        "busca salva, em {}",
+                        "saved search, in {}",
+                        q.root.display()
+                    )
+                }),
+                Item::RemoveWorkspace(_) | Item::RemoveSearch(_) => None,
             };
             items.push(A11yItem::Choice {
                 label: p.items[i].label(),
@@ -384,6 +406,12 @@ impl TabsView {
                 tab.update(cx, |view, cx| view.open(path, window, cx));
             }
             Item::Workspace { name, .. } => self.open_workspace(&name, cx),
+            Item::Search(q) => tab.update(cx, |view, cx| view.open_saved_search(&q, cx)),
+            Item::RemoveSearch(query) => {
+                crate::searches::remove(&query);
+                let text = trf!("Busca \"{}\" esquecida", "Search \"{}\" forgotten", query);
+                tab.update(cx, |view, cx| view.show_notice(text, cx));
+            }
             Item::RemoveWorkspace(name) => {
                 crate::workspaces::remove(&name);
                 let text = trf!("Espaço \"{}\" excluído", "Workspace \"{}\" deleted", name);
@@ -499,6 +527,22 @@ impl TabsView {
                     label: item.label().into(),
                     detail: super::workspace::tabs_text(*tabs).into(),
                     shortcut: tr!("Nova janela", "New window").into(),
+                },
+                item @ Item::Search(q) => Row {
+                    glyph: "\u{E721}", // Search
+                    label: item.label().into(),
+                    detail: if q.disk {
+                        tr!("no disco inteiro", "on the whole disk").into()
+                    } else {
+                        q.root.display().to_string().into()
+                    },
+                    shortcut: tr!("Busca salva", "Saved search").into(),
+                },
+                item @ Item::RemoveSearch(_) => Row {
+                    glyph: "\u{E74D}",
+                    label: item.label().into(),
+                    detail: SharedString::default(),
+                    shortcut: SharedString::default(),
                 },
                 item @ Item::RemoveWorkspace(_) => Row {
                     glyph: "\u{E74D}", // Delete

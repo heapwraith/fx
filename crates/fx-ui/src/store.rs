@@ -93,6 +93,15 @@ pub struct UndoRow {
     pub backward: Vec<u8>,
 }
 
+/// A saved search (T6.3): the query and where it looks.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct SearchState {
+    pub query: String,
+    /// The whole disk (with the index); otherwise `root` and below.
+    pub disk: bool,
+    pub root: PathBuf,
+}
+
 /// A named set of tabs (T6.13): the folders and which one is active.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct WorkspaceState {
@@ -123,6 +132,8 @@ pub struct Session {
     /// Undo history (T6.6), oldest first; `None` until this session's history
     /// took in the saved one.
     pub undo: Option<Vec<UndoRow>>,
+    /// Saved searches (T6.3); `None` while they are still loading.
+    pub searches: Option<Vec<SearchState>>,
 }
 
 /// `%APPDATA%\fx` or `%LOCALAPPDATA%\fx`; `FX_DATA_DIR` replaces both (tests).
@@ -191,6 +202,9 @@ const SCHEMA: &str = "
     -- T6.5: how often and how recently each folder was opened.
     CREATE TABLE IF NOT EXISTS visits (
         path TEXT PRIMARY KEY, rank REAL NOT NULL, last INTEGER NOT NULL);
+    -- T6.3: saved searches, in the order shown.
+    CREATE TABLE IF NOT EXISTS searches (
+        pos INTEGER NOT NULL, query TEXT NOT NULL, disk INTEGER NOT NULL, root TEXT NOT NULL);
     -- T6.6: the undo history, oldest first.
     CREATE TABLE IF NOT EXISTS undo (
         seq INTEGER NOT NULL, at INTEGER NOT NULL, label TEXT NOT NULL,
@@ -288,6 +302,17 @@ impl Db {
                 [],
             )?;
         }
+        if let Some(list) = &s.searches {
+            tx.execute("DELETE FROM searches", [])?;
+            for (k, q) in list.iter().enumerate() {
+                if let Some(root) = q.root.to_str() {
+                    tx.execute(
+                        "INSERT INTO searches (pos, query, disk, root) VALUES (?1, ?2, ?3, ?4)",
+                        params![k as i64, q.query, i64::from(q.disk), root],
+                    )?;
+                }
+            }
+        }
         if let Some(rows) = &s.undo {
             tx.execute("DELETE FROM undo", [])?;
             for (k, r) in rows.iter().enumerate() {
@@ -324,6 +349,21 @@ impl Db {
             }
         }
         tx.commit()
+    }
+
+    /// The saved searches (T6.3), in order.
+    pub fn load_searches(&self) -> rusqlite::Result<Vec<SearchState>> {
+        let mut q = self
+            .conn
+            .prepare("SELECT query, disk, root FROM searches ORDER BY pos")?;
+        let rows = q.query_map([], |r| {
+            Ok(SearchState {
+                query: r.get(0)?,
+                disk: r.get::<_, i64>(1)? != 0,
+                root: PathBuf::from(r.get::<_, String>(2)?),
+            })
+        })?;
+        rows.collect()
     }
 
     /// The saved undo history (T6.6), oldest first.
@@ -499,6 +539,7 @@ impl Db {
             visits: None,
             workspaces: None,
             undo: None,
+            searches: None,
         })
     }
 
@@ -569,6 +610,24 @@ mod tests {
         s.visits = None;
         db.save(&s).unwrap();
         assert_eq!(db.load_visits().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn saved_searches_round_trip_in_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut db = Db::open(&dir.path().join("state.db")).unwrap();
+        let q = |text: &str, disk| SearchState {
+            query: text.into(),
+            disk,
+            root: PathBuf::from(r"C:\Users"),
+        };
+        let mut s = session(1);
+        s.searches = Some(vec![q("tipo:pdf data:semana", true), q("relatório", false)]);
+        db.save(&s).unwrap();
+        assert_eq!(
+            db.load_searches().unwrap(),
+            vec![q("tipo:pdf data:semana", true), q("relatório", false)]
+        );
     }
 
     #[test]
@@ -645,6 +704,7 @@ mod tests {
             visits: None,
             workspaces: None,
             undo: None,
+            searches: None,
         }
     }
 
