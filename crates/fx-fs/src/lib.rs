@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 pub use fx_core::{Attributes, Change, Entry};
 
 pub mod duplicates;
+pub mod tree;
 
 #[cfg(windows)]
 mod windows;

@@ -41,6 +41,8 @@ pub enum Action {
     /// Asks (or not) before sending items to the Recycle Bin.
     ConfirmRecycle,
     /// T6.13: asks a name and saves this window's tabs as a workspace.
+    /// T6.11: compares the two panes of the dual view.
+    Compare,
     SaveWorkspace,
 }
 
@@ -112,6 +114,7 @@ impl Command {
             Action::Update | Action::UpdateChecks => "\u{E895}", // Sync
             Action::ConfirmRecycle => "\u{E74D}",
             Action::SaveWorkspace => "\u{E74E}", // Save
+            Action::Compare => "\u{E8F9}",       // Switch
         }
     }
 
@@ -186,6 +189,13 @@ pub const COMMANDS: &[Command] = &[
         "ctrl-shift-d",
     ),
     tab(("Painel de detalhes", "Details panel"), "alt-shift-p"),
+    direct(
+        (
+            "Comparar com o outro painel (painel duplo)",
+            "Compare with the other pane (dual pane)",
+        ),
+        Action::Compare,
+    ),
     direct(
         (
             "Salvar abas como espaço de trabalho…",

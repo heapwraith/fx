@@ -5,6 +5,7 @@
 #![forbid(unsafe_code)]
 
 pub mod batch_rename;
+pub mod compare;
 pub mod complete;
 pub mod crash;
 mod entry;

@@ -67,7 +67,7 @@ Lateral direita com metadados reais (dimensões, EXIF, duração, autor), lidos 
 Dimensões, duração, data da foto como colunas; agrupar por tipo, data ou tamanho, sem travar.
 
 ### T6.11 — Comparar pastas e sincronizar
-- [ ] Concluída em: ____ · Resumo:
+- [x] Concluída em: 2026-11-22 · Resumo: "Comparar com o outro painel" (paleta, com o painel duplo aberto) lista, abaixo das duas pastas, o que só existe de um lado e os arquivos com data (± 2 s) ou tamanho diferentes (`fx-core/src/compare.rs`, listagem em `fx-fs/src/tree.rs` numa thread, até 200 mil itens por lado, avisando se cortou); Espaço marca, → copia para a direita e ← para a esquerda pelo motor de operações (conflitos perguntam, desfazer vale), e a comparação refaz em seguida (2 testes novos).
 
 Painel duplo mostrando o que difere entre duas pastas; sincronizar pelo motor seguro, com desfazer.
 

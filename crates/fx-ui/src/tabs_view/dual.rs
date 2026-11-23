@@ -30,7 +30,7 @@ impl TabsView {
         }
     }
 
-    fn other(&self) -> Option<Entity<FolderView>> {
+    pub(super) fn other(&self) -> Option<Entity<FolderView>> {
         let primary = self.tabs.active().clone();
         let s = self.seconds.get(&primary.entity_id())?;
         Some(if s.focused { primary } else { s.view.clone() })

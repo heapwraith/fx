@@ -9,6 +9,7 @@
 //! Sidebar (task T1.5, `sidebar.rs`): quick access and drives, left of the
 //! active tab; ☰ or Ctrl+B collapses it.
 
+mod compare;
 mod dual;
 mod guide;
 mod history;
@@ -82,6 +83,8 @@ pub struct TabsView {
     settings: Option<settings::Section>,
     /// The Settings control with the keyboard (Tab order).
     settings_focus: usize,
+    /// Comparing the two panes (T6.11).
+    compare: Option<compare::Compare>,
     /// The sidebar place with the keyboard (F6), in `sidebar_targets` order.
     sidebar_focus: Option<usize>,
     /// Tab was used in Settings: the focus ring shows and Space/Enter act
@@ -172,6 +175,7 @@ impl TabsView {
             guide: false,
             settings: None,
             settings_focus: 0,
+            compare: None,
             settings_keyboard: false,
             sidebar_focus: None,
             a11y_acts: Vec::new(),
@@ -210,6 +214,10 @@ impl TabsView {
             "palette" => self.open_palette(cx),
             "sidebar" => self.sidebar_focus = Some(arg.parse().unwrap_or(0)),
             "guide" => self.open_guide(cx),
+            "compare" => {
+                self.toggle_dual(window, cx);
+                self.start_compare(cx);
+            }
             "history" => self.history_open = true,
             "search" | "columns" | "map" | "timeline" | "duplicates" | "details" => {
                 let tab = self.current();
@@ -436,6 +444,12 @@ impl TabsView {
 
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let started = Instant::now();
+        // Comparing is modal: every key stays in it.
+        if self.compare.is_some() {
+            self.compare_key(event, window, cx);
+            cx.stop_propagation();
+            return;
+        }
         if self.palette_open() {
             self.palette_key(event, started, window, cx);
             cx.stop_propagation();
@@ -834,6 +848,7 @@ impl Render for TabsView {
             .children(self.render_history(cx))
             .children(self.render_guide(cx))
             .children(self.render_settings(cx))
+            .children(self.render_compare(cx))
             .children(self.render_palette(cx))
             .children(self.render_conflict(cx))
     }
@@ -886,6 +901,8 @@ impl TabsView {
         };
         let (overlay, acts): (Option<Overlay>, Vec<Option<WindowAct>>) =
             if let Some((o, a)) = self.conflict_overlay(cx) {
+                (Some(o), a)
+            } else if let Some((o, a)) = self.compare_overlay() {
                 (Some(o), a)
             } else if let Some(section) = self.settings {
                 let (o, a) = self.settings_overlay(section);
