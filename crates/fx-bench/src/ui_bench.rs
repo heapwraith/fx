@@ -625,10 +625,14 @@ fn report_keys_against(
         }
         let (median, p95) = median_p95(&ms_samples(&samples));
         let max = samples.iter().copied().fold(0.0, f64::max);
-        let ok = p95 <= target && max <= MAX_P4_MS;
+        // The 16 ms ceiling is P4's (a key and its frame); Quick Look's target
+        // in PERFORMANCE.md is the p95 alone.
+        let ceiling = (target <= TARGET_P4_MS).then_some(MAX_P4_MS);
+        let ok = p95 <= target && ceiling.is_none_or(|c| max <= c);
         pass &= ok;
+        let ceiling_text = ceiling.map_or(String::new(), |c| format!(", max ≤ {c}"));
         println!(
-            "  {label}: {} keys  median {median:.2} ms  p95 {p95:.2} ms  max {max:.2} ms   target p95 ≤ {target}, max ≤ {MAX_P4_MS} ms  {}",
+            "  {label}: {} keys  median {median:.2} ms  p95 {p95:.2} ms  max {max:.2} ms   target p95 ≤ {target}{ceiling_text} ms  {}",
             samples.len(),
             if ok { "pass" } else { "FAIL" }
         );

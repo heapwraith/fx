@@ -25,7 +25,9 @@ def metadata():
         ["cargo", "metadata", "--format-version", "1", "--filter-platform", TARGET],
         check=True,
         capture_output=True,
-        text=True,
+        # cargo writes UTF-8; without this, Python on Windows decodes it with
+        # the ANSI code page and mangles authors' names (CI runs on Windows).
+        encoding="utf-8",
     ).stdout
     return json.loads(out)
 
