@@ -1,0 +1,242 @@
+# End-to-end tests on clean machines (T5.1): what the developer's PC cannot
+# test without a person clicking (UAC) or other hardware. GitHub's Windows
+# runners start fresh every time and run as administrator without prompts,
+# and there is a Windows on ARM runner.
+#   - install, first open and uninstall on a clean Windows (x64 and ARM64);
+#   - updating over an Inno Setup install (0.2) and over fx 0.3.0-beta;
+#   - the index service: install, real MFT (P6), search (P5), uninstall.
+# Runs after every successful CI on main (with that run's installers) or by
+# hand; results go to the job summary, screenshots to the "e2e-shots" artifacts.
+name: E2E
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "CI run whose artifacts to test (empty: the latest successful one on main)"
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  pick:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.run.outputs.id }}
+    steps:
+      - id: run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT: ${{ inputs.run_id }}
+          FROM_CI: ${{ github.event.workflow_run.id }}
+        run: |
+          id="${INPUT:-$FROM_CI}"
+          if [ -z "$id" ]; then
+            id=$(gh run list -R "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          fi
+          echo "CI run: $id"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+  install-x64:
+    needs: pick
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: fx-setup
+          path: setup
+          run-id: ${{ needs.pick.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Clean install, first open, uninstall
+        shell: pwsh
+        run: |
+          . tools/e2e/common.ps1
+          Summary 'Instalação limpa (x64)'
+          $setup = (Get-ChildItem setup -Filter *-setup-x64.exe | Select-Object -First 1).FullName
+          Check 'Nada instalado antes' (-not (Test-Path $Programs))
+          $t = Measure-Command { Start-Process -Wait -FilePath $setup -ArgumentList '--silent' }
+          Check 'Instalação silenciosa' (Test-Path (Join-Path $Programs 'pathdash.exe')) ("{0:N1} s" -f $t.TotalSeconds)
+          foreach ($f in 'fx-indexd.exe', 'fx-preview.exe', 'fx-setup.exe', 'THIRD-PARTY-NOTICES.txt') {
+            Check "Arquivo $f" (Test-Path (Join-Path $Programs $f))
+          }
+          Check 'Atalho Pathdash no Menu Iniciar' (Test-Path $StartMenu)
+          $entry = Get-ItemProperty $UninstallKey -ErrorAction SilentlyContinue
+          Check 'Entrada em Configurações › Aplicativos' ($entry.DisplayName -eq 'Pathdash') "$($entry.DisplayName) $($entry.DisplayVersion)"
+          Check 'Sem pedir administrador' ($entry -and -not (Test-Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\fx'))
+          LaunchAndShoot (Join-Path $Programs 'pathdash.exe') $env:USERPROFILE 'x64-primeira-abertura'
+          Check 'Configurações gravadas na primeira abertura' (Test-Path "$env:LOCALAPPDATA\fx")
+          LaunchAndShoot (Join-Path $Programs 'pathdash.exe') 'C:\Windows' 'x64-segunda-abertura'
+          Uninstall-Quiet
+          Check 'Desinstalação remove os programas' (-not (Test-Path (Join-Path $Programs 'pathdash.exe')))
+          Check 'Desinstalação remove o atalho' (-not (Test-Path $StartMenu))
+          Check 'Desinstalação remove a entrada' (-not (Test-Path $UninstallKey))
+          $copies = Get-ChildItem $env:TEMP -Filter 'fx-uninstall-*' -ErrorAction SilentlyContinue
+          WaitFor { -not (Get-ChildItem $env:TEMP -Filter 'fx-uninstall-*' -ErrorAction SilentlyContinue) } 15 | Out-Null
+          Check 'Cópia temporária do desinstalador apagada' (-not (Get-ChildItem $env:TEMP -Filter 'fx-uninstall-*' -ErrorAction SilentlyContinue))
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-shots-install-x64
+          path: ${{ runner.temp }}/shots
+          retention-days: 14
+
+  upgrade-x64:
+    needs: pick
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: fx-setup
+          path: setup
+          run-id: ${{ needs.pick.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Inno Setup (to build the old installer)
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress | Out-Null }
+      - name: Over an Inno Setup install (0.2 era) and over fx 0.3.0-beta
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          . tools/e2e/common.ps1
+          $setup = (Get-ChildItem setup -Filter *-setup-x64.exe | Select-Object -First 1).FullName
+          # The fx 0.3.0-beta programs (fx.exe), packed by the Inno script of the time.
+          gh release download v0.3.0-beta -R $env:GITHUB_REPOSITORY -p 'fx-0.3.0-beta-windows-x64.zip' -p 'fx-0.3.0-beta-setup-x64.exe' -D old
+          Expand-Archive old/fx-0.3.0-beta-windows-x64.zip -DestinationPath old/bin
+          New-Item -ItemType Directory -Force installer | Out-Null
+          git show 15ad3ac^:installer/fx.iss | Set-Content -Encoding utf8 installer/fx.iss
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /Q /DAppVersion=0.2.0 "/DSourceDir=$PWD\old\bin" installer\fx.iss
+          $inno = (Get-ChildItem dist -Filter 'fx-0.2.0-setup-x64.exe').FullName
+
+          Summary 'Por cima de uma instalação do Inno Setup (0.2)'
+          Start-Process -Wait -FilePath $inno -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/CURRENTUSER', '/NORESTART'
+          Check 'Inno instalou o fx.exe' (Test-Path (Join-Path $Programs 'fx.exe'))
+          Check 'Entrada do Inno' (Test-Path $InnoKey)
+          Start-Process -Wait -FilePath $setup -ArgumentList '--silent'
+          Check 'pathdash.exe instalado' (Test-Path (Join-Path $Programs 'pathdash.exe'))
+          Check 'fx.exe antigo removido' (-not (Test-Path (Join-Path $Programs 'fx.exe')))
+          Check 'Entrada do Inno adotada (removida)' (-not (Test-Path $InnoKey))
+          $entry = Get-ItemProperty $UninstallKey -ErrorAction SilentlyContinue
+          Check 'Uma entrada só, a do Pathdash' ($entry.DisplayName -eq 'Pathdash') "$($entry.DisplayVersion)"
+          Check 'Atalho antigo trocado' ((Test-Path $StartMenu) -and -not (Test-Path $LegacyStartMenu))
+          LaunchAndShoot (Join-Path $Programs 'pathdash.exe') $env:USERPROFILE 'depois-do-inno'
+          Uninstall-Quiet
+          Check 'Desinstalado' (-not (Test-Path (Join-Path $Programs 'pathdash.exe')))
+
+          Summary 'Por cima do fx 0.3.0-beta (instalador próprio, fx.exe)'
+          Start-Process -Wait -FilePath old/fx-0.3.0-beta-setup-x64.exe -ArgumentList '--silent'
+          Check 'fx 0.3.0-beta instalado' (Test-Path (Join-Path $Programs 'fx.exe')) "$((Get-ItemProperty $UninstallKey).DisplayVersion)"
+          New-Item -ItemType Directory -Force "$env:APPDATA\fx" | Out-Null
+          "idioma = `"pt`"" | Set-Content "$env:APPDATA\fx\settings.toml"
+          Start-Process -Wait -FilePath $setup -ArgumentList '--silent'
+          Check 'pathdash.exe no lugar do fx.exe' ((Test-Path (Join-Path $Programs 'pathdash.exe')) -and -not (Test-Path (Join-Path $Programs 'fx.exe')))
+          Check 'Configurações preservadas' ((Get-Content "$env:APPDATA\fx\settings.toml" -Raw) -match 'idioma')
+          Check 'Versão nova registrada' ((Get-ItemProperty $UninstallKey).DisplayName -eq 'Pathdash') "$((Get-ItemProperty $UninstallKey).DisplayVersion)"
+          LaunchAndShoot (Join-Path $Programs 'pathdash.exe') $env:USERPROFILE 'depois-do-0.3'
+          Uninstall-Quiet
+          Check 'Desinstalado' (-not (Test-Path (Join-Path $Programs 'pathdash.exe')))
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-shots-upgrade-x64
+          path: ${{ runner.temp }}/shots
+          retention-days: 14
+
+  service-x64:
+    needs: pick
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: fx-exe
+          path: bin
+          run-id: ${{ needs.pick.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: fx-bench
+          path: bin
+          run-id: ${{ needs.pick.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Index service, real MFT (P6) and search (P5)
+        shell: pwsh
+        run: |
+          . tools/e2e/common.ps1
+          $bin = (Get-ChildItem bin -Recurse -Filter fx-indexd.exe | Select-Object -First 1).DirectoryName
+          Summary 'Serviço do índice (administrador, sem UAC)'
+          Check 'Processo elevado' ([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))
+          $files = (cmd /c "dir C:\ /s /a /-c 2>nul" | Select-String 'File\(s\)|arquivo\(s\)' | Select-Object -Last 1).Line
+          Check 'Arquivos no C: do runner' $true "$files"
+          # P6: the whole MFT of C:, as the service reads it (needs Administrator).
+          New-Item -ItemType Directory -Force bench/results | Out-Null
+          $p6 = & "$bin\fx-bench.exe" index --volume C: 2>&1 | Out-String
+          Write-Host $p6
+          Check 'P6: índice do C: lido da MFT' ($LASTEXITCODE -eq 0) (($p6 -split "`n" | Where-Object { $_ -match 'files indexed|time|breakdown' }) -join ' · ')
+          & "$bin\fx-indexd.exe" install | Out-Host
+          Check 'fx-indexd install' ($LASTEXITCODE -eq 0)
+          Check 'Serviço rodando' (WaitFor { (Get-Service fx-indexd -ErrorAction SilentlyContinue).Status -eq 'Running' } 30)
+          Check 'Cópia em Program Files' (Test-Path "$env:ProgramFiles\fx\fx-indexd.exe")
+          $ready = WaitFor { (& "$bin\fx-indexd.exe" status | Out-String) -match '\d{4,}' } 180
+          Check 'Índice pronto' $ready ((& "$bin\fx-indexd.exe" status | Out-String).Trim() -replace "`r?`n", ' · ')
+          $p5 = & "$bin\fx-bench.exe" search --service 2>&1 | Out-String
+          Write-Host $p5
+          Check 'P5: busca pelo serviço' ($LASTEXITCODE -eq 0) (($p5 -split "`n" | Where-Object { $_ -match 'keystrokes' }) -join ' ')
+          # The app finds the service's copy identical to its own (no "out of date" notice).
+          $same = (Get-FileHash "$env:ProgramFiles\fx\fx-indexd.exe").Hash -eq (Get-FileHash "$bin\fx-indexd.exe").Hash
+          Check 'Serviço igual ao do app (sem aviso de desatualizado)' $same
+          & "$bin\fx-indexd.exe" uninstall | Out-Host
+          Check 'fx-indexd uninstall' ($LASTEXITCODE -eq 0)
+          Check 'Serviço removido' (-not (Get-Service fx-indexd -ErrorAction SilentlyContinue))
+          Check 'Program Files limpo' (-not (Test-Path "$env:ProgramFiles\fx"))
+
+  arm64:
+    needs: pick
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: fx-arm64
+          path: arm
+          run-id: ${{ needs.pick.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: ARM64 install, open, service, uninstall
+        shell: pwsh
+        run: |
+          . tools/e2e/common.ps1
+          Summary 'Windows on ARM (ARM64 nativo)'
+          Check 'Máquina ARM64' ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') $env:PROCESSOR_ARCHITECTURE
+          $setup = (Get-ChildItem arm -Recurse -Filter *-setup-arm64.exe | Select-Object -First 1).FullName
+          Start-Process -Wait -FilePath $setup -ArgumentList '--silent'
+          Check 'Instalação silenciosa' (Test-Path (Join-Path $Programs 'pathdash.exe'))
+          Check 'Atalho e entrada' ((Test-Path $StartMenu) -and (Test-Path $UninstallKey))
+          LaunchAndShoot (Join-Path $Programs 'pathdash.exe') $env:USERPROFILE 'arm64-abertura'
+          & (Join-Path $Programs 'fx-indexd.exe') install | Out-Host
+          Check 'Serviço ARM64 rodando' (WaitFor { (Get-Service fx-indexd -ErrorAction SilentlyContinue).Status -eq 'Running' } 30)
+          $ready = WaitFor { (& (Join-Path $Programs 'fx-indexd.exe') status | Out-String) -match '\d{4,}' } 180
+          Check 'Índice ARM64 pronto' $ready ((& (Join-Path $Programs 'fx-indexd.exe') status | Out-String).Trim() -replace "`r?`n", ' · ')
+          $q = & (Join-Path $Programs 'fx-indexd.exe') query notepad | Out-String
+          Check 'Busca pelo serviço ARM64' ($q -match 'notepad') (($q -split "`n" | Select-Object -First 2) -join ' ')
+          & (Join-Path $Programs 'fx-indexd.exe') uninstall | Out-Host
+          Check 'Serviço removido' (-not (Get-Service fx-indexd -ErrorAction SilentlyContinue))
+          Uninstall-Quiet
+          Check 'Desinstalado' (-not (Test-Path (Join-Path $Programs 'pathdash.exe')))
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-shots-arm64
+          path: ${{ runner.temp }}/shots
+          retention-days: 14
