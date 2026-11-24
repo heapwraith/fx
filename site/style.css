@@ -172,9 +172,9 @@ h2 { font-size: clamp(28px, 4vw, 42px); line-height: 1.12; letter-spacing: -0.02
 .bento { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; }
 .card.wide { grid-column: span 2; }
-.card .ico { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); margin-bottom: 16px; }
+.card h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 17px; }
+.card .ico { display: inline-flex; flex: none; color: var(--accent); }
 .card .ico svg { width: 20px; height: 20px; }
-.card h3 { margin: 0 0 6px; font-size: 17px; }
 .card p { margin: 0; color: var(--muted); font-size: 15px; }
 
 /* Steps */
