@@ -154,6 +154,33 @@ impl FolderView {
         .detach();
     }
 
+    /// At startup: an update of Pathdash does not reach the index service
+    /// (it needs Administrator), so a service older than this Pathdash is
+    /// pointed out once, with where to update it. Reads files: a worker.
+    pub fn check_index_service(&mut self, cx: &mut Context<Self>) {
+        let work = cx.background_executor().spawn(async move {
+            fx_index::service::service_state() == fx_index::service::ServiceState::Running
+                && crate::update::index_outdated()
+        });
+        cx.spawn(async move |this, cx| {
+            if work.await {
+                let _ = this.update(cx, |view, cx| {
+                    if view.notice.is_none() {
+                        view.show_notice(
+                            tr!(
+                                "Serviço do índice desatualizado · Configurações › Sistema",
+                                "Index service out of date · Settings › System"
+                            )
+                            .to_owned(),
+                            cx,
+                        );
+                    }
+                });
+            }
+        })
+        .detach();
+    }
+
     /// The update check (T4.1/T4.4), on a worker thread: a newer version is
     /// downloaded, checked and kept ready, applied when fx closes. `quiet`:
     /// the daily check at startup, which only speaks when one is ready.

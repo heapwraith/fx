@@ -96,6 +96,8 @@ pub(super) enum Act {
 pub(super) struct Live {
     owner: Option<fx_shell::default_manager::Owner>,
     index: Option<fx_index::service::ServiceState>,
+    /// The service runs an fx-indexd older (or other) than this Pathdash's.
+    index_outdated: bool,
     last_check: Option<std::time::SystemTime>,
     /// The version downloaded, checked and waiting for Pathdash to close.
     ready: Option<String>,
@@ -177,19 +179,23 @@ impl TabsView {
             let exe = std::env::current_exe()
                 .map(|p| p.to_string_lossy().into_owned())
                 .unwrap_or_default();
+            let index = fx_index::service::service_state();
             (
                 owner(CLASSES, BACKUP, &exe),
-                fx_index::service::service_state(),
+                index,
+                index != fx_index::service::ServiceState::NotInstalled
+                    && crate::update::index_outdated(),
                 crate::update::last_check(),
                 crate::update::ready().map(|(v, _, _)| v.to_string()),
             )
         });
         cx.spawn(async move |this, cx| {
-            let (owner, index, last_check, ready) = work.await;
+            let (owner, index, index_outdated, last_check, ready) = work.await;
             let _ = this.update(cx, |view, cx| {
                 let live = &mut view.live;
                 live.owner = Some(owner);
                 live.index = Some(index);
+                live.index_outdated = index_outdated;
                 live.last_check = last_check;
                 live.ready = ready;
                 cx.notify();
@@ -248,11 +254,7 @@ impl TabsView {
     }
 
     fn set_index_service(&mut self, install: bool, cx: &mut Context<Self>) {
-        let exe = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.join("fx-indexd.exe")))
-            .filter(|p| p.exists());
-        let Some(exe) = exe else {
+        let Some(exe) = crate::update::bundled_indexd() else {
             self.live.error = Some((
                 Topic::Index,
                 tr!(
@@ -838,6 +840,22 @@ impl TabsView {
         } else {
             match live.index {
                 None => checking(),
+                Some(ServiceState::Running) if live.index_outdated => (
+                    status(
+                        Tone::Error,
+                        tr!(
+                            "Ativa, mas o serviço é de uma versão anterior do Pathdash. Atualizar pede permissão de administrador.",
+                            "On, but the service is from an earlier version of Pathdash. Updating asks for administrator permission."
+                        ),
+                    ),
+                    vec![
+                        (
+                            tr!("Atualizar serviço", "Update service"),
+                            Act::IndexService(true),
+                        ),
+                        (tr!("Desativar", "Turn off"), Act::IndexService(false)),
+                    ],
+                ),
                 Some(ServiceState::Running) => (
                     status(
                         Tone::On,

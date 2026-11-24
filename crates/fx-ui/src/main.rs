@@ -416,12 +416,17 @@ fn open_folder_window(
             if let Some(state) = saved {
                 view.update(cx, |view, cx| view.restore_tabs(state, window, cx));
             }
-            // Daily update check (T4.1), first window only, off the UI thread.
-            if prefs::UPDATES.get()
-                && !UPDATE_CHECKED.swap(true, std::sync::atomic::Ordering::Relaxed)
-            {
+            // First window only: files an update set aside go, and the daily
+            // update check (T4.1) runs; both off the UI thread.
+            if !UPDATE_CHECKED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                let _ = std::thread::Builder::new()
+                    .name("fx-clean-old".into())
+                    .spawn(update::clean_set_aside);
                 let tab = view.read(cx).current();
-                tab.update(cx, |tab, cx| tab.check_updates(true, cx));
+                tab.update(cx, |tab, cx| tab.check_index_service(cx));
+                if prefs::UPDATES.get() {
+                    tab.update(cx, |tab, cx| tab.check_updates(true, cx));
+                }
             }
             if tabs_view::guide_take_first_run() {
                 view.update(cx, |v, cx| v.open_howto(cx));

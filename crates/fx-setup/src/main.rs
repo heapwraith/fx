@@ -234,6 +234,8 @@ struct Setup {
     logo: Arc<Image>,
     /// The fx-indexd service installed for the whole machine (T2.5).
     service: bool,
+    /// Uninstalling removes the service too (asked on the confirm screen).
+    remove_service: bool,
 }
 
 fn run_ui(screen: Screen, package: Option<Arc<Package>>, target: Target) {
@@ -271,8 +273,9 @@ fn run_ui(screen: Screen, package: Option<Arc<Package>>, target: Target) {
                     window.set_background_appearance(WindowBackgroundAppearance::Opaque);
                 }
                 let installed = transaction::installed_version(&target);
-                let service = std::env::var_os("ProgramFiles")
-                    .is_some_and(|p| Path::new(&p).join("fx").join("fx-indexd.exe").exists());
+                let service = target.real
+                    && std::env::var_os("ProgramFiles")
+                        .is_some_and(|p| Path::new(&p).join("fx").join("fx-indexd.exe").exists());
                 let view = cx.new(|cx| Setup {
                     screen,
                     package,
@@ -290,6 +293,7 @@ fn run_ui(screen: Screen, package: Option<Arc<Package>>, target: Target) {
                     focus: cx.focus_handle(),
                     logo: Arc::new(Image::from_bytes(ImageFormat::Png, LOGO.to_vec())),
                     service,
+                    remove_service: service,
                 });
                 view.update(cx, |v, _| v.focus.focus(window));
                 let themed = view.clone();
@@ -357,8 +361,16 @@ impl Setup {
 
     fn start_uninstall(&mut self, remove_data: bool, cx: &mut Context<Self>) {
         let target = self.target.clone();
+        let remove_service = self.service && self.remove_service;
         let (tx, rx) = unbounded::<Result<Step, String>>();
         std::thread::spawn(move || {
+            // The service first, while its fx-indexd.exe is still here: it
+            // runs elevated (UAC) and removes the Program Files copy. Refused
+            // or failed: nothing else is removed, and the screen says why.
+            if remove_service && let Err(text) = remove_index_service(&target) {
+                let _ = tx.unbounded_send(Err(text));
+                return;
+            }
             let data = if remove_data {
                 transaction::data_dirs()
             } else {
@@ -378,6 +390,13 @@ impl Setup {
             );
         });
         self.begin(true, rx, cx);
+        if remove_service {
+            self.step = tr!(
+                "Aguardando a permissão de administrador para remover o serviço…",
+                "Waiting for administrator permission to remove the service…"
+            )
+            .to_owned();
+        }
     }
 
     /// Follows the worker's progress; the bar eases every frame.
@@ -500,6 +519,36 @@ impl Setup {
 /// How much of the real work is done when `step` arrives: each file is one
 /// unit, plus one for the shortcuts and one for the Apps entry (uninstall:
 /// the entry only). Nothing is estimated (status is always real).
+/// Removes the fx-indexd service with the copy of fx-indexd.exe in the
+/// install folder, run as Administrator (the UAC prompt); waits for it.
+fn remove_index_service(target: &Target) -> Result<(), String> {
+    let exe = target.dir.join("fx-indexd.exe");
+    if !exe.exists() {
+        return Err(tr!(
+            "O fx-indexd.exe não está na pasta do Pathdash, então o serviço não pôde ser removido. Desmarque a opção do serviço para desinstalar sem ele.",
+            "fx-indexd.exe is not in the Pathdash folder, so the service could not be removed. Untick the service option to uninstall without it."
+        )
+        .to_owned());
+    }
+    let rx = fx_shell::launch(fx_shell::launch::Launch::Elevated {
+        exe,
+        args: "uninstall".to_owned(),
+    });
+    match rx.recv() {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(e)) if e.raw_os_error() == Some(1223) => Err(tr!(
+            "Cancelado: o Windows não recebeu a permissão de administrador, e nada foi removido. Para desinstalar sem remover o serviço, desmarque a opção dele.",
+            "Cancelled: Windows did not get administrator permission, and nothing was removed. To uninstall without removing the service, untick its option."
+        )
+        .to_owned()),
+        Ok(Err(e)) => Err(trf!(
+            "O serviço não foi removido ({e}), e nada mais foi. Tente de novo, ou desmarque a opção do serviço.",
+            "The service was not removed ({e}), and nothing else was. Try again, or untick the service option."
+        )),
+        Err(_) => Err(tr!("não foi possível começar", "could not start").to_owned()),
+    }
+}
+
 fn goal_for(step: Step, files: usize, uninstall: bool) -> f32 {
     let units = (files + if uninstall { 1 } else { 2 }).max(1) as f32;
     let done = match step {
@@ -780,45 +829,56 @@ impl Render for Setup {
             }
         }
         if let Screen::Confirm { remove_data } = self.screen {
-            let checkbox = if remove_data {
-                ICON_CHECKBOX
-            } else {
-                ICON_CHECKBOX_EMPTY
-            };
-            content = content.child(
+            let icon_font = self.icon_font;
+            let check = |id: &'static str, on: bool, label: &str| {
                 div()
-                    .id("remove-data")
+                    .id(id)
                     .flex()
                     .items_center()
                     .gap(px(space(2)))
                     .cursor_pointer()
                     .child(
                         div()
-                            .font_family(self.icon_font)
-                            .text_color(rgba(if remove_data {
-                                t.accent
+                            .font_family(icon_font)
+                            .text_color(rgba(if on { t.accent } else { t.text_secondary }))
+                            .child(if on {
+                                ICON_CHECKBOX
                             } else {
-                                t.text_secondary
-                            }))
-                            .child(checkbox),
+                                ICON_CHECKBOX_EMPTY
+                            }),
                     )
-                    .child(tr!(
+                    .child(label.to_owned())
+            };
+            content = content.child(
+                check(
+                    "remove-data",
+                    remove_data,
+                    tr!(
                         "Apagar também configurações, abas salvas e histórico",
                         "Also delete settings, saved tabs and history"
-                    ))
-                    .on_click(cx.listener(|v, _, _, cx| {
-                        if let Screen::Confirm { remove_data } = &mut v.screen {
-                            *remove_data = !*remove_data;
-                        }
-                        cx.notify();
-                    })),
+                    ),
+                )
+                .on_click(cx.listener(|v, _, _, cx| {
+                    if let Screen::Confirm { remove_data } = &mut v.screen {
+                        *remove_data = !*remove_data;
+                    }
+                    cx.notify();
+                })),
             );
             if self.service {
                 content = content.child(
-                    div().text_size(px(CAPTION_SIZE)).text_color(rgba(t.text_secondary)).child(tr!(
-                        "O serviço de busca no disco inteiro continua instalado. Para removê-lo, abra o Pathdash antes e use Configurações › Sistema › Desativar.",
-                        "The whole-disk search service stays installed. To remove it, first open Pathdash and use Settings › System › Turn off."
-                    )),
+                    check(
+                        "remove-service",
+                        self.remove_service,
+                        tr!(
+                            "Remover também o serviço de busca no disco inteiro (pede permissão de administrador)",
+                            "Also remove the whole-disk search service (asks for administrator permission)"
+                        ),
+                    )
+                    .on_click(cx.listener(|v, _, _, cx| {
+                        v.remove_service = !v.remove_service;
+                        cx.notify();
+                    })),
                 );
             }
         }

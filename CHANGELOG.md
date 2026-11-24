@@ -4,6 +4,13 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 
 ## [Não lançado]
 
+### Mudou
+- **O serviço de busca acompanha as atualizações.** Uma atualização do Pathdash não pode trocar o serviço do índice (ele fica em Arquivos de Programas e precisa de permissão de administrador). Agora o Pathdash compara o serviço instalado com o seu e, quando é de uma versão anterior, avisa na abertura ("Serviço do índice desatualizado · Configurações › Sistema") e Configurações › Sistema oferece **Atualizar serviço**.
+- **O desinstalador remove o serviço de busca** (opção marcada quando ele está instalado; pede permissão de administrador). Se a permissão for recusada, nada é removido e a tela diz como desinstalar sem ele.
+
+### Corrigido
+- Os arquivos que uma atualização deixava de lado (`pathdash.exe.fx-old-…`, quando o programa ainda estava aberto) agora são apagados na abertura seguinte, como o código prometia.
+
 ## [0.4.0-beta] — 2026-11-23
 
 O fx agora é o **Pathdash**: nome, ícone e cor novos, tema escuro por padrão, Configurações que mostram o estado real do sistema, uma revisão de toda a interface e as correções que saíram dos testes manuais.

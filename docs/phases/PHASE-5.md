@@ -50,7 +50,7 @@ Seguir a pasta da aba (`cd`) quando ela muda, cmd além do PowerShell, rolar o h
 - Benchmarks de entrada conferirem o foco da janela antes de começar (falhas pontuais vistas no portão 3).
 - Compilação ARM64 local no WSL (cabeçalhos ARM64 do xwin).
 - **Memória parado (P8):** está em 87–88 MB com meta de 88. Descobrir o que carrega WinTrust e Crypt32 no processo parado e o peso do atlas de glifos, e abrir margem.
-- `fx-indexd`: a cópia em Program Files não é atualizada pelo atualizador nem removida pelo desinstalador (hoje só avisa).
+- `fx-indexd`: a cópia em Program Files não é atualizada pelo atualizador nem removida pelo desinstalador (hoje só avisa). Feito em 2026-11-23: o Pathdash compara byte a byte o `fx-indexd.exe` do serviço com o seu (`installed_matches`); diferente, avisa na abertura e Configurações › Sistema mostra "Atualizar serviço" (reinstala com UAC). O desinstalador tem a opção (marcada) de remover o serviço, rodando o `fx-indexd.exe uninstall` elevado antes de apagar os arquivos; recusado, nada é removido. Conferido na janela com o serviço real (antigo) deste PC: aviso e botão aparecem. As sobras `*.fx-old-*` são apagadas na abertura (`update::clean_set_aside`).
 - A cópia temporária usada para desinstalar fica em `%TEMP%`.
 
 ## T5.7 — Metas novas que hoje reprovam (D-064)

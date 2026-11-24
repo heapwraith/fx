@@ -195,6 +195,46 @@ fn checked(setup: &std::path::Path, hash: &[u8; 32]) -> Option<std::fs::File> {
     same_publisher.then_some(file)
 }
 
+/// Deletes the files an install or update set aside next to the program
+/// (`*.fx-old-<pid>`, left when the old one was still running). Blocking:
+/// worker thread. One still in use stays for the next start.
+pub fn clean_set_aside() {
+    let Some(dir) = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(PathBuf::from))
+    else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return;
+    };
+    for e in entries.flatten() {
+        let is_file = e.file_type().is_ok_and(|t| t.is_file());
+        if is_file
+            && e.file_name()
+                .to_str()
+                .is_some_and(fx_core::update::is_set_aside)
+        {
+            let _ = std::fs::remove_file(e.path());
+        }
+    }
+}
+
+/// The fx-indexd.exe shipped with this Pathdash (next to it), if present.
+pub fn bundled_indexd() -> Option<std::path::PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("fx-indexd.exe")))
+        .filter(|p| p.exists())
+}
+
+/// Whether the installed service is not this Pathdash's fx-indexd (reads
+/// both files: worker thread). Unknown counts as not outdated.
+pub fn index_outdated() -> bool {
+    bundled_indexd()
+        .is_some_and(|b| fx_index::service::installed_matches(&b).is_ok_and(|same| !same))
+}
+
 /// Whether to download updates by themselves (`verificar_atualizacoes`).
 pub fn automatic() -> bool {
     crate::prefs::UPDATES.get()

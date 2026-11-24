@@ -7,7 +7,7 @@
 //!    and the new one is renamed in; any failure puts everything back;
 //! 3. shortcuts and the Settings › Apps entry are written;
 //! 4. the files set aside are deleted when possible (a running one is left
-//!    for the next install or start of fx).
+//!    for the next install or start of Pathdash: `update::clean_set_aside`).
 //!
 //! Uninstalling deletes only the files fx installed, never a folder's
 //! unknown contents.
@@ -37,6 +37,10 @@ pub struct Target {
     /// program, so Win+E keeps working (D-074). `None` in tests that must
     /// not touch them.
     pub default_manager: Option<(String, String)>,
+    /// The real install of this user: only then may the uninstaller touch
+    /// what belongs to the whole machine (the fx-indexd service). `false`
+    /// for `--test-root` and in tests.
+    pub real: bool,
 }
 
 impl Target {
@@ -53,6 +57,7 @@ impl Target {
                 uninstall_key: r"Software\fx-test-setup\Uninstall\fx".to_owned(),
                 legacy_key: None,
                 default_manager: None,
+                real: false,
             });
         }
         let local = std::env::var_os("LOCALAPPDATA").map(PathBuf::from)?;
@@ -67,6 +72,7 @@ impl Target {
                 fx_shell::default_manager::CLASSES.to_owned(),
                 fx_shell::default_manager::BACKUP.to_owned(),
             )),
+            real: true,
         })
     }
 
@@ -375,6 +381,7 @@ mod tests {
             ),
             legacy_key: None,
             default_manager: None,
+            real: false,
         }
     }
 

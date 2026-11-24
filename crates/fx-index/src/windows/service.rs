@@ -96,6 +96,33 @@ pub fn installed_exe() -> io::Result<PathBuf> {
     Ok(PathBuf::from(base).join("fx").join("fx-indexd.exe"))
 }
 
+/// Whether the installed copy is the same program as `bundled` (the
+/// fx-indexd.exe next to Pathdash), byte for byte: an update of Pathdash
+/// replaces its own files but not the service's copy, which needs
+/// Administrator. Reads both files: call it on a worker thread.
+pub fn installed_matches(bundled: &Path) -> io::Result<bool> {
+    same_file_contents(&installed_exe()?, bundled)
+}
+
+fn same_file_contents(a: &Path, b: &Path) -> io::Result<bool> {
+    use std::io::Read;
+    if std::fs::metadata(a)?.len() != std::fs::metadata(b)?.len() {
+        return Ok(false);
+    }
+    let (mut fa, mut fb) = (std::fs::File::open(a)?, std::fs::File::open(b)?);
+    let (mut ba, mut bb) = (vec![0u8; 64 << 10], vec![0u8; 64 << 10]);
+    loop {
+        let n = fa.read(&mut ba)?;
+        if n == 0 {
+            return Ok(true);
+        }
+        fb.read_exact(&mut bb[..n])?;
+        if ba[..n] != bb[..n] {
+            return Ok(false);
+        }
+    }
+}
+
 /// Installs (or reinstalls) and starts the service. Needs Administrator.
 /// `exe` is this executable; `user_sid` the only user the pipe will serve.
 pub fn install(exe: &Path, user_sid: &str) -> io::Result<PathBuf> {
@@ -284,4 +311,27 @@ pub fn run_service(
     // SAFETY: the table (null-terminated) and the name it points to live
     // until the dispatcher returns, after the service stopped.
     unsafe { StartServiceCtrlDispatcherW(table.as_ptr()) }.map_err(io::Error::from)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn file_contents_compare_byte_for_byte() {
+        let dir = tempfile::tempdir().unwrap();
+        let (a, b, c) = (
+            dir.path().join("a"),
+            dir.path().join("b"),
+            dir.path().join("c"),
+        );
+        let big: Vec<u8> = (0..200_000u32).map(|i| i as u8).collect();
+        std::fs::write(&a, &big).unwrap();
+        std::fs::write(&b, &big).unwrap();
+        let mut other = big.clone();
+        other[150_000] ^= 1;
+        std::fs::write(&c, &other).unwrap();
+        assert!(super::same_file_contents(&a, &b).unwrap());
+        assert!(!super::same_file_contents(&a, &c).unwrap());
+        std::fs::write(&c, &big[..10]).unwrap();
+        assert!(!super::same_file_contents(&a, &c).unwrap());
+    }
 }

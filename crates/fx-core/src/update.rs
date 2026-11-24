@@ -185,6 +185,15 @@ pub fn due(last_check_secs: Option<u64>, now_secs: u64) -> bool {
     last_check_secs.is_none_or(|t| now_secs.saturating_sub(t) >= 24 * 3600 || t > now_secs)
 }
 
+/// Whether `name` is a file an install or update set aside
+/// (`<name>.fx-old-<pid>`): the installer renames the running program
+/// instead of deleting it, and the next start of Pathdash removes it.
+pub fn is_set_aside(name: &str) -> bool {
+    name.rsplit_once(".fx-old-").is_some_and(|(base, pid)| {
+        !base.is_empty() && !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit())
+    })
+}
+
 /// A minimal JSON reader: enough for the GitHub answer (objects, arrays,
 /// strings with escapes, numbers, booleans, null).
 pub mod json {
@@ -382,6 +391,16 @@ pub mod json {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn set_aside_files_are_recognised_and_nothing_else() {
+        assert!(super::is_set_aside("pathdash.exe.fx-old-1234"));
+        assert!(super::is_set_aside("fx.exe.fx-old-7"));
+        assert!(!super::is_set_aside("pathdash.exe"));
+        assert!(!super::is_set_aside("notas.fx-old-"));
+        assert!(!super::is_set_aside(".fx-old-12"));
+        assert!(!super::is_set_aside("relatorio.fx-old-12.txt"));
+    }
+
     #[test]
     fn ready_note_round_trips_and_rejects_the_rest() {
         let v = super::Version::parse("1.2.3").unwrap();
