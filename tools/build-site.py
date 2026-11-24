@@ -134,14 +134,16 @@ PAGE = """<!doctype html>
 <link rel="stylesheet" href="../style.css">
 </head>
 <body>
-<header class="wrap top">
-  <a class="brand" href="../"><img src="../logo.png" alt="">Pathdash</a>
-  <nav class="nav">
-    <a href="../">Início</a>
-    <a href="https://github.com/heapwraith/fx">GitHub</a>
-    <a data-download href="https://github.com/heapwraith/fx/releases">Baixar</a>
-  </nav>
-</header>
+<div class="topbar">
+  <header class="wrap top">
+    <a class="brand" href="../"><img src="../logo.png" alt="">Pathdash</a>
+    <nav class="nav">
+      <a href="../">Início</a>
+      <a href="https://github.com/heapwraith/fx">GitHub</a>
+      <a class="btn primary" data-download href="https://github.com/heapwraith/fx/releases">Baixar</a>
+    </nav>
+  </header>
+</div>
 <main class="wrap doc">
 %s
 </main>
