@@ -4,6 +4,8 @@
 
 **Objetivo:** fechar tudo o que ficou para depois, testar com o usuário o que só uma pessoa pode testar e publicar a 1.0 assinada.
 
+> Situação em 2026-11-24 e o que falta, por responsável: [`docs/PENDENCIAS.md`](../PENDENCIAS.md).
+
 ## T5.1 — Testes manuais com o usuário
 - [ ] Concluída em: ____ · Resumo:
 
