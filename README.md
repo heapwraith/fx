@@ -4,7 +4,7 @@
 
 O Pathdash é um gerenciador de arquivos para Windows 10 e 11, nativo, open source e escrito em Rust. Ele abre uma pasta com 100 mil arquivos em cerca de 10 ms, busca no disco inteiro enquanto você digita e pode substituir o Explorador como padrão do sistema, com volta garantida.
 
-> **Status:** versão **0.3.0-beta**. As fases 0 a 4 estão concluídas: navegação, busca, prévias, recursos avançados, instalador próprio e atualizador. A Fase 5 reúne o que falta para a 1.0, como testes manuais, assinatura digital e publicação; a Fase 6 traz os diferenciais depois dela (mapa do disco, linha do tempo, buscas vivas e mais). Veja o [roteiro](docs/ROADMAP.md).
+> **Status:** versão **0.4.0-beta**. As fases 0 a 4 estão concluídas: navegação, busca, prévias, recursos avançados, instalador próprio e atualizador. A Fase 5 reúne o que falta para a 1.0, como testes manuais, assinatura digital e publicação; a Fase 6 traz os diferenciais depois dela (mapa do disco, linha do tempo, buscas vivas e mais). Veja o [roteiro](docs/ROADMAP.md).
 
 ## Por que o Pathdash
 

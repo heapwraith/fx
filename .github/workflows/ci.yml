@@ -123,7 +123,9 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [check, arm64]
+    # Published as soon as it is built (D-075): only after the tests, the
+    # ARM64 build and the dependency audit all pass.
+    needs: [check, arm64, audit]
     runs-on: windows-latest
     permissions:
       contents: write
@@ -165,7 +167,7 @@ jobs:
           $end = ($rest | Select-String -Pattern '^## ' | Select-Object -First 1).LineNumber
           $notes = if ($end) { $rest[0..($end - 2)] } else { $rest }
           $notes -join "`n" | Set-Content notes.md
-      - name: Draft release
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
@@ -178,6 +180,6 @@ jobs:
             "{0}  {1}" -f (Get-FileHash -Algorithm SHA256 $f).Hash.ToLower(), (Split-Path $f -Leaf)
           }
           $sums | Set-Content -Encoding ascii SHA256SUMS.txt
-          $ghArgs = @("${{ github.ref_name }}", "Pathdash-$v-windows-x64.zip", "Pathdash-$v-windows-arm64.zip", $setup, $setupArm, "SHA256SUMS.txt", "--draft", "--title", "Pathdash $v", "--notes-file", "notes.md")
+          $ghArgs = @("${{ github.ref_name }}", "Pathdash-$v-windows-x64.zip", "Pathdash-$v-windows-arm64.zip", $setup, $setupArm, "SHA256SUMS.txt", "--title", "Pathdash $v", "--notes-file", "notes.md")
           if ($v.StartsWith('0.')) { $ghArgs += "--prerelease" }  # pre-1.0
           gh release create @ghArgs

@@ -4,6 +4,10 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 
 ## [Não lançado]
 
+## [0.4.0-beta] — 2026-11-23
+
+O fx agora é o **Pathdash**: nome, ícone e cor novos, tema escuro por padrão, Configurações que mostram o estado real do sistema, uma revisão de toda a interface e as correções que saíram dos testes manuais.
+
 ### Mudou
 - **Novo nome: Pathdash.** O fx passa a se chamar Pathdash, com ícone novo (grafite, com um caminho em ciano que termina numa seta) e o slogan "Qualquer pasta, numa arrancada.". O programa agora é `pathdash.exe`; ao atualizar, o instalador troca o `fx.exe` e os atalhos antigos e, se o fx era o gerenciador padrão, aponta o Win+E para o programa novo. Configurações, abas e etiquetas continuam onde estavam.
 - **Cor de destaque ciano** no lugar do verde-azulado; os temas claro e escuro não mudam.
