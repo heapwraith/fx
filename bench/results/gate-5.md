@@ -51,8 +51,8 @@ Faltam, todos fora do alcance deste PC ou dependentes do usuário:
 | P2 pasta de 100 mil (fx aberto) | mediana 75–78 ms, p95 83–88 ms; aba nova 9,1 ms (p95 11,3) | ≤ 80 ms / ≤ 16 ms | ⚠ a pasta pedida passa na mediana e reprova no p95; a aba nova passa |
 | P3 ordenar e filtrar | nome 37–39 ms (uma rodada com 51 ms); filtro 0,92 ms | ≤ 50 / ≤ 5 ms | ✅ |
 | P4 tecla → quadro | digitação p95 4,66; navegação 3,49; caminho 4,81/7,04; abas 5,17; paleta 3,42; busca 3,76; terminal 3,56; durante cópia 4,12 ms | p95 ≤ 8, máx. ≤ 16 ms | ✅ |
-| P5 busca | pelo serviço real (todos os volumes NTFS): p95 5,34 ms; índice sintético de 2 milhões: p95 7,05 ms | ≤ 16 ms | ✅ |
-| P6 construir o índice | não medido: precisa de Administrador. Leitura da MFT em pedidos grandes (D-076); antes/depois prontos em `%TEMP%\pathdash-p6\p6.ps1` | ≤ 10 s para 2 milhões | ❓ |
+| P5 busca | pelo serviço real (todos os volumes NTFS): p95 5,34 ms; no runner do GitHub (2 vCPUs, 1,35 milhão de itens): p95 19,2 ms; índice sintético de 2 milhões: p95 7,05 ms | ≤ 16 ms | ✅ |
+| P6 construir o índice | no runner do GitHub (E2E, administrador, 2026-11-24): **1.353.364 arquivos em 12,5 s**, sendo 11,95 s para ler 1.342 MB de MFT (112 MB/s, o limite do disco virtual do runner), 0,5 s de parse e 0,04 s de junção. Neste PC (NVMe) ainda não medido | ≤ 10 s para 2 milhões | ⚠ preso ao disco: o código gasta 0,54 s; num NVMe, a leitura de 1,3 GB leva bem menos de 1 s |
 | P7 rolagem | 0,02% e 0,10% (4 quadros num pico na partida) | ≤ 0,1% | ✅ |
 | P7 rolagem durante cópia de 10 mil arquivos | 0,13%, 0,21%, 0,28% (em 21/11: 0,026%) | ≤ 0,1% | ❌ |
 | P8 memória parado | 75,4 MB; por aba 0,46 MB; por janela 11,0 MB | ≤ 85 / 3 / 20 MB | ✅ |
@@ -82,3 +82,13 @@ Faltam, todos fora do alcance deste PC ou dependentes do usuário:
 - os testes que pedem outra máquina.
 
 Próximos passos sem depender do usuário: investigar a rolagem durante cópia e o p95 do menu. Com o usuário: um clique de Administrador para a P6 e para atualizar o serviço, e a inscrição na SignPath. A decisão é do usuário.
+
+## Ambiente de testes de ponta a ponta (2026-11-24)
+
+`.github/workflows/e2e.yml` roda depois de cada CI verde em máquinas Windows limpas do GitHub, como administrador e sem UAC, e também em Windows on ARM. A primeira execução completa (run 45324527113) passou em todas as verificações:
+- instalação limpa, primeira e segunda abertura, desinstalação sem sobras;
+- atualização por cima do Inno (0.2) e da 0.3.0-beta;
+- serviço com índice de 1,35 milhão de itens, P6 e P5;
+- ARM64 nativo: instala, abre, o serviço indexa 901 mil itens e busca em 7,2 ms.
+
+Isso cobre os itens T2.10/T4.3, T3.6 e T4.3 (Inno) de `TESTES-FINAIS.md`. Os números de desempenho do runner são informativos: a máquina de referência é a deste relatório.
