@@ -14,3 +14,6 @@ workspace = true
 [dependencies]
 fx-core.workspace = true
 fx-shell.workspace = true
+
+[build-dependencies]
+embed-resource.workspace = true

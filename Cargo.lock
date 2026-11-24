@@ -1861,6 +1861,7 @@ dependencies = [
 name = "fx-indexd"
 version = "0.4.0-beta"
 dependencies = [
+ "embed-resource",
  "fx-core",
  "fx-index",
 ]
@@ -1878,6 +1879,7 @@ dependencies = [
 name = "fx-preview"
 version = "0.4.0-beta"
 dependencies = [
+ "embed-resource",
  "fx-core",
  "fx-shell",
 ]
