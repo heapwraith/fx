@@ -87,3 +87,34 @@ Ordem sugerida:
 4. Seguir a T5.7 (P1, P8, S1) e a T5.1 (conferência com o usuário).
 
 A decisão é do usuário.
+
+
+## Reavaliação de 2026-11-23 (commit f1eda89)
+
+Depois da redução de tamanho (D-077) e da conferência do grupo A na janela. As metas desta rodada estão em `gate-5.md`.
+
+**Data:** 2026-11-23 · **Commit:** f1eda89 · mesma máquina e mesma rodada de metas de `gate-5.md`.
+
+**Critério:** os diferenciais do grupo A entregues e conferidos com o usuário; todas as metas de `docs/PERFORMANCE.md` dentro do limite.
+
+### Tarefas
+
+As 16 tarefas de `docs/phases/PHASE-6.md` estão concluídas: T6.15 foi descartada pelo usuário e T6.16 saiu sem juntar PDFs, também por decisão dele.
+
+### Grupo A conferido na janela (2026-11-23, build release)
+
+| Diferencial | Conferido | Resultado |
+|---|---|---|
+| T6.1 Mapa do disco (Ctrl+Shift+M) | numa pasta de demonstração | blocos proporcionais com os totais reais (171 MB; backup-fotos.zip 46 MB, 27%), cor por tipo, cursor e legenda de teclas |
+| T6.2 Linha do tempo (Ctrl+Shift+L) | com o serviço real deste PC | 500 mudanças da última hora (criado, alterado, apagado), caminhos `C:\…` legíveis, períodos de 10 min, 1 h e 24 h |
+| T6.3 Buscas vivas | Ctrl+F "relat" e Ctrl+S | a busca aparece em "Buscas" na barra lateral |
+
+**Observação de uso:** a linha do tempo fica dominada pelos arquivos internos que navegadores e editores mexem o tempo todo (`*-journal`, `.sqlite-shm` dentro de `AppData`). Melhoria proposta: esconder por padrão as mudanças em `AppData` dos programas, com um botão para mostrar.
+
+### Metas
+
+Desde a primeira versão deste relatório: **P8 de 88,3 para 75,4 MB** (D-073) e **S1 de 16,5 para 14,8 MB** (D-077), as duas dentro do limite; a P7 sem cópia caiu para 0,02%. As mesmas de `gate-5.md`: reprovam a rolagem durante cópia (P7) e o p95 do menu de contexto; P1 e P2 oscilam no limite com o PC carregado; a P6 espera o Administrador.
+
+### Recomendação
+
+As funcionalidades estão completas e o grupo A funciona com dados reais. Falta a conferência com o usuário, que o critério pede, e as mesmas metas do portão 5. **Passar depende do usuário**, e faz sentido decidir junto com o portão 5.

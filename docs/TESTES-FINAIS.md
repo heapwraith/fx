@@ -6,11 +6,11 @@ Testes que precisam de uma pessoa, de outro computador ou de uma conta (tarefa T
 
 - [x] **T2.3/T2.11 Narrador:** ligar o Narrador (Ctrl+Win+Enter), navegar pela lista e pelas migalhas; os itens são lidos com nome e tipo. 2026-11-23: árvore do UIA lida pela interface COM (o que o Narrador fala): cada item tem nome, papel "opção", descrição ("pasta", ou tamanho e data) e posição ("2 de 5"); Ctrl+L leva o foco ao campo "Caminho". O Narrador real ligado com o Pathdash navegando por teclado: nada travou. Os arquivos não dizem o tipo por extenso (a extensão está no nome).
 - [x] **T2.3/T2.11 Explorador:** Copiar no fx e colar no Explorador (e o contrário); arrastar do fx para o Explorador, a área de trabalho e o navegador (upload), e do Explorador para o fx. **Resultado 2026-11-23:** feito pelo usuário: tudo funcionou.
-- [ ] **T2.7 Totais pelo serviço:** com o `fx-indexd` ativo, abrir `C:\` e conferir que os totais das pastas aparecem quase na hora.
+- [x] **T2.7 Totais pelo serviço:** (2026-11-23: com o serviço deste PC ativo, `C:\` aberto mostrou os totais de todas as pastas em 1,5 s, ex.: Program Files 14,4 GB)  com o `fx-indexd` ativo, abrir `C:\` e conferir que os totais das pastas aparecem quase na hora.
 - [ ] **T2.9 Visualizadores:** DOCX (com Office instalado), MP4 e MP3 (com um visualizador de mídia) no Quick Look.
 - [ ] **T2.10/T4.3 Instalador:** num Windows limpo (ou máquina virtual): instalar pelo `fx-…-setup-x64.exe` (fx-setup) sem administrador, abrir pelo Menu Iniciar, desinstalar por Configurações › Aplicativos e conferir que `%LOCALAPPDATA%\Programs\fx` sumiu; repetir marcando "Apagar também configurações" e conferir que `%APPDATA%\fx` e `%LOCALAPPDATA%\fx` sumiram. SmartScreen: sem assinatura, avisa "editor desconhecido".
 - [ ] **T2.11 Assinatura:** inscrição do projeto na SignPath Foundation (só o usuário pode); depois, conferir que o SmartScreen não mostra "editor desconhecido".
-- [ ] **T2.11 Beta:** publicar um release no GitHub (os rascunhos `v0.1.0` e `v0.2.0-beta` existentes são antigos: o `v0.1.0` tem um travamento conhecido e não deve ser publicado; gerar um novo pela tag).
+- [x] **T2.11 Beta:** (2026-11-23: 0.3.0-beta e 0.4.0-beta publicados pelo CI a partir da tag, D-075)  publicar um release no GitHub (os rascunhos `v0.1.0` e `v0.2.0-beta` existentes são antigos: o `v0.1.0` tem um travamento conhecido e não deve ser publicado; gerar um novo pela tag).
 
 ## Fase 3
 
@@ -21,8 +21,8 @@ Testes que precisam de uma pessoa, de outro computador ou de uma conta (tarefa T
 
 ## Fase 4
 
-- [ ] **T4.1/T4.4 Atualização real:** com dois releases publicados, abrir a versão antiga: em até um dia (ou por "Atualizar o fx" na paleta) o status diz "Versão X pronta"; fechar o fx e abrir de novo: "Sobre o fx" mostra a versão nova. Repetir com "Atualizar o fx" (reinicia na hora).
+- [x] **T4.1/T4.4 Atualização real:** (2026-11-23: 0.2.0-beta instalado achou a 0.3.0-beta, baixou, conferiu e aplicou ao fechar; ver T5.2)  com dois releases publicados, abrir a versão antiga: em até um dia (ou por "Atualizar o fx" na paleta) o status diz "Versão X pronta"; fechar o fx e abrir de novo: "Sobre o fx" mostra a versão nova. Repetir com "Atualizar o fx" (reinicia na hora).
 - [ ] **T4.3 Instalador por cima de uma instalação feita pelo Inno** (versão 0.2.0-beta antiga): o fx-setup adota a pasta e só uma entrada aparece em Configurações › Aplicativos.
-- [ ] **T4.6 Primeira abertura:** num usuário novo do Windows, "Como usar o fx" aparece uma vez e não volta na segunda abertura.
+- [x] **T4.6 Primeira abertura:** (2026-11-23: simulado com pastas de dados vazias por `FX_DATA_DIR`: "Como usar o Pathdash" apareceu na primeira abertura e não na segunda)  num usuário novo do Windows, "Como usar o fx" aparece uma vez e não volta na segunda abertura.
 - [x] **T4.5 Instalação no PC do usuário:** 2026-11-22, instalador do CI (commit 50f354f); abriu pelo próprio instalador e mostrou "Como usar".
 
