@@ -2,6 +2,8 @@
 
 **Qualquer pasta, numa arrancada.** Pastas abrem na hora e arquivos aparecem enquanto você digita.
 
+Site: **[heapwraith.github.io/fx](https://heapwraith.github.io/fx/)** · [Guia de uso](https://heapwraith.github.io/fx/guia/)
+
 O Pathdash é um gerenciador de arquivos para Windows 10 e 11, nativo, open source e escrito em Rust. Ele abre uma pasta com 100 mil arquivos em cerca de 10 ms, busca no disco inteiro enquanto você digita e pode substituir o Explorador como padrão do sistema, com volta garantida.
 
 > **Status:** versão **0.4.0-beta**. As fases 0 a 4 estão concluídas: navegação, busca, prévias, recursos avançados, instalador próprio e atualizador. A Fase 5 reúne o que falta para a 1.0, como testes manuais, assinatura digital e publicação; a Fase 6 traz os diferenciais depois dela (mapa do disco, linha do tempo, buscas vivas e mais). Veja o [roteiro](docs/ROADMAP.md).
@@ -14,7 +16,7 @@ O Pathdash é um gerenciador de arquivos para Windows 10 e 11, nativo, open sour
 | Primeira abertura (processo novo) até a lista | **~430 ms** | ~1.050 ms |
 | Tecla → tela atualizada (p95) | **≤ 4,4 ms** | — |
 | Busca por nome no disco inteiro, por tecla (p95) | **~5 ms** | — |
-| Memória parado | ~87 MB | +117–125 MB por janela |
+| Memória parado | ~76 MB | +117–125 MB por janela |
 
 Medições em release num Ryzen 7 5700X com NVMe e monitor de 239 Hz. O método está em [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) e os números completos, em [`bench/results/gate-4.md`](bench/results/gate-4.md).
 

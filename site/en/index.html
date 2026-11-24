@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pathdash — file manager for Windows</title>
+<meta name="description" content="Every path, one dash away. A native, open source file manager for Windows 10 and 11: folders open at once and files show up as you type.">
+<link rel="icon" href="../favicon.ico">
+<link rel="alternate" hreflang="pt-BR" href="../">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="wrap top">
+  <a class="brand" href="./"><img src="../logo.png" alt="">Pathdash</a>
+  <nav class="nav">
+    <a href="#numbers" class="hide-sm">Numbers</a>
+    <a href="https://github.com/heapwraith/fx#readme">Docs</a>
+    <a href="https://github.com/heapwraith/fx">GitHub</a>
+    <a href="../" hreflang="pt-BR" lang="pt-BR">Português</a>
+  </nav>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <div>
+      <h1>Every path, one dash away.</h1>
+      <p class="lead">Folders open at once and files show up as you type. Pathdash is a native file manager for Windows 10 and 11, open source and built for the keyboard.</p>
+      <div class="actions">
+        <a class="btn primary" data-download href="https://github.com/heapwraith/fx/releases">Download for Windows</a>
+        <a class="btn" href="https://github.com/heapwraith/fx/releases">All releases</a>
+      </div>
+      <p class="fine"><span lang="en" data-version="Version {v} · {arch} installer, {mb} MB · " hidden></span>Installs for your user only, no administrator needed. Free, MIT or Apache-2.0.</p>
+    </div>
+    <div class="art"><img src="../logo.png" width="128" height="128" alt="Pathdash icon: a cyan path ending in an arrow"></div>
+  </div>
+
+  <section id="numbers">
+    <div class="wrap">
+      <h2>Measured, not promised</h2>
+      <p class="sub">Release builds on a Ryzen 7 5700X with NVMe and a 239 Hz monitor, following <a href="https://github.com/heapwraith/fx/blob/main/docs/PERFORMANCE.md">PERFORMANCE.md</a>. Full numbers are in each phase's report.</p>
+      <div class="table-scroll">
+        <table class="nums">
+          <thead><tr><th>What</th><th>Pathdash</th><th>Explorer</th></tr></thead>
+          <tbody>
+            <tr><td>Open a folder with 100,000 files (app running)</td><td class="us">~10 ms</td><td class="them">~254 ms</td></tr>
+            <tr><td>First launch, new process to file list</td><td class="us">~430 ms</td><td class="them">~1,050 ms</td></tr>
+            <tr><td>Key press to updated screen (p95)</td><td class="us">≤ 4.4 ms</td><td class="them">—</td></tr>
+            <tr><td>Whole-disk name search, per key (p95)</td><td class="us">~5 ms</td><td class="them">—</td></tr>
+            <tr><td>Memory while idle</td><td class="us">~76 MB</td><td class="them">+117–125 MB per window</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>What it does</h2>
+      <p class="sub">Everything you use in Explorer, with the same shortcuts, plus what it was missing.</p>
+      <div class="grid">
+        <div class="card"><h3>Whole-disk search</h3><p>Reads the NTFS MFT and answers as you type, with filters like <code>type:image</code>, <code>size:&gt;100mb</code> and <code>date:week</code>.</p></div>
+        <div class="card"><h3>Quick Look</h3><p>Space previews images, text and highlighted code, Markdown, ZIP, PDF and Office without opening another app.</p></div>
+        <div class="card"><h3>Safe operations</h3><p>A copy queue, conflicts that never overwrite without asking, and Ctrl+Z that undoes any operation, even from another day.</p></div>
+        <div class="card"><h3>Keyboard first</h3><p>Ctrl+K finds any command or folder by name. Built-in terminal on Ctrl+J, dual pane on F3.</p></div>
+        <div class="card"><h3>Organised</h3><p>Tabs, colour tags, the total size of every folder, saved searches that keep themselves up to date, and a column view.</p></div>
+        <div class="card"><h3>Can be the default</h3><p>Folders, drives and Win+E open in Pathdash. "Back to Explorer" restores what was there.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Privacy</h2>
+      <p class="sub">Pathdash sends nothing about you. The update check only reads the list of releases on GitHub; a crash report stays on your PC, with no paths or names, until you choose to send it. Both can be turned off in Settings.</p>
+      <h2>Still in beta</h2>
+      <p class="sub">Until code signing is active, Windows may warn about an "unknown publisher": click "More info", then "Run anyway". Updates arrive by themselves and apply when you close Pathdash. Found a problem? <a href="https://github.com/heapwraith/fx/issues/new/choose">Open an issue</a>.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Pathdash · open source, MIT or Apache-2.0</span>
+    <span><a href="https://github.com/heapwraith/fx/releases">All releases</a> · <a href="https://github.com/heapwraith/fx/blob/main/CHANGELOG.md">Changelog</a></span>
+  </div>
+</footer>
+<script src="../download.js"></script>
+</body>
+</html>

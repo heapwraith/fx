@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pathdash — gerenciador de arquivos para Windows</title>
+<meta name="description" content="Qualquer pasta, numa arrancada. Gerenciador de arquivos nativo para Windows 10 e 11, open source: pastas abrem na hora e arquivos aparecem enquanto você digita.">
+<link rel="icon" href="favicon.ico">
+<link rel="alternate" hreflang="en" href="en/">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="wrap top">
+  <a class="brand" href="./"><img src="logo.png" alt="">Pathdash</a>
+  <nav class="nav">
+    <a href="#numeros" class="hide-sm">Números</a>
+    <a href="guia/">Guia</a>
+    <a href="https://github.com/heapwraith/fx">GitHub</a>
+    <a href="en/" hreflang="en" lang="en">English</a>
+  </nav>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <div>
+      <h1>Qualquer pasta, numa arrancada.</h1>
+      <p class="lead">Pastas abrem na hora e arquivos aparecem enquanto você digita. O Pathdash é um gerenciador de arquivos nativo para Windows 10 e 11, open source e feito para o teclado.</p>
+      <div class="actions">
+        <a class="btn primary" data-download href="https://github.com/heapwraith/fx/releases">Baixar para Windows</a>
+        <a class="btn" href="guia/">Como usar</a>
+      </div>
+      <p class="fine"><span data-version="Versão {v} · instalador {arch}, {mb} MB · " hidden></span>Instala só para o seu usuário, sem pedir administrador. Grátis, MIT ou Apache-2.0.</p>
+    </div>
+    <div class="art"><img src="logo.png" width="128" height="128" alt="Ícone do Pathdash: um caminho ciano que termina numa seta"></div>
+  </div>
+
+  <section id="numeros">
+    <div class="wrap">
+      <h2>Medido, não prometido</h2>
+      <p class="sub">Medições em release num Ryzen 7 5700X com NVMe e monitor de 239 Hz, pelo protocolo de <a href="https://github.com/heapwraith/fx/blob/main/docs/PERFORMANCE.md">PERFORMANCE.md</a>. Os números completos estão nos relatórios de cada fase.</p>
+      <div class="table-scroll">
+        <table class="nums">
+          <thead><tr><th>O quê</th><th>Pathdash</th><th>Explorador</th></tr></thead>
+          <tbody>
+            <tr><td>Abrir uma pasta com 100 mil arquivos (programa aberto)</td><td class="us">~10 ms</td><td class="them">~254 ms</td></tr>
+            <tr><td>Primeira abertura, do processo novo até a lista</td><td class="us">~430 ms</td><td class="them">~1.050 ms</td></tr>
+            <tr><td>Tecla até a tela atualizada (p95)</td><td class="us">≤ 4,4 ms</td><td class="them">—</td></tr>
+            <tr><td>Busca por nome no disco inteiro, por tecla (p95)</td><td class="us">~5 ms</td><td class="them">—</td></tr>
+            <tr><td>Memória com o programa parado</td><td class="us">~76 MB</td><td class="them">+117–125 MB por janela</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>O que ele faz</h2>
+      <p class="sub">Tudo o que você usa no Explorador, com os mesmos atalhos, e o que faltava nele.</p>
+      <div class="grid">
+        <div class="card"><h3>Busca no disco inteiro</h3><p>Lê a MFT do NTFS e responde enquanto você digita, com filtros como <code>tipo:imagem</code>, <code>tamanho:&gt;100mb</code> e <code>data:semana</code>.</p></div>
+        <div class="card"><h3>Quick Look</h3><p>Espaço mostra imagens, texto e código com cores, Markdown, ZIP, PDF e Office sem abrir outro programa.</p></div>
+        <div class="card"><h3>Operações seguras</h3><p>Fila de cópias, conflitos que nunca sobrescrevem sem perguntar e Ctrl+Z que desfaz qualquer operação, mesmo de outro dia.</p></div>
+        <div class="card"><h3>Teclado primeiro</h3><p>Ctrl+K encontra qualquer comando ou pasta pelo nome. Terminal embutido no Ctrl+J, painel duplo no F3.</p></div>
+        <div class="card"><h3>Organização</h3><p>Abas, etiquetas coloridas, tamanho total de cada pasta, buscas salvas que se atualizam sozinhas e vista em colunas.</p></div>
+        <div class="card"><h3>Pode virar o padrão</h3><p>Pastas, unidades e Win+E abrem no Pathdash. "Voltar ao Explorador" restaura o que havia.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Privacidade</h2>
+      <p class="sub">O Pathdash não envia nada sobre você. A verificação de atualizações só consulta a lista de versões no GitHub; o relatório de falha fica no seu PC, sem caminhos nem nomes, até você decidir enviá-lo. As duas coisas desligam em Configurações.</p>
+      <h2>Ainda em beta</h2>
+      <p class="sub">Enquanto a assinatura digital não está ativa, o Windows pode avisar "editor desconhecido": clique em "Mais informações" e depois em "Executar assim mesmo". As atualizações chegam sozinhas e entram quando você fecha o Pathdash. Encontrou um problema? <a href="https://github.com/heapwraith/fx/issues/new/choose">Abra uma issue</a>.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Pathdash · open source, MIT ou Apache-2.0</span>
+    <span><a href="https://github.com/heapwraith/fx/releases">Todas as versões</a> · <a href="https://github.com/heapwraith/fx/blob/main/CHANGELOG.md">Novidades</a></span>
+  </div>
+</footer>
+<script src="download.js"></script>
+</body>
+</html>

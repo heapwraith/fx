@@ -4,6 +4,9 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 
 ## [Não lançado]
 
+### Novo
+- **Site do projeto:** [heapwraith.github.io/fx](https://heapwraith.github.io/fx/), em português e inglês, com o download da versão mais nova e o guia de uso.
+
 ### Mudou
 - **O serviço de busca acompanha as atualizações.** Uma atualização do Pathdash não pode trocar o serviço do índice (ele fica em Arquivos de Programas e precisa de permissão de administrador). Agora o Pathdash compara o serviço instalado com o seu e, quando é de uma versão anterior, avisa na abertura ("Serviço do índice desatualizado · Configurações › Sistema") e Configurações › Sistema oferece **Atualizar serviço**.
 - **O desinstalador remove o serviço de busca** (opção marcada quando ele está instalado; pede permissão de administrador). Se a permissão for recusada, nada é removido e a tela diz como desinstalar sem ele.

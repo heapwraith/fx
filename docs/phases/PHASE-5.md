@@ -22,7 +22,7 @@ Toda a lista de `docs/TESTES-FINAIS.md` (Narrador, Explorador, totais pelo servi
 
 ## T5.3 — Site, documentação de uso e vídeo
 - [ ] Concluída em: ____ · Resumo:
-- Parcial em 2026-11-23: guia de uso em `docs/GUIA.md` (instalar, navegar, buscar e filtros, arquivos, ver, ferramentas, abas e painéis, terminal, etiquetas, gerenciador padrão, privacidade), com os atalhos conferidos no código. Ao conferir, achou-se que F6 no painel duplo nunca movia (a barra lateral ficava com a tecla): agora, com painéis divididos, F6 move para o outro painel (conferido de ponta a ponta). Faltam o site e o vídeo.
+- Parcial em 2026-11-23: guia de uso em `docs/GUIA.md` (instalar, navegar, buscar e filtros, arquivos, ver, ferramentas, abas e painéis, terminal, etiquetas, gerenciador padrão, privacidade), com os atalhos conferidos no código. Ao conferir, achou-se que F6 no painel duplo nunca movia (a barra lateral ficava com a tecla): agora, com painéis divididos, F6 move para o outro painel (conferido de ponta a ponta). Site em 2026-11-23: `site/` (página em português e em inglês, números medidos, download que aponta para o instalador do release mais novo pela API do GitHub) e o guia gerado do `docs/GUIA.md` por `tools/build-site.py` (só biblioteca padrão; Markdown que ele não converte faz o build falhar); o workflow `pages.yml` publica em https://heapwraith.github.io/fx/ a cada mudança. Conferido por captura (desktop e 390 px). Falta o vídeo.
 
 Site do projeto, guia de uso (atalhos, busca, painel duplo, etiquetas, terminal, gerenciador padrão) e vídeo de 30 s lado a lado com o Explorador.
 

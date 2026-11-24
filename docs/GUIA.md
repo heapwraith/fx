@@ -1,10 +1,10 @@
 # Guia de uso do Pathdash
 
-O Pathdash é um gerenciador de arquivos para Windows 10 e 11. Tudo se faz pelo teclado; na dúvida, **Ctrl+K** abre a paleta, que encontra qualquer comando ou pasta pelo nome. **F1** mostra o resumo dos atalhos dentro do próprio fx.
+O Pathdash é um gerenciador de arquivos para Windows 10 e 11. Tudo se faz pelo teclado; na dúvida, **Ctrl+K** abre a paleta, que encontra qualquer comando ou pasta pelo nome. **F1** mostra o resumo dos atalhos dentro do próprio Pathdash.
 
 ## Instalar
 
-Baixe o instalador (`Pathdash-<versão>-setup-x64.exe`, ou `-arm64` em PCs ARM) e abra. Ele instala só para o seu usuário, sem senha de administrador, em poucos segundos. As atualizações chegam sozinhas e são aplicadas quando o Pathdash fecha (pode desligar em Configurações › Sistema). Para desinstalar: Configurações do Windows › Aplicativos › fx.
+Baixe o instalador (`Pathdash-<versão>-setup-x64.exe`, ou `-arm64` em PCs ARM) e abra. Ele instala só para o seu usuário, sem senha de administrador, em poucos segundos. As atualizações chegam sozinhas e são aplicadas quando o Pathdash fecha (pode desligar em Configurações › Atualizações). Para desinstalar: Configurações do Windows › Aplicativos › Pathdash (o desinstalador também oferece remover o serviço de busca).
 
 ## Navegar
 
@@ -18,7 +18,7 @@ Baixe o instalador (`Pathdash-<versão>-setup-x64.exe`, ou `-arm64` em PCs ARM) 
 | letras | filtram a pasta na hora (Esc limpa) |
 | Ctrl+B | mostra ou esconde a barra lateral |
 
-A barra de caminho mostra as pastas acima; clicar numa delas vai até lá. Na paleta, digite parte do nome de uma pasta que você abre muito: o Pathdash aprende quais você usa mais e as coloca primeiro ("proj Pathdash" acha `C:\Projetos\fx`).
+A barra de caminho mostra as pastas acima; clicar numa delas vai até lá. Na paleta, digite parte do nome de uma pasta que você abre muito: o Pathdash aprende quais você usa mais e as coloca primeiro ("proj site" acha `C:\Projetos\site-novo`).
 
 ## Buscar
 
@@ -89,7 +89,7 @@ Pela paleta: alternar grade e lista, ordenar, agrupar por tipo, data ou tamanho,
 | Ctrl+F3 / Ctrl+Shift+F3 | mais um painel (até 4) / fechar este painel |
 | F5 / F6 | no painel duplo: copiar / mover para o outro painel |
 
-Arraste uma aba para a área dos painéis para levá-la a uma janela nova. "Salvar abas como espaço de trabalho…" guarda as abas da janela com um nome, para reabrir depois pela paleta. As abas, os painéis e a vista em colunas voltam como estavam ao reabrir o fx.
+Arraste uma aba para a área dos painéis para levá-la a uma janela nova. "Salvar abas como espaço de trabalho…" guarda as abas da janela com um nome, para reabrir depois pela paleta. As abas, os painéis e a vista em colunas voltam como estavam ao reabrir o Pathdash.
 
 ## Terminal
 
