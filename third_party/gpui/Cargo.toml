@@ -36,7 +36,10 @@ repository = "https://github.com/zed-industries/zed"
 resolver = "2"
 
 [features]
+# fx patch: "svg" (usvg, resvg) is optional, on by default as upstream.
+svg = ["dep:usvg", "dep:resvg"]
 default = [
+    "svg",
     "font-kit",
     "wayland",
     "x11",
@@ -161,6 +164,10 @@ package = "gpui_http_client"
 
 [dependencies.image]
 version = "0.25.1"
+# fx patch: only the formats GPUI decodes (img.rs, clipboard), not the
+# default set (EXR, AVIF encoder, HDR, QOI, TGA...): smaller program (T5.7).
+default-features = false
+features = ["png", "jpeg", "gif", "webp", "bmp", "tiff", "ico"]
 
 [dependencies.inventory]
 version = "0.3.19"
@@ -212,6 +219,7 @@ version = "0.2.2"
 package = "gpui_refineable"
 
 [dependencies.resvg]
+optional = true
 version = "0.45.0"
 features = [
     "text",
@@ -273,6 +281,7 @@ version = "=0.9.0"
 version = "2.0.12"
 
 [dependencies.usvg]
+optional = true
 version = "0.45.0"
 default-features = false
 

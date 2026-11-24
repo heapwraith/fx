@@ -1,6 +1,6 @@
 diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples -x a a/Cargo.toml ./Cargo.toml
---- a/Cargo.toml	2006-07-23 21:21:28.000000000 -0400
-+++ ./Cargo.toml	2026-11-21 01:22:03.727031618 -0400
+--- a/Cargo.toml	2026-11-23 23:16:25.109823989 -0400
++++ ./Cargo.toml	2026-11-23 23:16:25.180937140 -0400
 @@ -19,6 +19,7 @@
  autolib = false
  autobins = false
@@ -9,7 +9,18 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
  autotests = false
  autobenches = false
  description = "Zed's GPU-accelerated UI framework"
-@@ -104,126 +105,6 @@
+@@ -35,7 +36,10 @@
+ resolver = "2"
+ 
+ [features]
++# fx patch: "svg" (usvg, resvg) is optional, on by default as upstream.
++svg = ["dep:usvg", "dep:resvg"]
+ default = [
++    "svg",
+     "font-kit",
+     "wayland",
+     "x11",
+@@ -104,126 +108,6 @@
  path = "src/gpui.rs"
  doctest = false
  
@@ -136,7 +147,34 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
  [[test]]
  name = "action_macros"
  path = "tests/action_macros.rs"
-@@ -576,7 +457,9 @@
+@@ -280,6 +164,10 @@
+ 
+ [dependencies.image]
+ version = "0.25.1"
++# fx patch: only the formats GPUI decodes (img.rs, clipboard), not the
++# default set (EXR, AVIF encoder, HDR, QOI, TGA...): smaller program (T5.7).
++default-features = false
++features = ["png", "jpeg", "gif", "webp", "bmp", "tiff", "ico"]
+ 
+ [dependencies.inventory]
+ version = "0.3.19"
+@@ -331,6 +219,7 @@
+ package = "gpui_refineable"
+ 
+ [dependencies.resvg]
++optional = true
+ version = "0.45.0"
+ features = [
+     "text",
+@@ -392,6 +281,7 @@
+ version = "2.0.12"
+ 
+ [dependencies.usvg]
++optional = true
+ version = "0.45.0"
+ default-features = false
+ 
+@@ -576,7 +466,9 @@
  ]
  optional = true
  
@@ -147,7 +185,7 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
  version = "25.0"
  features = ["wgsl-in"]
  
-@@ -724,7 +607,7 @@
+@@ -724,7 +616,7 @@
  [target.'cfg(target_os = "windows")'.dependencies.windows-registry]
  version = "0.5"
  
@@ -157,8 +195,8 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
  
  [lints.clippy]
 diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples -x a a/build.rs ./build.rs
---- a/build.rs	2006-07-23 21:21:28.000000000 -0400
-+++ ./build.rs	2026-11-21 00:16:16.109490537 -0400
+--- a/build.rs	2026-11-23 23:16:25.110792410 -0400
++++ ./build.rs	2026-11-23 23:16:25.181593958 -0400
 @@ -10,11 +10,17 @@
      let target = env::var("CARGO_CFG_TARGET_OS");
      println!("cargo::rustc-check-cfg=cfg(gles)");
@@ -415,8 +453,8 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
 -    }
  }
 diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples -x a a/resources/windows/gpui.manifest.xml ./resources/windows/gpui.manifest.xml
---- a/resources/windows/gpui.manifest.xml	2006-07-23 21:21:28.000000000 -0400
-+++ ./resources/windows/gpui.manifest.xml	2026-11-22 18:32:30.410955577 -0400
+--- a/resources/windows/gpui.manifest.xml	2026-11-23 23:16:25.126145782 -0400
++++ ./resources/windows/gpui.manifest.xml	2026-11-23 23:16:25.182141957 -0400
 @@ -3,6 +3,8 @@
          <asmv3:windowsSettings>
              <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware>
@@ -426,9 +464,32 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
          </asmv3:windowsSettings>
      </asmv3:application>
      <dependency>
+diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples -x a a/src/elements/img.rs ./src/elements/img.rs
+--- a/src/elements/img.rs	2026-11-23 23:16:25.139990058 -0400
++++ ./src/elements/img.rs	2026-11-23 23:16:25.183356165 -0400
+@@ -739,7 +739,7 @@
+     Image(Arc<ImageError>),
+     /// An error that occurred while processing an SVG.
+     #[error("svg error: {0}")]
+-    Usvg(Arc<usvg::Error>),
++    Usvg(Arc<crate::SvgError>),
+ }
+ 
+ impl From<anyhow::Error> for ImageCacheError {
+@@ -754,8 +754,8 @@
+     }
+ }
+ 
+-impl From<usvg::Error> for ImageCacheError {
+-    fn from(value: usvg::Error) -> Self {
++impl From<crate::SvgError> for ImageCacheError {
++    fn from(value: crate::SvgError) -> Self {
+         Self::Usvg(Arc::new(value))
+     }
+ }
 diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples -x a a/src/elements/text.rs ./src/elements/text.rs
---- a/src/elements/text.rs	2006-07-23 21:21:28.000000000 -0400
-+++ ./src/elements/text.rs	2026-11-21 23:47:06.401652325 -0400
+--- a/src/elements/text.rs	2026-11-23 23:16:25.141495977 -0400
++++ ./src/elements/text.rs	2026-11-23 23:16:25.183568713 -0400
 @@ -316,6 +316,8 @@
      lines: SmallVec<[WrappedLine; 1]>,
      line_height: Pixels,
@@ -479,8 +540,8 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
                      bounds: None,
                  });
 diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples -x a a/src/platform/windows/directx_devices.rs ./src/platform/windows/directx_devices.rs
---- a/src/platform/windows/directx_devices.rs	2006-07-23 21:21:28.000000000 -0400
-+++ ./src/platform/windows/directx_devices.rs	2026-11-21 01:02:12.786886238 -0400
+--- a/src/platform/windows/directx_devices.rs	2026-11-23 23:16:25.167767580 -0400
++++ ./src/platform/windows/directx_devices.rs	2026-11-23 23:16:25.188250590 -0400
 @@ -53,32 +53,25 @@
          let debug_layer_available = check_debug_layer_available();
          let dxgi_factory =
@@ -573,8 +634,8 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
  }
  
 diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples -x a a/src/platform/windows/directx_renderer.rs ./src/platform/windows/directx_renderer.rs
---- a/src/platform/windows/directx_renderer.rs	2006-07-23 21:21:28.000000000 -0400
-+++ ./src/platform/windows/directx_renderer.rs	2026-11-23 11:05:23.489458507 -0400
+--- a/src/platform/windows/directx_renderer.rs	2026-11-23 23:16:25.168406513 -0400
++++ ./src/platform/windows/directx_renderer.rs	2026-11-23 23:16:25.188309109 -0400
 @@ -63,11 +63,10 @@
      render_target: ManuallyDrop<ID3D11Texture2D>,
      render_target_view: [Option<ID3D11RenderTargetView>; 1],
@@ -969,8 +1030,8 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
  }
  
 diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples -x a a/src/platform/windows/window.rs ./src/platform/windows/window.rs
---- a/src/platform/windows/window.rs	2006-07-23 21:21:28.000000000 -0400
-+++ ./src/platform/windows/window.rs	2026-11-21 13:53:36.751103022 -0400
+--- a/src/platform/windows/window.rs	2026-11-23 23:16:25.170560481 -0400
++++ ./src/platform/windows/window.rs	2026-11-23 23:16:25.188905793 -0400
 @@ -772,6 +772,25 @@
                  // ACCENT_ENABLE_ACRYLICBLURBEHIND
                  set_window_composition_attribute(hwnd, Some((0, 0, 0, 0)), 4);
@@ -1013,8 +1074,8 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
                          paths.push(path);
                      }
 diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples -x a a/src/platform.rs ./src/platform.rs
---- a/src/platform.rs	2006-07-23 21:21:28.000000000 -0400
-+++ ./src/platform.rs	2026-11-21 05:40:28.387051795 -0400
+--- a/src/platform.rs	2026-11-23 23:16:25.171569121 -0400
++++ ./src/platform.rs	2026-11-23 23:16:25.189105381 -0400
 @@ -1323,6 +1323,9 @@
      ///
      /// Not always supported.
@@ -1025,9 +1086,126 @@ diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x f
  }
  
  /// The options that can be configured for a file dialog prompt
+diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples -x a a/src/svg_renderer.rs ./src/svg_renderer.rs
+--- a/src/svg_renderer.rs	2026-11-23 23:16:25.174382922 -0400
++++ ./src/svg_renderer.rs	2026-11-23 23:16:25.189540727 -0400
+@@ -1,9 +1,52 @@
+ use crate::{AssetSource, DevicePixels, IsZero, Result, SharedString, Size};
++#[cfg(feature = "svg")]
+ use resvg::tiny_skia::Pixmap;
+-use std::{
+-    hash::Hash,
+-    sync::{Arc, LazyLock},
+-};
++#[cfg(feature = "svg")]
++use std::sync::LazyLock;
++use std::{hash::Hash, sync::Arc};
++
++// fx patch: SVG rendering (usvg, resvg, tiny-skia and their font stack) is
++// behind the `svg` feature, on by default as upstream. fx draws no SVG and
++// turns it off: about 1 MB less in the program (T5.7). Without it every SVG
++// fails to render with `SvgError`, and nothing else changes.
++/// The error of a failed SVG render.
++#[cfg(feature = "svg")]
++pub type SvgError = usvg::Error;
++
++/// The error of a failed SVG render: SVG support is not compiled in.
++#[cfg(not(feature = "svg"))]
++#[derive(Debug, Clone, Copy)]
++pub struct SvgError;
++
++#[cfg(not(feature = "svg"))]
++impl std::fmt::Display for SvgError {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        f.write_str("SVG support is not compiled in (gpui feature \"svg\")")
++    }
++}
++
++#[cfg(not(feature = "svg"))]
++impl std::error::Error for SvgError {}
++
++/// Stands in for the rendered pixmap when SVG support is off (never built).
++#[cfg(not(feature = "svg"))]
++pub struct Pixmap(std::convert::Infallible);
++
++#[cfg(not(feature = "svg"))]
++impl Pixmap {
++    /// Width in pixels.
++    pub fn width(&self) -> u32 {
++        match self.0 {}
++    }
++    /// Height in pixels.
++    pub fn height(&self) -> u32 {
++        match self.0 {}
++    }
++    /// The pixel data.
++    pub fn take(self) -> Vec<u8> {
++        match self.0 {}
++    }
++}
+ 
+ /// When rendering SVGs, we render them at twice the size to get a higher-quality result.
+ pub const SMOOTH_SVG_SCALE_FACTOR: f32 = 2.;
+@@ -17,6 +60,7 @@
+ #[derive(Clone)]
+ pub struct SvgRenderer {
+     asset_source: Arc<dyn AssetSource>,
++    #[cfg(feature = "svg")]
+     usvg_options: Arc<usvg::Options<'static>>,
+ }
+ 
+@@ -26,6 +70,12 @@
+ }
+ 
+ impl SvgRenderer {
++    #[cfg(not(feature = "svg"))]
++    pub fn new(asset_source: Arc<dyn AssetSource>) -> Self {
++        Self { asset_source }
++    }
++
++    #[cfg(feature = "svg")]
+     pub fn new(asset_source: Arc<dyn AssetSource>) -> Self {
+         static FONT_DB: LazyLock<Arc<usvg::fontdb::Database>> = LazyLock::new(|| {
+             let mut db = usvg::fontdb::Database::new();
+@@ -66,7 +116,16 @@
+         };
+ 
+         let pixmap = self.render_pixmap(&bytes, SvgSize::Size(params.size))?;
++        Ok(Some(Self::alpha_mask(pixmap)))
++    }
+ 
++    #[cfg(not(feature = "svg"))]
++    fn alpha_mask(pixmap: Pixmap) -> (Size<DevicePixels>, Vec<u8>) {
++        match pixmap.0 {}
++    }
++
++    #[cfg(feature = "svg")]
++    fn alpha_mask(pixmap: Pixmap) -> (Size<DevicePixels>, Vec<u8>) {
+         // Convert the pixmap's pixels into an alpha mask.
+         let size = Size::new(
+             DevicePixels(pixmap.width() as i32),
+@@ -77,10 +136,16 @@
+             .iter()
+             .map(|p| p.alpha())
+             .collect::<Vec<_>>();
+-        Ok(Some((size, alpha_mask)))
++        (size, alpha_mask)
++    }
++
++    #[cfg(not(feature = "svg"))]
++    pub fn render_pixmap(&self, _bytes: &[u8], _size: SvgSize) -> Result<Pixmap, SvgError> {
++        Err(SvgError)
+     }
+ 
+-    pub fn render_pixmap(&self, bytes: &[u8], size: SvgSize) -> Result<Pixmap, usvg::Error> {
++    #[cfg(feature = "svg")]
++    pub fn render_pixmap(&self, bytes: &[u8], size: SvgSize) -> Result<Pixmap, SvgError> {
+         let tree = usvg::Tree::from_data(bytes, &self.usvg_options)?;
+         let svg_size = tree.size();
+         let scale = match size {
 diff -ruN -x Cargo.lock -x .cargo-ok -x .cargo_vcs_info.json -x FX-PATCH.md -x fx.patch -x shaders-dxbc -x compile-shaders.ps1 -x examples -x a a/src/taffy.rs ./src/taffy.rs
---- a/src/taffy.rs	2006-07-23 21:21:28.000000000 -0400
-+++ ./src/taffy.rs	2026-11-22 18:26:24.028114337 -0400
+--- a/src/taffy.rs	2026-11-23 23:16:25.175015345 -0400
++++ ./src/taffy.rs	2026-11-23 23:16:25.189654436 -0400
 @@ -309,7 +309,9 @@
              unit: &Option<u16>,
          ) -> Vec<taffy::GridTemplateComponent<T>> {

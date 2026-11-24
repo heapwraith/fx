@@ -1,9 +1,52 @@
 use crate::{AssetSource, DevicePixels, IsZero, Result, SharedString, Size};
+#[cfg(feature = "svg")]
 use resvg::tiny_skia::Pixmap;
-use std::{
-    hash::Hash,
-    sync::{Arc, LazyLock},
-};
+#[cfg(feature = "svg")]
+use std::sync::LazyLock;
+use std::{hash::Hash, sync::Arc};
+
+// fx patch: SVG rendering (usvg, resvg, tiny-skia and their font stack) is
+// behind the `svg` feature, on by default as upstream. fx draws no SVG and
+// turns it off: about 1 MB less in the program (T5.7). Without it every SVG
+// fails to render with `SvgError`, and nothing else changes.
+/// The error of a failed SVG render.
+#[cfg(feature = "svg")]
+pub type SvgError = usvg::Error;
+
+/// The error of a failed SVG render: SVG support is not compiled in.
+#[cfg(not(feature = "svg"))]
+#[derive(Debug, Clone, Copy)]
+pub struct SvgError;
+
+#[cfg(not(feature = "svg"))]
+impl std::fmt::Display for SvgError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SVG support is not compiled in (gpui feature \"svg\")")
+    }
+}
+
+#[cfg(not(feature = "svg"))]
+impl std::error::Error for SvgError {}
+
+/// Stands in for the rendered pixmap when SVG support is off (never built).
+#[cfg(not(feature = "svg"))]
+pub struct Pixmap(std::convert::Infallible);
+
+#[cfg(not(feature = "svg"))]
+impl Pixmap {
+    /// Width in pixels.
+    pub fn width(&self) -> u32 {
+        match self.0 {}
+    }
+    /// Height in pixels.
+    pub fn height(&self) -> u32 {
+        match self.0 {}
+    }
+    /// The pixel data.
+    pub fn take(self) -> Vec<u8> {
+        match self.0 {}
+    }
+}
 
 /// When rendering SVGs, we render them at twice the size to get a higher-quality result.
 pub const SMOOTH_SVG_SCALE_FACTOR: f32 = 2.;
@@ -17,6 +60,7 @@ pub(crate) struct RenderSvgParams {
 #[derive(Clone)]
 pub struct SvgRenderer {
     asset_source: Arc<dyn AssetSource>,
+    #[cfg(feature = "svg")]
     usvg_options: Arc<usvg::Options<'static>>,
 }
 
@@ -26,6 +70,12 @@ pub enum SvgSize {
 }
 
 impl SvgRenderer {
+    #[cfg(not(feature = "svg"))]
+    pub fn new(asset_source: Arc<dyn AssetSource>) -> Self {
+        Self { asset_source }
+    }
+
+    #[cfg(feature = "svg")]
     pub fn new(asset_source: Arc<dyn AssetSource>) -> Self {
         static FONT_DB: LazyLock<Arc<usvg::fontdb::Database>> = LazyLock::new(|| {
             let mut db = usvg::fontdb::Database::new();
@@ -66,7 +116,16 @@ impl SvgRenderer {
         };
 
         let pixmap = self.render_pixmap(&bytes, SvgSize::Size(params.size))?;
+        Ok(Some(Self::alpha_mask(pixmap)))
+    }
 
+    #[cfg(not(feature = "svg"))]
+    fn alpha_mask(pixmap: Pixmap) -> (Size<DevicePixels>, Vec<u8>) {
+        match pixmap.0 {}
+    }
+
+    #[cfg(feature = "svg")]
+    fn alpha_mask(pixmap: Pixmap) -> (Size<DevicePixels>, Vec<u8>) {
         // Convert the pixmap's pixels into an alpha mask.
         let size = Size::new(
             DevicePixels(pixmap.width() as i32),
@@ -77,10 +136,16 @@ impl SvgRenderer {
             .iter()
             .map(|p| p.alpha())
             .collect::<Vec<_>>();
-        Ok(Some((size, alpha_mask)))
+        (size, alpha_mask)
     }
 
-    pub fn render_pixmap(&self, bytes: &[u8], size: SvgSize) -> Result<Pixmap, usvg::Error> {
+    #[cfg(not(feature = "svg"))]
+    pub fn render_pixmap(&self, _bytes: &[u8], _size: SvgSize) -> Result<Pixmap, SvgError> {
+        Err(SvgError)
+    }
+
+    #[cfg(feature = "svg")]
+    pub fn render_pixmap(&self, bytes: &[u8], size: SvgSize) -> Result<Pixmap, SvgError> {
         let tree = usvg::Tree::from_data(bytes, &self.usvg_options)?;
         let svg_size = tree.size();
         let scale = match size {

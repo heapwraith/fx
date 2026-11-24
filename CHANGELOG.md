@@ -11,6 +11,9 @@ Todas as mudanças relevantes do fx. Versões seguem o [versionamento semântico
 - **O serviço de busca acompanha as atualizações.** Uma atualização do Pathdash não pode trocar o serviço do índice (ele fica em Arquivos de Programas e precisa de permissão de administrador). Agora o Pathdash compara o serviço instalado com o seu e, quando é de uma versão anterior, avisa na abertura ("Serviço do índice desatualizado · Configurações › Sistema") e Configurações › Sistema oferece **Atualizar serviço**.
 - **O desinstalador remove o serviço de busca** (opção marcada quando ele está instalado; pede permissão de administrador). Se a permissão for recusada, nada é removido e a tela diz como desinstalar sem ele.
 
+- **Programa menor:** o `pathdash.exe` caiu de 18,6 para 14,8 MB e o instalador para 7,8 MB, sem perder nada: saíram formatos de imagem e o desenho de SVG que o Pathdash nunca usa (D-077).
+- **Índice mais rápido de construir:** a MFT é lida do disco em blocos grandes em vez de 4 KB por vez (D-076).
+
 ### Corrigido
 - Os arquivos que uma atualização deixava de lado (`pathdash.exe.fx-old-…`, quando o programa ainda estava aberto) agora são apagados na abertura seguinte, como o código prometia.
 

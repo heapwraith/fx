@@ -354,3 +354,46 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod aligned_read_tests {
+    // The patched ntfs-reader (D-076): its large reads return exactly the
+    // bytes the original 4 KiB path does.
+    use ntfs_reader::aligned_reader::AlignedReader;
+    use std::io::{Cursor, Read, Seek, SeekFrom};
+
+    #[test]
+    fn large_and_small_reads_return_the_same_bytes() {
+        let data: Vec<u8> = (0..3_000_000u32)
+            .map(|i| (i * 7 + i / 4096) as u8)
+            .collect();
+        let cases = [
+            (0usize, 1usize),
+            (5, 100),
+            (4096, 4096),
+            (4095, 70_000),
+            (0, 65_536),
+            (12_288, 1_048_576),
+            (1, 2_500_000),
+            (8192, 2_000_000),
+        ];
+        for (offset, len) in cases {
+            let mut r = std::io::BufReader::new(
+                AlignedReader::new(Cursor::new(data.clone()), 4096).unwrap(),
+            );
+            r.seek(SeekFrom::Start(offset as u64)).unwrap();
+            let mut got = vec![0u8; len];
+            r.read_exact(&mut got).unwrap();
+            assert!(
+                got == data[offset..offset + len],
+                "offset {offset}, len {len}"
+            );
+            // A small read right after continues from the right place.
+            let mut next = [0u8; 10];
+            if offset + len + 10 <= data.len() {
+                r.read_exact(&mut next).unwrap();
+                assert_eq!(next, data[offset + len..offset + len + 10]);
+            }
+        }
+    }
+}

@@ -41,7 +41,8 @@ rusqlite = { version = "=0.43.0", default-features = false, features = ["bundled
 
 # GPUI: fixado na T0.1 (D-007). Resolvido para a cópia com patch em third_party/gpui
 # via [patch.crates-io] abaixo, para compilar de forma cruzada WSL -> Windows (D-005).
-gpui = "=0.2.2"
+# Sem a feature "svg" do patch (usvg, resvg): o fx não desenha SVG (T5.7). As outras são as padrão.
+gpui = { version = "=0.2.2", default-features = false, features = ["font-kit", "wayland", "x11", "windows-manifest"] }
 
 # Revisão de código (D-066): já compiladas como dependências do GPUI, agora diretas.
 # Canais assíncronos (sem bloquear o pool de threads do Windows).
@@ -59,7 +60,8 @@ sevenz-rust2 = { version = "=0.25.0", default-features = false }
 bzip2 = "=0.6.1"
 lzma-rust2 = { version = "=0.25.0", default-features = false, features = ["std", "xz"] }
 # Imagens (D-069): a mesma versão que o GPUI já compila (todos os formatos), e a data EXIF.
-image = "=0.25.10"
+# Só os formatos que o fx lê e grava (prévia, ações de imagem); sem EXR, AVIF, HDR etc. (T5.7).
+image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "tiff", "ico"] }
 kamadak-exif = "=0.6.2"
 # JPEG com SIMD (2× o codificador da `image`).
 jpeg-encoder = { version = "=0.7.1", features = ["simd"] }
@@ -116,6 +118,8 @@ features = [
 gpui = { path = "third_party/gpui" }
 # Sem o zed-reqwest (hyper, rustls, ring): o fx não faz HTTP pelo GPUI (T5.7, D-071).
 gpui_http_client = { path = "third_party/gpui_http_client" }
+# Leitura da MFT em pedidos grandes (P6, D-076).
+ntfs-reader = { path = "third_party/ntfs-reader" }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
@@ -135,3 +139,29 @@ debug = "line-tables-only"   # permite perfilar o build de release
 
 [profile.bench]
 inherits = "release"
+
+# Dependências fora do caminho crítico (abrir pasta, rolar, digitar, Quick Look)
+# otimizadas para tamanho (T5.7): o banco de estado, regex do renomear em lote,
+# configurações, compactadores, codificador JPEG e a camada de acessibilidade.
+[profile.release.package.libsqlite3-sys]
+opt-level = "s"
+[profile.release.package.regex-automata]
+opt-level = "s"
+[profile.release.package.regex-syntax]
+opt-level = "s"
+[profile.release.package.toml_edit]
+opt-level = "s"
+[profile.release.package.zip]
+opt-level = "s"
+[profile.release.package.lzma-rust2]
+opt-level = "s"
+[profile.release.package.sevenz-rust2]
+opt-level = "s"
+[profile.release.package.jpeg-encoder]
+opt-level = "s"
+[profile.release.package.accesskit_consumer]
+opt-level = "s"
+[profile.release.package.accesskit_windows]
+opt-level = "s"
+[profile.release.package.jiff]
+opt-level = "s"
