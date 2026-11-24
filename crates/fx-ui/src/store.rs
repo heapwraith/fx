@@ -849,7 +849,30 @@ mod tests {
                 .stderr(std::process::Stdio::null())
                 .spawn()
                 .unwrap();
-            std::thread::sleep(Duration::from_millis(300 + 70 * round));
+            // Wait until the child has committed something new (a slow CI
+            // runner can take longer than any fixed sleep just to start it),
+            // then let it write a little more and kill it mid-stream.
+            let saved = |path: &Path| {
+                Db::open(path)
+                    .ok()
+                    .and_then(|db| db.load().ok())
+                    .and_then(|s| {
+                        s.windows
+                            .first()
+                            .and_then(|w| w.tabs.first())
+                            .map(|t| -t.scroll as u32)
+                    })
+                    .unwrap_or(0)
+            };
+            let started = std::time::Instant::now();
+            while saved(&path) <= last {
+                assert!(
+                    started.elapsed() < Duration::from_secs(20),
+                    "round {round}: the child saved nothing in 20 s"
+                );
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            std::thread::sleep(Duration::from_millis(30 + 40 * round));
             child.kill().unwrap(); // TerminateProcess: no chance to clean up
             child.wait().unwrap();
             let db = Db::open(&path).unwrap();
