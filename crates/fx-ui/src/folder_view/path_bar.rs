@@ -39,6 +39,11 @@ const BUTTON_SIZE: f32 = 32.0;
 /// The path bar never gets narrower than this (the status text gives way).
 const BAR_MIN_WIDTH: f32 = 88.0;
 const STATUS_MAX_WIDTH: f32 = 400.0;
+/// Room the path keeps before the status gets any (about the current folder
+/// and its parent): a long notice truncates, the folder name does not.
+const BAR_WANT_WIDTH: f32 = 280.0;
+/// A status narrower than this says nothing and is left out.
+const STATUS_MIN_WIDTH: f32 = 48.0;
 /// Below this pane width the status gives its room to the folder name.
 const NARROW_PANE: f32 = 420.0;
 
@@ -310,9 +315,17 @@ impl FolderView {
             }
             + 1.0)
             .min(STATUS_MAX_WIDTH);
-        // The list's width (last frame), which the status itself does not
-        // change: deciding on it cannot flicker.
-        let narrow = self.last_list_width > 0.0 && self.last_list_width < NARROW_PANE;
+        // What the row leaves for the path and the status, after the five
+        // buttons, their gaps and the row's padding (last frame's list width,
+        // which the status does not change: deciding on it cannot flicker).
+        let reserve = 5.0 * BUTTON_SIZE + 6.0 * space(1) + 2.0 * space(2);
+        let status_width = if self.last_list_width > 0.0 {
+            status_width.min((self.last_list_width - reserve - BAR_WANT_WIDTH).max(0.0))
+        } else {
+            status_width
+        };
+        let narrow = (self.last_list_width > 0.0 && self.last_list_width < NARROW_PANE)
+            || status_width < STATUS_MIN_WIDTH;
         let can_back = self.history.can_go_back();
         let can_forward = self.history.can_go_forward();
         let can_up = self.path.parent().is_some();
