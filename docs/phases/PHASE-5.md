@@ -20,7 +20,7 @@ Toda a lista de `docs/TESTES-FINAIS.md` (Narrador, Explorador, totais pelo servi
 - **Licenças de terceiros:** feito em 2026-11-23 — `THIRD-PARTY-NOTICES.txt` gerado por `tools/third-party-notices.py` (453 crates dos programas entregues, licença, autores, arquivos de licença e NOTICE, textos repetidos uma vez só, textos padrão MIT e Apache-2.0 para os 32 crates sem arquivo), levado pelo instalador e conferido pelo CI. Ações do CI: nenhuma usa mais Node 20; o aviso de instalação automática do `rustup` foi resolvido com `rustup toolchain install`. Antes: gerar um `THIRD-PARTY-NOTICES` com a licença de cada dependência (GPUI, Apache 2.0, e as demais) e incluí-lo no instalador e no zip; a Apache 2.0 pede que a licença acompanhe o programa e que arquivos modificados sejam indicados.
 - Pacote MSIX para a Microsoft Store e manifesto do winget. Winget preparado em 2026-11-23: `tools/winget-manifest.py <versão> <instaladores>` gera os três arquivos do manifesto 1.9 (`heapwraith.fx`, por usuário, `--silent`, x64 e ARM64, com os SHA-256) para enviar ao `microsoft/winget-pkgs` depois do release publicado. MSIX: depende da conta da Store e do `makeappx` do Windows SDK.
 - Ações do CI que ainda usam Node 20.
-- Instalador menor (hoje 15,2 MB, porque o programa do instalador leva o GPUI sem compressão).
+- Instalador menor (hoje 15,2 MB, porque o programa do instalador leva o GPUI sem compressão). Em 2026-11-25: 8,10 MB (S2 ≤ 10 MB, passa; o mapa do disco novo somou ~0,5 MB ao `pathdash.exe`, agora 15,3 MB). O pacote já vai em LZMS; cortar mais pede um programa de instalação sem o GPUI, uma tela nova, e fica para decisão do usuário.
 
 ## T5.3 — Site, documentação de uso e vídeo
 - [ ] Concluída em: ____ · Resumo:
