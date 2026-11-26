@@ -10,6 +10,7 @@ pub mod compare;
 pub mod complete;
 pub mod crash;
 pub mod diff;
+pub mod disk_labels;
 pub mod disk_tree;
 mod entry;
 pub mod format;

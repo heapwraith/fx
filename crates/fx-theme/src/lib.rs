@@ -92,8 +92,10 @@ pub const ICON_CHEVRON_LEFT: &str = "\u{E76B}";
 /// code, programs, other). Drawn at `MAP_ALPHA_*` over the layer so the text
 /// on them stays readable in both themes.
 pub const MAP_COLORS: [Color; 8] = [
-    0x3B78FF, 0xB4009E, 0xC19C00, 0x13A10E, 0xE74856, 0x8764B8, 0xF7630C, 0x767676,
+    0x3B78FF, 0xB4009E, 0xC19C00, 0x13A10E, 0x8E562E, 0x8764B8, 0xF7630C, 0x767676,
 ];
+/// Every file inside a recognized game, whatever its extension.
+pub const MAP_GAME_COLOR: Color = 0xE74856;
 /// The light corner and the dark corner of a block's shading.
 pub const MAP_ALPHA_LIGHT: u32 = 0x78;
 pub const MAP_ALPHA_DARK: u32 = 0x48;

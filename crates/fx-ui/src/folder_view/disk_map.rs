@@ -15,6 +15,7 @@
 //! keeps the last layout while a batch is being written.
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -23,6 +24,7 @@ use std::sync::{Arc, PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
 use futures::StreamExt;
+use fx_core::disk_labels::{Category, things};
 use fx_core::disk_tree::{
     DiskTree, KINDS, Kind, LayoutOptions, ROOT, Tile, TileKind, hit, layout, nearest,
 };
@@ -37,7 +39,8 @@ use gpui::{
 
 use super::{FolderView, Restore, rows_of};
 use crate::theme::{
-    CAPTION_SIZE, MAP_ALPHA_DARK, MAP_ALPHA_LIGHT, MAP_COLORS, RADIUS, Theme, rgba, space,
+    CAPTION_SIZE, MAP_ALPHA_DARK, MAP_ALPHA_LIGHT, MAP_COLORS, MAP_GAME_COLOR, RADIUS, Theme, rgba,
+    space,
 };
 
 /// Width of the side panel; hidden when the map would be narrower than
@@ -79,6 +82,8 @@ struct Info {
     kind: Kind,
     denied: bool,
     bytes: u64,
+    /// Inside a recognized game.
+    game: bool,
 }
 
 #[derive(Default)]
@@ -109,6 +114,7 @@ struct Detail {
     files: u64,
     kind: TileKind,
     denied: bool,
+    what: Option<SharedString>,
 }
 
 /// The open map.
@@ -130,7 +136,25 @@ pub(super) struct DiskMap {
     removing: Vec<u32>,
     /// "Smaller files" blocks being read one by one (zoomed in).
     expanding: Vec<u32>,
+    /// What the recognized items are (games, disks of virtual machines…),
+    /// found off the UI thread.
+    things: Rc<Things>,
+    things_key: (u64, u32, u64),
+    things_running: bool,
+    things_at: Option<Instant>,
 }
+
+/// The recognized items below the map's folder, by group.
+#[derive(Default)]
+struct Things {
+    /// Node to its group and "what it is".
+    labels: HashMap<u32, (Category, SharedString)>,
+    /// Group, total, items (node, name, size).
+    groups: Vec<(Category, u64, Vec<ThingRow>)>,
+}
+
+/// A recognized item in the panel: node, name, size.
+type ThingRow = (u32, SharedString, u64);
 
 fn alpha(c: u32, a: u32) -> u32 {
     (c << 8) | (a & 0xFF)
@@ -167,6 +191,10 @@ impl FolderView {
                 drive_asked: None,
                 removing: Vec::new(),
                 expanding: Vec::new(),
+                things: Rc::default(),
+                things_key: (u64::MAX, 0, 0),
+                things_running: false,
+                things_at: None,
             });
         }
         cx.notify();
@@ -314,7 +342,10 @@ impl FolderView {
             },
             &LayoutOptions::default(),
         );
-        let infos = tiles.iter().map(|t| info(&tree, t)).collect();
+        let infos = tiles
+            .iter()
+            .map(|t| info(&tree, t, &map.things.labels))
+            .collect();
         // A "smaller files" block with room to show its files: read them.
         let expand: Vec<(u32, PathBuf)> = tiles
             .iter()
@@ -364,11 +395,79 @@ impl FolderView {
         let mut details = Vec::new();
         for n in [map.hover, map.selected].into_iter().flatten() {
             if n < tree.len() as u32 && !tree.is_removed(n) {
-                details.push((n, detail(&tree, n, root, &path)));
+                details.push((n, detail(&tree, n, root, &path, &map.things.labels)));
             }
         }
         map.details = details;
+        let version = tree.version();
         drop(tree);
+        let throttled = map
+            .things_at
+            .is_some_and(|at| at.elapsed() < Duration::from_millis(700));
+        let tk = (version, root, map.scan.id);
+        if map.things_key != tk
+            && !map.things_running
+            && (!throttled || map.things_key.1 != root || map.scan.done.load(Ordering::Relaxed))
+        {
+            map.things_running = true;
+            map.things_at = Some(Instant::now());
+            let tree = tree_lock.clone();
+            let (tx, rx) = channel::<Things>();
+            let _ = std::thread::Builder::new()
+                .name("fx-map-things".into())
+                .spawn(move || {
+                    let t = tree.read().unwrap_or_else(PoisonError::into_inner);
+                    let found = things(&t, root);
+                    let mut out = Things::default();
+                    for c in Category::ALL {
+                        let items: Vec<_> =
+                            found.iter().filter(|x| x.label.category == c).collect();
+                        if items.is_empty() {
+                            continue;
+                        }
+                        let total = items.iter().map(|x| x.bytes).sum();
+                        let rows = items
+                            .iter()
+                            .map(|x| {
+                                (
+                                    x.node,
+                                    SharedString::from(t.name(x.node).to_owned()),
+                                    x.bytes,
+                                )
+                            })
+                            .collect();
+                        out.groups.push((c, total, rows));
+                    }
+                    out.groups.sort_by_key(|g| std::cmp::Reverse(g.1));
+                    for x in found {
+                        // "Windows · Windows" says nothing.
+                        let what = if x.label.what.eq_ignore_ascii_case(t.name(x.node)) {
+                            String::new()
+                        } else {
+                            x.label.what
+                        };
+                        out.labels
+                            .insert(x.node, (x.label.category, SharedString::from(what)));
+                    }
+                    let _ = tx.send(out);
+                });
+            cx.spawn(async move |this, cx| {
+                let mut rx = crate::chan::stream(rx);
+                let found = rx.next().await;
+                let _ = this.update(cx, |view, cx| {
+                    if let Some(map) = view.disk_map.as_mut() {
+                        map.things_running = false;
+                        if let Some(found) = found {
+                            map.things = Rc::new(found);
+                            map.things_key = tk;
+                            map.key.0 = u64::MAX;
+                        }
+                        cx.notify();
+                    }
+                });
+            })
+            .detach();
+        }
         for (rest, folder) in expand {
             map.expanding.push(rest);
             let tree = tree_lock.clone();
@@ -503,6 +602,13 @@ impl FolderView {
             "delete" => {
                 if let Some(n) = map.selected {
                     self.recycle_node(n, window, cx);
+                }
+            }
+            "d" if !m.shift => {
+                if let Some(root) = self.path.ancestors().last().map(Path::to_path_buf)
+                    && root != self.path
+                {
+                    self.go_to(root, None, window, cx);
                 }
             }
             "f5" => {
@@ -731,6 +837,28 @@ impl FolderView {
                 size_short(s.total),
                 count(s.files as usize)
             ));
+        // The whole drive: where games and system files usually are.
+        let drive_root = self.path.ancestors().last().map(Path::to_path_buf);
+        let whole_disk = drive_root.filter(|d| *d != self.path).map(|d| {
+            let label = trf!(
+                "Ver o disco {} inteiro (D)",
+                "See the whole {} drive (D)",
+                d.display().to_string().trim_end_matches('\\')
+            );
+            div()
+                .id("map-whole-disk")
+                .flex_none()
+                .px(px(space(2)))
+                .rounded(px(RADIUS))
+                .border_1()
+                .border_color(rgba(t.divider))
+                .cursor_pointer()
+                .hover(|x| x.bg(rgba(t.hover)))
+                .child(label)
+                .on_click(cx.listener(move |view, _, window, cx| {
+                    view.go_to(d.clone(), None, window, cx);
+                }))
+        });
         let status = if running {
             trf!(
                 "Lendo · {} pastas na fila · {}",
@@ -780,6 +908,10 @@ impl FolderView {
                 };
                 let mut line =
                     format!("{} · {} · {}", d.path, size_short(d.size), percent(d.share));
+                if let Some(what) = &d.what {
+                    line.push_str(" · ");
+                    line.push_str(what);
+                }
                 if !what.is_empty() {
                     line.push_str(" · ");
                     line.push_str(&what);
@@ -918,6 +1050,7 @@ impl FolderView {
                         .text_size(px(CAPTION_SIZE))
                         .child(div().flex_1().min_w_0().child(crumbs))
                         .child(totals)
+                        .children(whole_disk)
                         .child(
                             div()
                                 .flex_none()
@@ -956,8 +1089,8 @@ impl FolderView {
                         .text_color(rgba(t.text_secondary))
                         .truncate()
                         .child(tr!(
-                            "Setas andam · Enter entra · Backspace sobe · 1–8 destacam um tipo · Delete: Lixeira · F5 lê de novo · Esc fecha",
-                            "Arrows move · Enter goes in · Backspace goes up · 1–8 highlight a kind · Delete: Recycle Bin · F5 reads again · Esc closes"
+                            "Setas andam · Enter entra · Backspace sobe · D: disco inteiro · 1–8 destacam um tipo · Delete: Lixeira · F5 lê de novo · Esc fecha",
+                            "Arrows move · Enter goes in · Backspace goes up · D: whole drive · 1–8 highlight a kind · Delete: Recycle Bin · F5 reads again · Esc closes"
                         )),
                 ),
         )
@@ -1082,6 +1215,78 @@ impl FolderView {
                     }),
             );
         }
+        // Recognized items, by group: games, virtual disks, system…
+        let mut known = div().flex().flex_col();
+        for (g, (category, total, items)) in map.things.groups.iter().enumerate() {
+            known = known.child(
+                div()
+                    .flex()
+                    .gap(px(space(2)))
+                    .px(px(space(2)))
+                    .pt(px(if g == 0 { 0.0 } else { space(1) }))
+                    .when(*category == Category::Games, |d| {
+                        d.child(
+                            div()
+                                .flex_none()
+                                .mt(px(3.0))
+                                .size(px(10.0))
+                                .rounded(px(2.0))
+                                .bg(rgba(alpha(MAP_GAME_COLOR, 0xE0))),
+                        )
+                    })
+                    .child(div().flex_1().child(category.name()))
+                    .child(
+                        div()
+                            .text_color(rgba(t.text_secondary))
+                            .child(size_short(*total)),
+                    ),
+            );
+            for (k, (node, name, bytes)) in items.iter().take(5).enumerate() {
+                let node = *node;
+                let chosen = map.selected == Some(node);
+                known = known.child(
+                    div()
+                        .id(("map-known", g * 100 + k))
+                        .flex()
+                        .gap(px(space(2)))
+                        .pl(px(space(4)))
+                        .pr(px(space(2)))
+                        .py(px(1.0))
+                        .rounded(px(RADIUS))
+                        .cursor_pointer()
+                        .when(chosen, |d| d.bg(rgba(t.selected)))
+                        .hover(|d| d.bg(rgba(t.hover)))
+                        .on_click(cx.listener(move |view, ev: &gpui::ClickEvent, window, cx| {
+                            view.select_node(node, cx);
+                            if ev.click_count() >= 2 {
+                                view.open_node(node, window, cx);
+                            }
+                        }))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .text_color(rgba(t.text_secondary))
+                                .child(name.clone()),
+                        )
+                        .child(
+                            div()
+                                .flex_none()
+                                .text_color(rgba(t.text_secondary))
+                                .child(size_short(*bytes)),
+                        ),
+                );
+            }
+            if items.len() > 5 {
+                known = known.child(
+                    div()
+                        .pl(px(space(4)))
+                        .text_color(rgba(t.text_secondary))
+                        .child(trf!("e mais {}", "and {} more", items.len() - 5)),
+                );
+            }
+        }
         let title = |text: &'static str| {
             div()
                 .px(px(space(2)))
@@ -1104,6 +1309,10 @@ impl FolderView {
                 .bg(rgba(t.layer))
                 .border_1()
                 .border_color(rgba(t.divider))
+                .when(!map.things.groups.is_empty(), |d| {
+                    d.child(title(tr!("O que mais ocupa", "What takes the most")))
+                        .child(known)
+                })
                 .child(title(tr!("Por tipo", "By kind")))
                 .child(kinds)
                 .when(!s.largest.is_empty(), |d| {
@@ -1187,7 +1396,7 @@ fn nearest_node(tree: &DiskTree, path: &Path) -> u32 {
     ROOT
 }
 
-fn info(tree: &DiskTree, t: &Tile) -> Info {
+fn info(tree: &DiskTree, t: &Tile, labels: &HashMap<u32, (Category, SharedString)>) -> Info {
     let n = t.node;
     let (name, size) = match t.kind {
         TileKind::Unread => (
@@ -1202,14 +1411,28 @@ fn info(tree: &DiskTree, t: &Tile) -> Info {
             )),
             SharedString::from(size_short(tree.bytes(n))),
         ),
-        _ => (
-            SharedString::from(tree.name(n).to_owned()),
-            SharedString::from(if tree.complete(n) {
+        _ => {
+            let size = if tree.complete(n) {
                 size_short(tree.shown(n))
             } else {
                 format!("{}…", size_short(tree.shown(n)))
-            }),
-        ),
+            };
+            match labels.get(&n).map(|(_, w)| w).filter(|w| !w.is_empty()) {
+                // A folder says what it is next to its name; a file below it.
+                Some(what) if t.kind == TileKind::Dir => (
+                    SharedString::from(format!("{} · {what}", tree.name(n))),
+                    SharedString::from(size),
+                ),
+                Some(what) => (
+                    SharedString::from(tree.name(n).to_owned()),
+                    SharedString::from(format!("{size} · {what}")),
+                ),
+                None => (
+                    SharedString::from(tree.name(n).to_owned()),
+                    SharedString::from(size),
+                ),
+            }
+        }
     };
     Info {
         name,
@@ -1222,10 +1445,30 @@ fn info(tree: &DiskTree, t: &Tile) -> Info {
         kind: tree.kind(n),
         denied: tree.is_denied(n),
         bytes: tree.shown(n),
+        game: t.kind != TileKind::Dir && t.kind != TileKind::Unread && in_game(tree, n, labels),
     }
 }
 
-fn detail(tree: &DiskTree, n: u32, root: u32, path: &Path) -> Detail {
+/// `n` is inside a recognized game (its files get the games color).
+fn in_game(tree: &DiskTree, mut n: u32, labels: &HashMap<u32, (Category, SharedString)>) -> bool {
+    loop {
+        if labels.get(&n).is_some_and(|(c, _)| *c == Category::Games) {
+            return true;
+        }
+        match tree.parent(n) {
+            Some(p) => n = p,
+            None => return false,
+        }
+    }
+}
+
+fn detail(
+    tree: &DiskTree,
+    n: u32,
+    root: u32,
+    path: &Path,
+    labels: &HashMap<u32, (Category, SharedString)>,
+) -> Detail {
     let total = tree.shown(root).max(1);
     let full = tree.path_of(n);
     let rel = full
@@ -1251,6 +1494,10 @@ fn detail(tree: &DiskTree, n: u32, root: u32, path: &Path) -> Detail {
             TileKind::File
         },
         denied: tree.is_denied(n),
+        what: labels
+            .get(&n)
+            .map(|(_, w)| w.clone())
+            .filter(|w| !w.is_empty()),
     }
 }
 
@@ -1423,7 +1670,11 @@ fn paint_map(
                 }
             }
             TileKind::File | TileKind::Rest => {
-                let rgb = MAP_COLORS[info.kind as usize];
+                let rgb = if info.game {
+                    MAP_GAME_COLOR
+                } else {
+                    MAP_COLORS[info.kind as usize]
+                };
                 let dim = s.highlight.is_some_and(|h| h != info.kind) || removing;
                 let scale = |a: u32| {
                     let a = if tile.kind == TileKind::Rest {
