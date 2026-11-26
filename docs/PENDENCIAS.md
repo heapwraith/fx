@@ -51,6 +51,6 @@ Os outros itens de `docs/TESTES-FINAIS.md` estão feitos, ou cobertos pelo E2E (
 1. **Trocar "fx" por "Pathdash" por dentro** (pastas `%APPDATA%\fx` e `Programs\fx`, `fx-indexd.exe`, `fx-preview.exe`, `fx-setup.exe`, nome interno do serviço). Exige migração em duas versões (D-074):
    - a primeira move os dados e reinstala o serviço com o nome novo;
    - só depois o repositório pode mudar de nome, porque o atualizador das versões instaladas consulta `heapwraith/fx`.
-2. **Linha do tempo sem ruído:** esconder por padrão as mudanças internas de programas em `AppData` (`*-journal`, `.sqlite-shm` de navegadores e editores), com um botão para mostrar.
+2. **Linha do tempo sem ruído:** feito em 2026-11-25 — as mudanças que programas fazem nos próprios arquivos (`AppData`, `ProgramData`, pastas `logs`/`cache`/`temp`, `*-journal`, `-wal`, `-shm`, `.log`, `.tmp`, `~$` do Office) ficam ocultas por padrão; o cabeçalho diz quantas, e A mostra todas (`fx-core/src/timeline_noise.rs`). Conferido na janela: 48 de 500 mudanças da última hora eram de programas.
 3. **Compilação ARM64 local no WSL** (T5.6): o `psm` não monta com `clang-cl` fora do Windows (D-071). O CI compila e o E2E testa o ARM64.
 4. **Site:** prova social (estrelas e opiniões) quando houver, e um vídeo curto no lugar da captura do topo.

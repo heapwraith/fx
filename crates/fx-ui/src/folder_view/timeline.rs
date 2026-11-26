@@ -3,6 +3,8 @@
 //! the `fx-indexd` service (it follows the USN journal). Ctrl+Shift+L opens
 //! it; Tab changes the period; Enter shows the item in its folder; it
 //! refreshes by itself every few seconds while open (real changes only).
+//! Programs' own bookkeeping (`AppData`, journals, logs) is hidden unless the
+//! user asks (A), so the changes they made stand out.
 
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -63,13 +65,16 @@ struct Item {
 /// What the service said.
 enum State {
     Loading,
-    Ready(Vec<Item>),
+    /// The changes shown, and how many program changes were hidden.
+    Ready(Vec<Item>, usize),
     /// The service is not running: how to turn it on.
     NoService,
 }
 
 pub(super) struct Timeline {
     period: Period,
+    /// Programs' own changes too (A).
+    show_all: bool,
     state: State,
     cursor: usize,
     /// Bumped at each request; an older answer is dropped.
@@ -112,6 +117,7 @@ impl FolderView {
         }
         self.timeline = Some(Timeline {
             period: Period::Hour,
+            show_all: false,
             state: State::Loading,
             cursor: 0,
             ticket: 0,
@@ -126,7 +132,7 @@ impl FolderView {
             return;
         };
         t.ticket += 1;
-        let (ticket, since) = (t.ticket, now() - t.period.seconds());
+        let (ticket, since, show_all) = (t.ticket, now() - t.period.seconds(), t.show_all);
         let (tx, rx) = futures::channel::oneshot::channel();
         let _ = std::thread::Builder::new()
             .name("fx-timeline".into())
@@ -149,6 +155,19 @@ impl FolderView {
                         })
                         .collect::<Vec<_>>()
                 });
+                let answer = answer.map(|items| {
+                    let total = items.len();
+                    let shown: Vec<Item> = if show_all {
+                        items
+                    } else {
+                        items
+                            .into_iter()
+                            .filter(|i| !fx_core::timeline_noise::is_noise(&i.path))
+                            .collect()
+                    };
+                    let hidden = total - shown.len();
+                    (shown, hidden)
+                });
                 let _ = tx.send(answer);
             });
         cx.spawn(async move |this, cx| {
@@ -159,7 +178,7 @@ impl FolderView {
                         return false;
                     };
                     t.state = match answer {
-                        Some(items) => State::Ready(items),
+                        Some((items, hidden)) => State::Ready(items, hidden),
                         None => State::NoService,
                     };
                     cx.notify();
@@ -180,7 +199,7 @@ impl FolderView {
 
     fn timeline_items(&self) -> &[Item] {
         match self.timeline.as_ref().map(|t| &t.state) {
-            Some(State::Ready(items)) => items,
+            Some(State::Ready(items, _)) => items,
             _ => &[],
         }
     }
@@ -205,6 +224,11 @@ impl FolderView {
                 t.period = t.period.next();
                 t.cursor = 0;
                 t.state = State::Loading;
+                self.ask_timeline(cx);
+            }
+            "a" => {
+                t.show_all = !t.show_all;
+                t.cursor = 0;
                 self.ask_timeline(cx);
             }
             "down" if n > 0 => t.cursor = (t.cursor + 1).min(n - 1),
@@ -270,14 +294,23 @@ impl FolderView {
                     "The timeline comes from the whole-disk search service, which is not running. Settings › System › Whole-disk search › Turn on."
                 )));
             }
-            State::Ready(items) if items.is_empty() => {
-                list = list.child(div().p(px(space(4))).text_color(rgba(t.text_secondary)).child(trf!(
-                    "Nada mudou nos discos nos últimos {}. Tab escolhe outro período.",
-                    "Nothing changed on the disks in the last {}. Tab picks another period.",
-                    tl.period.label()
-                )));
+            State::Ready(items, hidden) if items.is_empty() => {
+                list = list.child(div().p(px(space(4))).text_color(rgba(t.text_secondary)).child(if *hidden > 0 {
+                    trf!(
+                        "Só programas mudaram seus próprios arquivos nos últimos {} ({} mudanças). A mostra.",
+                        "Only programs changed their own files in the last {} ({} changes). A shows them.",
+                        tl.period.label(),
+                        hidden
+                    )
+                } else {
+                    trf!(
+                        "Nada mudou nos discos nos últimos {}. Tab escolhe outro período.",
+                        "Nothing changed on the disks in the last {}. Tab picks another period.",
+                        tl.period.label()
+                    )
+                }));
             }
-            State::Ready(items) => {
+            State::Ready(items, _) => {
                 for (k, item) in items.iter().enumerate() {
                     let (glyph, what) = kind_text(item.kind);
                     let name = item
@@ -380,7 +413,13 @@ impl FolderView {
                         .children(chips)
                         .child(div().flex_1())
                         .child(div().text_size(px(CAPTION_SIZE)).text_color(rgba(t.text_secondary)).child(match &tl.state {
-                            State::Ready(items) => fx_core::format::items(items.len()),
+                            State::Ready(items, 0) => fx_core::format::items(items.len()),
+                            State::Ready(items, hidden) => trf!(
+                                "{} · {} de programas ocultas (A mostra)",
+                                "{} · {} by programs hidden (A shows)",
+                                fx_core::format::items(items.len()),
+                                hidden
+                            ),
                             _ => String::new(),
                         })),
                 )
@@ -402,8 +441,8 @@ impl FolderView {
                         .text_size(px(CAPTION_SIZE))
                         .text_color(rgba(t.text_secondary))
                         .child(tr!(
-                            "Tab muda o período · Enter mostra na pasta · atualiza sozinha · Esc fecha",
-                            "Tab changes the period · Enter shows in folder · refreshes by itself · Esc closes"
+                            "Tab muda o período · A mostra ou oculta o que programas mudam · Enter mostra na pasta · atualiza sozinha · Esc fecha",
+                            "Tab changes the period · A shows or hides what programs change · Enter shows in folder · refreshes by itself · Esc closes"
                         )),
                 ),
         )
