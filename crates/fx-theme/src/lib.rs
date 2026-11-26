@@ -87,11 +87,16 @@ pub const ICON_UP: &str = "\u{E74A}";
 pub const ICON_CHEVRON: &str = "\u{E76C}";
 pub const ICON_CHEVRON_LEFT: &str = "\u{E76B}";
 
-/// Disk map blocks (T6.1), 35% over the layer so the text stays readable in
-/// both themes: folders, images, video, audio, documents, archives, other.
-pub const MAP_COLORS: [Color; 7] = [
-    0x0A6C8A59, 0x3B78FF59, 0xB4009E59, 0xC19C0059, 0x13A10E59, 0xE7485659, 0x76767659,
+/// Disk map (T6.1, D-078): one color per kind of file, in the order of
+/// `fx_core::disk_tree::Kind` (images, video, audio, documents, archives,
+/// code, programs, other). Drawn at `MAP_ALPHA_*` over the layer so the text
+/// on them stays readable in both themes.
+pub const MAP_COLORS: [Color; 8] = [
+    0x3B78FF, 0xB4009E, 0xC19C00, 0x13A10E, 0xE74856, 0x8764B8, 0xF7630C, 0x767676,
 ];
+/// The light corner and the dark corner of a block's shading.
+pub const MAP_ALPHA_LIGHT: u32 = 0x78;
+pub const MAP_ALPHA_DARK: u32 = 0x48;
 pub const ICON_ADD: &str = "\u{E710}";
 pub const ICON_CLOSE: &str = "\u{E711}";
 pub const ICON_MENU: &str = "\u{E700}";

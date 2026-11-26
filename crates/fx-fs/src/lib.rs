@@ -38,6 +38,8 @@ pub struct Recycled {
 
 // Uses `enumerate`, which only exists on Windows for now (D-012).
 #[cfg(windows)]
+pub mod disk_scan;
+#[cfg(windows)]
 mod search;
 #[cfg(windows)]
 pub use search::{

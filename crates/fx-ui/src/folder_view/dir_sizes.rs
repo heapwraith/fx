@@ -27,16 +27,6 @@ pub(super) struct DirSizes {
 }
 
 impl DirSizes {
-    /// The total of `entry` is final.
-    pub(super) fn is_known(&self, entry: u32) -> bool {
-        self.done.contains(&entry)
-    }
-
-    /// Totals are still being summed.
-    pub(super) fn running(&self) -> bool {
-        self.running
-    }
-
     pub(super) fn label(&self, entry: u32, bytes: u64) -> String {
         if self.done.contains(&entry) {
             fx_core::format::size(bytes)
@@ -168,7 +158,7 @@ impl FolderView {
 
 /// Subfolder totals of `folder` from `fx-indexd`, by path; `None` when the
 /// service is not running (the pipe is missing: fails at once) or not ready.
-fn service_totals(folder: &std::path::Path) -> Option<HashMap<PathBuf, u64>> {
+pub(super) fn service_totals(folder: &std::path::Path) -> Option<HashMap<PathBuf, u64>> {
     use fx_index::protocol::{Request, Status};
     let r = fx_index::pipe::query(&Request::folder_sizes(folder), 200).ok()?;
     if r.status != Status::Ready {

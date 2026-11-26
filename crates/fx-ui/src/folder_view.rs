@@ -1619,6 +1619,7 @@ impl Render for FolderView {
         self.trace_frame(window);
         self.sync_quick_look(window, cx);
         self.sync_terminal_size();
+        self.sync_disk_map(cx);
         let t = self.look.theme;
         let focused = self.focus.is_focused(window);
         let row_h = self.look.density.row_height();
