@@ -777,6 +777,7 @@ impl FolderView {
                 view.apply_changes(pending, cx);
                 view.start_dir_sizes(cx);
                 view.refresh_git(cx);
+                view.warm_menus();
                 cx.notify();
             });
         })

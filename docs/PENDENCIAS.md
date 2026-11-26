@@ -30,7 +30,7 @@ Os outros itens de `docs/TESTES-FINAIS.md` estão feitos, ou cobertos pelo E2E (
 | Meta | Hoje | Limite | Próximo passo |
 |---|---|---|---|
 | P7 rolagem durante cópia de 10 mil arquivos | 0,13–0,28% de quadros perdidos (em 21/11: 0,026%) | ≤ 0,1% | medir com o serviço do índice parado e o PC ocioso; se continuar, perfilar os quadros perdidos com `FX_TRACE` |
-| Menu de contexto do shell | p95 de 260–400 ms desde 21/11 (mediana ~60 ms) | ≤ 150 ms | o tempo vem das extensões de terceiros na primeira chamada: pré-carregar em segundo plano na abertura, ou rever a meta |
+| Menu de contexto do shell | 25/11: p95 205–267 ms, mediana 51–61 ms, máximo de 788 para ~250 ms (aquecimento por tipo, D-079) | ≤ 150 ms | sobram 2 dos 20 itens da `flat-100k` (`000046.exe` e `000060.jpg`, bytes aleatórios) que custam 200–250 ms a cada menu, não só no primeiro: um manipulador lê o arquivo. Medir numa pasta com arquivos reais, ou preparar o menu ao passar o mouse e reusá-lo no clique |
 | P1 e P2 | p95 oscilando logo acima de 450 ms e de 80 ms com o PC carregado (o executável antigo dá o mesmo) | ≤ 450 / ≤ 80 ms | medir com o PC ocioso antes de mexer |
 | P6 em NVMe | 1,35 milhão de arquivos em 12,5 s no runner, preso ao disco (112 MB/s); o código gasta 0,54 s | ≤ 10 s para 2 milhões | medir no PC de referência: `fx-bench index --volume C:`, como administrador |
 

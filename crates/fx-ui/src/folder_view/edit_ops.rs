@@ -401,6 +401,60 @@ impl FolderView {
         self.open_menu_in(items, folder, window, cx);
     }
 
+    /// After a folder loads: builds (without showing) the shell menu of one
+    /// item of each kind in view that had no menu yet this session, one at a
+    /// time on a thread of its own. The first menu of a kind loads its shell
+    /// extensions (Office, archivers, PDF readers), which took 250–800 ms on
+    /// the first right click; a real click waits for one warm-up at most.
+    pub(super) fn warm_menus(&mut self) {
+        let rows = super::rows_of(&self.filtered, &self.list);
+        let mut todo = Vec::new();
+        {
+            let mut warmed = warmed_kinds()
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            for &i in rows.iter().take(MENU_WARM_ROWS) {
+                let kind = if self.list.attributes(i).is_dir() {
+                    "/".to_owned()
+                } else {
+                    let name = self.list.name(i);
+                    name.rsplit_once('.')
+                        .map(|(_, e)| e.to_ascii_lowercase())
+                        .unwrap_or_default()
+                };
+                if warmed.insert(kind) {
+                    todo.push(self.path.join(self.list.os_name(i)));
+                }
+                if todo.len() >= MENU_WARM_MAX {
+                    break;
+                }
+            }
+        }
+        if todo.is_empty() {
+            return;
+        }
+        let folder = self.path.clone();
+        let _ = std::thread::Builder::new()
+            .name("fx-menu-warm".into())
+            .spawn(move || {
+                // After the first frames and the folder's own work.
+                std::thread::sleep(std::time::Duration::from_millis(800));
+                for item in todo {
+                    let rx = fx_shell::show_context_menu(fx_shell::menu::MenuRequest {
+                        items: vec![item],
+                        folder: folder.clone(),
+                        fx_items: Vec::new(),
+                        owner: 0,
+                        started: std::time::Instant::now(),
+                        warm_up: true,
+                    });
+                    if rx.recv_timeout(std::time::Duration::from_secs(5)).is_err() {
+                        return;
+                    }
+                }
+            });
+    }
+
     /// [`Self::open_menu`] for items of another folder (search results).
     pub(super) fn open_menu_in(
         &mut self,
@@ -603,6 +657,17 @@ impl FolderView {
             self.begin_rename(i);
         }
     }
+}
+
+/// Rows looked at, and kinds warmed, after a folder loads.
+const MENU_WARM_ROWS: usize = 60;
+const MENU_WARM_MAX: usize = 16;
+
+/// Kinds of item (extension, or "/" for folders) whose menu was built once.
+fn warmed_kinds() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static WARMED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+        std::sync::OnceLock::new();
+    WARMED.get_or_init(Default::default)
 }
 
 #[cfg(test)]
